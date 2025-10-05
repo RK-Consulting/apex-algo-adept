@@ -14,7 +14,102 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      market_data: {
+        Row: {
+          additional_data: Json | null
+          change: number | null
+          change_percent: number | null
+          exchange: string
+          high: number | null
+          id: string
+          low: number | null
+          open: number | null
+          previous_close: number | null
+          price: number
+          symbol: string
+          timestamp: string
+          volume: number | null
+        }
+        Insert: {
+          additional_data?: Json | null
+          change?: number | null
+          change_percent?: number | null
+          exchange: string
+          high?: number | null
+          id?: string
+          low?: number | null
+          open?: number | null
+          previous_close?: number | null
+          price: number
+          symbol: string
+          timestamp?: string
+          volume?: number | null
+        }
+        Update: {
+          additional_data?: Json | null
+          change?: number | null
+          change_percent?: number | null
+          exchange?: string
+          high?: number | null
+          id?: string
+          low?: number | null
+          open?: number | null
+          previous_close?: number | null
+          price?: number
+          symbol?: string
+          timestamp?: string
+          volume?: number | null
+        }
+        Relationships: []
+      }
+      strategies: {
+        Row: {
+          ai_generated: boolean | null
+          capital_allocation: number
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          performance_data: Json | null
+          risk_level: string
+          status: string
+          strategy_config: Json | null
+          trading_style: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ai_generated?: boolean | null
+          capital_allocation: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          performance_data?: Json | null
+          risk_level: string
+          status?: string
+          strategy_config?: Json | null
+          trading_style: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ai_generated?: boolean | null
+          capital_allocation?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          performance_data?: Json | null
+          risk_level?: string
+          status?: string
+          strategy_config?: Json | null
+          trading_style?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

@@ -1,8 +1,10 @@
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useMarketData } from "@/hooks/useMarketData";
 
-const watchlistItems = [
+const watchlist = [
   { symbol: "RELIANCE", price: "2,456.70", change: "+23.45", percent: "+0.96%", trend: "up" },
   { symbol: "TCS", price: "3,789.20", change: "-12.30", percent: "-0.32%", trend: "down" },
   { symbol: "INFY", price: "1,567.45", change: "+45.60", percent: "+2.99%", trend: "up" },
@@ -11,6 +13,21 @@ const watchlistItems = [
 ];
 
 export function Watchlist() {
+  const navigate = useNavigate();
+  const { data: liveData } = useMarketData([
+    { symbol: "NIFTY", exchange: "NSE" },
+    { symbol: "BANKNIFTY", exchange: "NSE" },
+    { symbol: "RELIANCE", exchange: "NSE" },
+    { symbol: "TCS", exchange: "NSE" },
+    { symbol: "INFY", exchange: "NSE" },
+  ]);
+
+  // Merge live data with static data
+  const watchlistWithLiveData = watchlist.map((stock, index) => ({
+    ...stock,
+    ...(liveData[index] || {})
+  }));
+
   return (
     <Card className="bg-card border-border">
       <CardHeader className="flex flex-row items-center justify-between pb-3">
@@ -20,9 +37,10 @@ export function Watchlist() {
         </Button>
       </CardHeader>
       <CardContent className="space-y-2">
-        {watchlistItems.map((item) => (
+        {watchlistWithLiveData.map((item) => (
           <div
             key={item.symbol}
+            onClick={() => navigate(`/stock/${item.symbol}`)}
             className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-all cursor-pointer border border-transparent hover:border-border"
           >
             <div>
