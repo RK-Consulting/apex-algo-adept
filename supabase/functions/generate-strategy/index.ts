@@ -1,20 +1,68 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+const allowedOrigins = [
+  'https://alphaforge.lovable.app',
+  'http://localhost:5173',
+  'http://localhost:8080'
+];
+
+const getCorsHeaders = (origin: string | null) => {
+  const allowedOrigin = origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  };
 };
 
 serve(async (req) => {
+  const origin = req.headers.get('origin');
+  const corsHeaders = getCorsHeaders(origin);
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { name, trading_style, capital_allocation, risk_level, description } = await req.json();
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      throw new Error('No authorization header');
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     
-    console.log('Generating strategy with AI:', { name, trading_style, risk_level });
+    if (userError || !user) {
+      throw new Error('Unauthorized');
+    }
+
+    // Rate limiting check: max 10 strategies per hour
+    const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
+    const { count, error: countError } = await supabase
+      .from('strategies')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .gte('created_at', oneHourAgo);
+
+    if (countError) {
+      console.error('Rate limit check error:', countError);
+    } else if (count && count >= 10) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'Rate limit exceeded. You can create maximum 10 strategies per hour.'
+        }),
+        { 
+          status: 429, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    const { name, trading_style, capital_allocation, risk_level, description } = await req.json();
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
@@ -101,22 +149,6 @@ Format the response as a JSON object with these keys: entry_rules, exit_rules, p
     }
 
     // Save to database
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('No authorization header');
-    }
-
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-    
-    if (userError || !user) {
-      throw new Error('Unauthorized');
-    }
-
     const { data: strategy, error: insertError } = await supabase
       .from('strategies')
       .insert({
@@ -144,8 +176,6 @@ Format the response as a JSON object with these keys: entry_rules, exit_rules, p
       throw insertError;
     }
 
-    console.log('Strategy saved successfully:', strategy.id);
-
     return new Response(
       JSON.stringify({ 
         success: true, 
@@ -157,14 +187,15 @@ Format the response as a JSON object with these keys: entry_rules, exit_rules, p
 
   } catch (error) {
     console.error('Error in generate-strategy:', error);
+    const origin = req.headers.get('origin');
+    const errorCorsHeaders = getCorsHeaders(origin);
     return new Response(
       JSON.stringify({ 
-        error: error instanceof Error ? error.message : 'Unknown error',
-        details: error
+        error: error instanceof Error ? error.message : 'Unknown error'
       }),
       { 
-        status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        status: error instanceof Error && error.message.includes('Rate limit') ? 429 : 500, 
+        headers: { ...errorCorsHeaders, 'Content-Type': 'application/json' } 
       }
     );
   }
