@@ -8,6 +8,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Brain, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { z } from "zod";
+
+const strategySchema = z.object({
+  name: z.string()
+    .trim()
+    .min(1, "Name is required")
+    .max(100, "Name must be less than 100 characters")
+    .regex(/^[a-zA-Z0-9\s\-]+$/, "Name can only contain letters, numbers, spaces, and hyphens"),
+  trading_style: z.enum(["Scalping", "Intraday", "Swing", "Positional"]),
+  capital_allocation: z.number()
+    .min(1000, "Minimum capital is ₹1,000")
+    .max(100000000, "Maximum capital is ₹10 crore"),
+  risk_level: z.enum(["Low", "Medium", "High"]),
+  description: z.string()
+    .trim()
+    .max(1000, "Description must be less than 1000 characters")
+    .optional()
+    .default("")
+});
 
 interface CreateStrategyDialogProps {
   open: boolean;
@@ -38,17 +57,34 @@ export function CreateStrategyDialog({ open, onOpenChange, onStrategyCreated }: 
           description: "Please sign in to create strategies",
           variant: "destructive",
         });
+        setLoading(false);
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke('generate-strategy', {
-        body: {
-          name: formData.name,
-          trading_style: formData.trading_style,
-          capital_allocation: parseFloat(formData.capital_allocation),
-          risk_level: formData.risk_level,
-          description: formData.description,
-        },
+      // Validate inputs
+      const validationResult = strategySchema.safeParse({
+        name: formData.name,
+        trading_style: formData.trading_style,
+        capital_allocation: parseFloat(formData.capital_allocation),
+        risk_level: formData.risk_level,
+        description: formData.description || "",
+      });
+
+      if (!validationResult.success) {
+        const firstError = validationResult.error.errors[0];
+        toast({
+          title: "Validation Error",
+          description: firstError.message,
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      const validatedData = validationResult.data;
+
+      const { error } = await supabase.functions.invoke('generate-strategy', {
+        body: validatedData,
       });
 
       if (error) throw error;
@@ -68,7 +104,6 @@ export function CreateStrategyDialog({ open, onOpenChange, onStrategyCreated }: 
         description: "",
       });
     } catch (error) {
-      console.error('Error creating strategy:', error);
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to generate strategy",

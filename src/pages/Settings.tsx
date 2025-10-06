@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Settings as SettingsIcon, User, Shield, Bell, Link2, Wallet } from "lucide-react";
+import { Settings as SettingsIcon, User, Shield, Bell, Link2, Wallet, AlertTriangle } from "lucide-react";
 
 const Settings = () => {
   return (
@@ -216,35 +216,25 @@ const Settings = () => {
                       <SettingsIcon className="w-5 h-5" />
                       API Configuration
                     </CardTitle>
-                    <CardDescription>Manage your API keys for external integrations</CardDescription>
+                    <CardDescription>Securely manage your broker API credentials</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label>OpenAlgo API Key</Label>
-                        <div className="flex gap-2">
-                          <Input placeholder="Enter your OpenAlgo API key" className="bg-background font-mono" />
-                          <Button variant="outline">Verify</Button>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Zerodha API Key</Label>
-                        <div className="flex gap-2">
-                          <Input placeholder="Enter your Zerodha API key" className="bg-background font-mono" />
-                          <Button variant="outline">Verify</Button>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Zerodha API Secret</Label>
-                        <div className="flex gap-2">
-                          <Input type="password" placeholder="Enter your Zerodha API secret" className="bg-background font-mono" />
-                          <Button variant="outline">Save</Button>
+                    <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20 mb-4">
+                      <div className="flex gap-2 items-start">
+                        <AlertTriangle className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium text-yellow-500">Security Notice</p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Your API credentials are encrypted and stored securely. They will never be exposed in logs or client-side code.
+                            To update credentials, please contact support or use your broker's dashboard.
+                          </p>
                         </div>
                       </div>
                     </div>
                     <div className="p-4 rounded-lg bg-accent/10 border border-accent/20">
                       <p className="text-sm text-muted-foreground">
-                        These API keys will be used to connect with OpenAlgo backend for executing trades through your broker.
+                        For security reasons, API key management has been disabled in this interface. 
+                        Please configure your broker integrations through the "Broker" tab above or contact support for assistance.
                       </p>
                     </div>
                   </CardContent>
