@@ -6,16 +6,21 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { TrendingUp, TrendingDown, Search, Star, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useMarketData } from "@/hooks/useMarketData";
 
-const stocks = [
-  { symbol: "RELIANCE", name: "Reliance Industries", price: "2,456.70", change: "+23.45", percent: "+0.96%", trend: "up", volume: "8.2M", marketCap: "16.6L Cr" },
-  { symbol: "TCS", name: "Tata Consultancy Services", price: "3,789.20", change: "-12.30", percent: "-0.32%", trend: "down", volume: "2.1M", marketCap: "13.8L Cr" },
-  { symbol: "INFY", name: "Infosys Limited", price: "1,567.45", change: "+45.60", percent: "+2.99%", trend: "up", volume: "6.5M", marketCap: "6.5L Cr" },
-  { symbol: "HDFCBANK", name: "HDFC Bank", price: "1,678.90", change: "+8.75", percent: "+0.52%", trend: "up", volume: "5.3M", marketCap: "12.3L Cr" },
-  { symbol: "ICICIBANK", name: "ICICI Bank", price: "987.35", change: "-5.20", percent: "-0.52%", trend: "down", volume: "7.8M", marketCap: "6.9L Cr" },
-  { symbol: "BHARTIARTL", name: "Bharti Airtel", price: "1,234.56", change: "+34.20", percent: "+2.85%", trend: "up", volume: "4.2M", marketCap: "7.2L Cr" },
-  { symbol: "ITC", name: "ITC Limited", price: "456.78", change: "-3.45", percent: "-0.75%", trend: "down", volume: "9.1M", marketCap: "5.7L Cr" },
-  { symbol: "SBIN", name: "State Bank of India", price: "623.45", change: "+12.30", percent: "+2.01%", trend: "up", volume: "12.4M", marketCap: "5.6L Cr" },
+const stockSymbols = [
+  { symbol: "RELIANCE", exchange: "NSE", name: "Reliance Industries", marketCap: "16.6L Cr" },
+  { symbol: "TCS", exchange: "NSE", name: "Tata Consultancy Services", marketCap: "13.8L Cr" },
+  { symbol: "INFY", exchange: "NSE", name: "Infosys Limited", marketCap: "6.5L Cr" },
+  { symbol: "HDFCBANK", exchange: "NSE", name: "HDFC Bank", marketCap: "12.3L Cr" },
+  { symbol: "ICICIBANK", exchange: "NSE", name: "ICICI Bank", marketCap: "6.9L Cr" },
+];
+
+const indexSymbols = [
+  { symbol: "NIFTY", exchange: "NSE", name: "NIFTY 50" },
+  { symbol: "SENSEX", exchange: "BSE", name: "SENSEX" },
+  { symbol: "BANKNIFTY", exchange: "NSE", name: "NIFTY BANK" },
+  { symbol: "INDIAVIX", exchange: "NSE", name: "INDIA VIX" },
 ];
 
 const sectors = [
@@ -27,14 +32,19 @@ const sectors = [
   { name: "FMCG", change: "-0.56%", trend: "down", stocks: 78 },
 ];
 
-const indices = [
-  { name: "NIFTY 50", value: "21,453.25", change: "+245.80", percent: "+1.16%", trend: "up", high: "21,567.30", low: "21,289.45" },
-  { name: "SENSEX", value: "71,283.45", change: "+823.45", percent: "+1.17%", trend: "up", high: "71,456.78", low: "70,892.34" },
-  { name: "NIFTY BANK", value: "46,789.30", change: "-127.65", percent: "-0.27%", trend: "down", high: "47,123.45", low: "46,567.89" },
-  { name: "NIFTY IT", value: "32,456.78", change: "+456.23", percent: "+1.43%", trend: "up", high: "32,567.90", low: "31,987.65" },
-];
-
 const Markets = () => {
+  const { data: indexData, loading: indexLoading } = useMarketData(indexSymbols);
+  const { data: stockData, loading: stockLoading } = useMarketData(stockSymbols);
+
+  const formatVolume = (volume: number) => {
+    if (volume >= 1000000) return `${(volume / 1000000).toFixed(1)}M`;
+    if (volume >= 1000) return `${(volume / 1000).toFixed(1)}K`;
+    return volume.toString();
+  };
+
+  const formatPrice = (price: number) => {
+    return price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
@@ -58,34 +68,41 @@ const Markets = () => {
 
             {/* Indices Overview */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {indices.map((index) => (
-                <Card key={index.name} className="bg-card border-border hover:border-primary/50 transition-all">
-                  <CardContent className="pt-6">
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-semibold text-sm">{index.name}</h3>
-                        <div className={`w-2 h-2 rounded-full ${index.trend === "up" ? "bg-success" : "bg-destructive"} animate-pulse`} />
-                      </div>
-                      <div className="text-2xl font-mono font-bold">{index.value}</div>
-                      <div className={`flex items-center gap-1 text-sm font-medium ${index.trend === "up" ? "text-success" : "text-destructive"}`}>
-                        {index.trend === "up" ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                        <span>{index.change}</span>
-                        <span className="text-xs">({index.percent})</span>
-                      </div>
-                      <div className="pt-2 border-t border-border text-xs text-muted-foreground space-y-1">
-                        <div className="flex justify-between">
-                          <span>High:</span>
-                          <span className="font-mono">{index.high}</span>
+              {indexSymbols.map((index) => {
+                const liveData = indexData.find(d => d.symbol === index.symbol);
+                const trend = liveData && liveData.change >= 0 ? "up" : "down";
+                
+                return (
+                  <Card key={index.symbol} className="bg-card border-border hover:border-primary/50 transition-all">
+                    <CardContent className="pt-6">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-semibold text-sm">{index.name}</h3>
+                          <div className={`w-2 h-2 rounded-full ${trend === "up" ? "bg-success" : "bg-destructive"} animate-pulse`} />
                         </div>
-                        <div className="flex justify-between">
-                          <span>Low:</span>
-                          <span className="font-mono">{index.low}</span>
+                        <div className="text-2xl font-mono font-bold">
+                          {indexLoading ? "..." : liveData ? formatPrice(liveData.price) : "N/A"}
+                        </div>
+                        <div className={`flex items-center gap-1 text-sm font-medium ${trend === "up" ? "text-success" : "text-destructive"}`}>
+                          {trend === "up" ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                          <span>{liveData ? `${liveData.change >= 0 ? '+' : ''}${liveData.change.toFixed(2)}` : "N/A"}</span>
+                          <span className="text-xs">({liveData ? `${liveData.change_percent >= 0 ? '+' : ''}${liveData.change_percent.toFixed(2)}%` : "N/A"})</span>
+                        </div>
+                        <div className="pt-2 border-t border-border text-xs text-muted-foreground space-y-1">
+                          <div className="flex justify-between">
+                            <span>High:</span>
+                            <span className="font-mono">{liveData ? formatPrice(liveData.high) : "N/A"}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Low:</span>
+                            <span className="font-mono">{liveData ? formatPrice(liveData.low) : "N/A"}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
 
             {/* Main Content Tabs */}
@@ -119,41 +136,64 @@ const Markets = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {stocks.map((stock, index) => (
-                            <tr
-                              key={stock.symbol}
-                              className={`hover:bg-muted/20 transition-colors ${
-                                index !== stocks.length - 1 ? "border-b border-border" : ""
-                              }`}
-                            >
-                              <td className="p-3">
-                                <div className="font-mono font-semibold text-sm">{stock.symbol}</div>
-                              </td>
-                              <td className="p-3">
-                                <div className="text-sm text-muted-foreground">{stock.name}</div>
-                              </td>
-                              <td className="p-3 text-right font-mono font-semibold">₹{stock.price}</td>
-                              <td className="p-3 text-right">
-                                <div className={`flex items-center justify-end gap-1 text-sm font-medium ${stock.trend === "up" ? "text-success" : "text-destructive"}`}>
-                                  {stock.trend === "up" ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                                  <span>{stock.change}</span>
-                                  <span className="text-xs">({stock.percent})</span>
-                                </div>
-                              </td>
-                              <td className="p-3 text-right font-mono text-sm text-muted-foreground">{stock.volume}</td>
-                              <td className="p-3 text-right font-mono text-sm text-muted-foreground">{stock.marketCap}</td>
-                              <td className="p-3 text-right">
-                                <div className="flex items-center justify-end gap-2">
-                                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
-                                    <Star className="w-3 h-3" />
-                                  </Button>
-                                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
-                                    <Plus className="w-3 h-3" />
-                                  </Button>
-                                </div>
+                          {stockLoading ? (
+                            <tr>
+                              <td colSpan={7} className="p-3 text-center text-muted-foreground">
+                                Loading stock data...
                               </td>
                             </tr>
-                          ))}
+                          ) : stockData.length === 0 ? (
+                            <tr>
+                              <td colSpan={7} className="p-3 text-center text-muted-foreground">
+                                No stock data available
+                              </td>
+                            </tr>
+                          ) : (
+                            stockSymbols.map((stock, index) => {
+                              const liveData = stockData.find(d => d.symbol === stock.symbol);
+                              const trend = liveData && liveData.change >= 0 ? "up" : "down";
+                              
+                              return (
+                                <tr
+                                  key={stock.symbol}
+                                  className={`hover:bg-muted/20 transition-colors ${
+                                    index !== stockSymbols.length - 1 ? "border-b border-border" : ""
+                                  }`}
+                                >
+                                  <td className="p-3">
+                                    <div className="font-mono font-semibold text-sm">{stock.symbol}</div>
+                                  </td>
+                                  <td className="p-3">
+                                    <div className="text-sm text-muted-foreground">{stock.name}</div>
+                                  </td>
+                                  <td className="p-3 text-right font-mono font-semibold">
+                                    ₹{liveData ? formatPrice(liveData.price) : "N/A"}
+                                  </td>
+                                  <td className="p-3 text-right">
+                                    <div className={`flex items-center justify-end gap-1 text-sm font-medium ${trend === "up" ? "text-success" : "text-destructive"}`}>
+                                      {trend === "up" ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                                      <span>{liveData ? `${liveData.change >= 0 ? '+' : ''}${liveData.change.toFixed(2)}` : "N/A"}</span>
+                                      <span className="text-xs">({liveData ? `${liveData.change_percent >= 0 ? '+' : ''}${liveData.change_percent.toFixed(2)}%` : "N/A"})</span>
+                                    </div>
+                                  </td>
+                                  <td className="p-3 text-right font-mono text-sm text-muted-foreground">
+                                    {liveData ? formatVolume(liveData.volume) : "N/A"}
+                                  </td>
+                                  <td className="p-3 text-right font-mono text-sm text-muted-foreground">{stock.marketCap}</td>
+                                  <td className="p-3 text-right">
+                                    <div className="flex items-center justify-end gap-2">
+                                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
+                                        <Star className="w-3 h-3" />
+                                      </Button>
+                                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
+                                        <Plus className="w-3 h-3" />
+                                      </Button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
                         </tbody>
                       </table>
                     </div>
