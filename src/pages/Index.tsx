@@ -5,8 +5,11 @@ import { Watchlist } from "@/components/Watchlist";
 import { StrategyBuilder } from "@/components/StrategyBuilder";
 import { TradingPanel } from "@/components/TradingPanel";
 import { PortfolioOverview } from "@/components/PortfolioOverview";
+import { usePortfolioData } from "@/hooks/usePortfolioData";
 
 const Index = () => {
+  const { totalValue, totalPnL } = usePortfolioData();
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
@@ -27,13 +30,13 @@ const Index = () => {
                 <div className="px-4 py-2 rounded-lg bg-card border border-border">
                   <div className="text-xs text-muted-foreground">Portfolio Value</div>
                   <div className="text-xl font-mono font-bold text-success">
-                    ₹12,45,678
+                    ₹{totalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                   </div>
                 </div>
                 <div className="px-4 py-2 rounded-lg bg-card border border-border">
                   <div className="text-xs text-muted-foreground">Today's P&L</div>
-                  <div className="text-xl font-mono font-bold text-success">
-                    +₹8,945
+                  <div className={`text-xl font-mono font-bold ${totalPnL >= 0 ? 'text-success' : 'text-destructive'}`}>
+                    {totalPnL >= 0 ? '+' : ''}₹{totalPnL.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                   </div>
                 </div>
               </div>
