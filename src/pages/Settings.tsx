@@ -7,8 +7,18 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Settings as SettingsIcon, User, Shield, Bell, Link2, Wallet, AlertTriangle } from "lucide-react";
+import { BrokerConnectionDialog } from "@/components/BrokerConnectionDialog";
+import { useState } from "react";
 
 const Settings = () => {
+  const [brokerDialogOpen, setBrokerDialogOpen] = useState(false);
+  const [selectedBroker, setSelectedBroker] = useState("");
+
+  const handleConnectBroker = (brokerName: string) => {
+    setSelectedBroker(brokerName);
+    setBrokerDialogOpen(true);
+  };
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
@@ -87,7 +97,7 @@ const Settings = () => {
                             <div className="text-xs text-muted-foreground">Not connected</div>
                           </div>
                         </div>
-                        <Button variant="outline">Connect</Button>
+                        <Button variant="outline" onClick={() => handleConnectBroker("Zerodha")}>Connect</Button>
                       </div>
 
                       <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-muted/30">
@@ -100,7 +110,7 @@ const Settings = () => {
                             <div className="text-xs text-muted-foreground">Not connected</div>
                           </div>
                         </div>
-                        <Button variant="outline">Connect</Button>
+                        <Button variant="outline" onClick={() => handleConnectBroker("Upstox")}>Connect</Button>
                       </div>
 
                       <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-muted/30">
@@ -113,7 +123,7 @@ const Settings = () => {
                             <div className="text-xs text-muted-foreground">Not connected</div>
                           </div>
                         </div>
-                        <Button variant="outline">Connect</Button>
+                        <Button variant="outline" onClick={() => handleConnectBroker("Angel One")}>Connect</Button>
                       </div>
                     </div>
                   </CardContent>
@@ -244,6 +254,11 @@ const Settings = () => {
           </div>
         </main>
       </div>
+      <BrokerConnectionDialog
+        open={brokerDialogOpen}
+        onOpenChange={setBrokerDialogOpen}
+        brokerName={selectedBroker}
+      />
     </SidebarProvider>
   );
 };
