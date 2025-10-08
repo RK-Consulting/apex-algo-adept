@@ -1,11 +1,67 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TrendingUp, TrendingDown } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 export function TradingPanel() {
+  const { toast } = useToast();
+  const [buySymbol, setBuySymbol] = useState("");
+  const [buyQuantity, setBuyQuantity] = useState("");
+  const [buyPrice, setBuyPrice] = useState("");
+  const [sellSymbol, setSellSymbol] = useState("");
+  const [sellQuantity, setSellQuantity] = useState("");
+  const [sellPrice, setSellPrice] = useState("");
+
+  const calculateTotal = (qty: string, price: string) => {
+    const q = parseFloat(qty) || 0;
+    const p = parseFloat(price) || 0;
+    return (q * p).toFixed(2);
+  };
+
+  const handleBuyOrder = () => {
+    if (!buySymbol || !buyQuantity || !buyPrice) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all fields to place an order.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Buy Order Placed",
+      description: `${buyQuantity} shares of ${buySymbol.toUpperCase()} at ₹${buyPrice}`,
+    });
+
+    setBuySymbol("");
+    setBuyQuantity("");
+    setBuyPrice("");
+  };
+
+  const handleSellOrder = () => {
+    if (!sellSymbol || !sellQuantity || !sellPrice) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all fields to place an order.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Sell Order Placed",
+      description: `${sellQuantity} shares of ${sellSymbol.toUpperCase()} at ₹${sellPrice}`,
+    });
+
+    setSellSymbol("");
+    setSellQuantity("");
+    setSellPrice("");
+  };
+
   return (
     <Card className="bg-card border-border">
       <CardHeader>
@@ -31,6 +87,8 @@ export function TradingPanel() {
                 id="symbol"
                 placeholder="e.g., RELIANCE"
                 className="h-9 bg-background border-border"
+                value={buySymbol}
+                onChange={(e) => setBuySymbol(e.target.value)}
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -41,6 +99,8 @@ export function TradingPanel() {
                   type="number"
                   placeholder="0"
                   className="h-9 bg-background border-border font-mono"
+                  value={buyQuantity}
+                  onChange={(e) => setBuyQuantity(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
@@ -50,20 +110,25 @@ export function TradingPanel() {
                   type="number"
                   placeholder="0.00"
                   className="h-9 bg-background border-border font-mono"
+                  value={buyPrice}
+                  onChange={(e) => setBuyPrice(e.target.value)}
                 />
               </div>
             </div>
             <div className="p-3 rounded-lg bg-muted/30 border border-border">
               <div className="flex justify-between text-xs mb-1">
                 <span className="text-muted-foreground">Total Value</span>
-                <span className="font-mono font-semibold">₹0.00</span>
+                <span className="font-mono font-semibold">₹{calculateTotal(buyQuantity, buyPrice)}</span>
               </div>
               <div className="flex justify-between text-xs">
                 <span className="text-muted-foreground">Available Margin</span>
                 <span className="font-mono font-semibold text-success">₹2,45,000</span>
               </div>
             </div>
-            <Button className="w-full bg-success hover:bg-success/90 text-success-foreground">
+            <Button 
+              className="w-full bg-success hover:bg-success/90 text-success-foreground"
+              onClick={handleBuyOrder}
+            >
               <TrendingUp className="w-4 h-4 mr-2" />
               Place Buy Order
             </Button>
@@ -76,6 +141,8 @@ export function TradingPanel() {
                 id="sell-symbol"
                 placeholder="e.g., TCS"
                 className="h-9 bg-background border-border"
+                value={sellSymbol}
+                onChange={(e) => setSellSymbol(e.target.value)}
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -86,6 +153,8 @@ export function TradingPanel() {
                   type="number"
                   placeholder="0"
                   className="h-9 bg-background border-border font-mono"
+                  value={sellQuantity}
+                  onChange={(e) => setSellQuantity(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
@@ -95,20 +164,25 @@ export function TradingPanel() {
                   type="number"
                   placeholder="0.00"
                   className="h-9 bg-background border-border font-mono"
+                  value={sellPrice}
+                  onChange={(e) => setSellPrice(e.target.value)}
                 />
               </div>
             </div>
             <div className="p-3 rounded-lg bg-muted/30 border border-border">
               <div className="flex justify-between text-xs mb-1">
                 <span className="text-muted-foreground">Total Value</span>
-                <span className="font-mono font-semibold">₹0.00</span>
+                <span className="font-mono font-semibold">₹{calculateTotal(sellQuantity, sellPrice)}</span>
               </div>
               <div className="flex justify-between text-xs">
                 <span className="text-muted-foreground">Holdings</span>
                 <span className="font-mono font-semibold">0 shares</span>
               </div>
             </div>
-            <Button className="w-full bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+            <Button 
+              className="w-full bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+              onClick={handleSellOrder}
+            >
               <TrendingDown className="w-4 h-4 mr-2" />
               Place Sell Order
             </Button>

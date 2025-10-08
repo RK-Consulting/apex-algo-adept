@@ -1,33 +1,71 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Play, Plus, TrendingUp } from "lucide-react";
+import { Sparkles, Play, Pause, Plus, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-
-const strategies = [
-  {
-    name: "Mean Reversion Pro",
-    status: "active",
-    performance: "+18.5%",
-    trades: 142,
-    winRate: "68%",
-  },
-  {
-    name: "Momentum Breakout",
-    status: "active",
-    performance: "+24.3%",
-    trades: 89,
-    winRate: "71%",
-  },
-  {
-    name: "AI Smart Grid",
-    status: "paused",
-    performance: "+12.1%",
-    trades: 67,
-    winRate: "65%",
-  },
-];
+import { CreateStrategyDialog } from "@/components/CreateStrategyDialog";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 
 export function StrategyBuilder() {
+  const [strategies, setStrategies] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const { toast } = useToast();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchStrategies();
+  }, []);
+
+  const fetchStrategies = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('strategies')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setStrategies(data || []);
+    } catch (error) {
+      console.error('Error fetching strategies:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleStrategyStatus = async (id: string, currentStatus: string) => {
+    const newStatus = currentStatus === 'active' ? 'paused' : 'active';
+    
+    try {
+      const { error } = await supabase
+        .from('strategies')
+        .update({ status: newStatus })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Strategy Updated",
+        description: `Strategy ${newStatus === 'active' ? 'resumed' : 'paused'} successfully.`,
+      });
+
+      fetchStrategies();
+    } catch (error) {
+      console.error('Error updating strategy:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update strategy status.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const viewStrategyDetails = (id: string) => {
+    navigate(`/strategies?id=${id}`);
+  };
+
   return (
     <Card className="bg-card border-border">
       <CardHeader>
@@ -36,13 +74,24 @@ export function StrategyBuilder() {
             <Sparkles className="w-5 h-5 text-accent" />
             AI Strategy Builder
           </CardTitle>
-          <Button variant="default" size="sm" className="gap-2">
+          <Button 
+            variant="default" 
+            size="sm" 
+            className="gap-2"
+            onClick={() => setDialogOpen(true)}
+          >
             <Plus className="w-4 h-4" />
             Create Strategy
           </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        <CreateStrategyDialog 
+          open={dialogOpen} 
+          onOpenChange={setDialogOpen}
+          onStrategyCreated={fetchStrategies}
+        />
+        
         {/* AI Suggestion Banner */}
         <div className="p-4 rounded-lg bg-gradient-to-r from-accent/10 to-primary/10 border border-accent/20">
           <div className="flex items-start gap-3">
@@ -62,48 +111,89 @@ export function StrategyBuilder() {
           </div>
         </div>
 
-        {/* Active Strategies */}
-        <div className="space-y-3">
-          {strategies.map((strategy) => (
-            <div
-              key={strategy.name}
-              className="p-4 rounded-lg bg-muted/30 border border-border hover:border-primary/50 transition-all"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h4 className="font-semibold text-sm">{strategy.name}</h4>
-                    <Badge
-                      variant={strategy.status === "active" ? "default" : "secondary"}
-                      className="text-xs"
+        {loading ? (
+          <div className="text-center text-muted-foreground py-8">Loading strategies...</div>
+        ) : strategies.length === 0 ? (
+          <div className="text-center text-muted-foreground py-8">
+            No strategies yet. Create your first strategy to get started!
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {strategies.map((strategy) => {
+              const performanceData = strategy.performance_data as any;
+              const trades = performanceData?.trades || 0;
+              const winRate = performanceData?.win_rate || 0;
+              const performance = performanceData?.total_return || 0;
+              
+              return (
+                <div
+                  key={strategy.id}
+                  className="p-4 rounded-lg bg-muted/30 border border-border hover:border-primary/50 transition-all"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-semibold text-sm">{strategy.name}</h4>
+                        <Badge
+                          variant={strategy.status === "active" ? "default" : "secondary"}
+                          className="text-xs"
+                        >
+                          {strategy.status}
+                        </Badge>
+                        {strategy.ai_generated && (
+                          <Badge variant="outline" className="text-xs">
+                            <Sparkles className="w-3 h-3 mr-1" />
+                            AI
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                        <span>{trades} trades</span>
+                        <span>Win rate: {winRate}%</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`flex items-center gap-1 font-mono font-bold ${
+                        performance >= 0 ? 'text-success' : 'text-destructive'
+                      }`}>
+                        <TrendingUp className="w-4 h-4" />
+                        {performance >= 0 ? '+' : ''}{performance}%
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="h-8 text-xs flex-1"
+                      onClick={() => toggleStrategyStatus(strategy.id, strategy.status)}
                     >
-                      {strategy.status}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                    <span>{strategy.trades} trades</span>
-                    <span>Win rate: {strategy.winRate}</span>
+                      {strategy.status === "active" ? (
+                        <>
+                          <Pause className="w-3 h-3 mr-1" />
+                          Pause
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-3 h-3 mr-1" />
+                          Resume
+                        </>
+                      )}
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="h-8 text-xs flex-1"
+                      onClick={() => viewStrategyDetails(strategy.id)}
+                    >
+                      View Details
+                    </Button>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="flex items-center gap-1 text-success font-mono font-bold">
-                    <TrendingUp className="w-4 h-4" />
-                    {strategy.performance}
-                  </div>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" className="h-8 text-xs flex-1">
-                  <Play className="w-3 h-3 mr-1" />
-                  {strategy.status === "active" ? "Pause" : "Resume"}
-                </Button>
-                <Button size="sm" variant="outline" className="h-8 text-xs flex-1">
-                  View Details
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -1,14 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, Activity } from "lucide-react";
-
-const holdings = [
-  { symbol: "RELIANCE", qty: 50, avgPrice: "2,380.00", ltp: "2,456.70", pnl: "+3,835", percent: "+3.22%", trend: "up" },
-  { symbol: "TCS", qty: 25, avgPrice: "3,850.00", ltp: "3,789.20", pnl: "-1,520", percent: "-1.58%", trend: "down" },
-  { symbol: "INFY", qty: 75, avgPrice: "1,498.00", ltp: "1,567.45", pnl: "+5,209", percent: "+4.64%", trend: "up" },
-  { symbol: "HDFCBANK", qty: 40, avgPrice: "1,645.00", ltp: "1,678.90", pnl: "+1,356", percent: "+2.06%", trend: "up" },
-];
+import { usePortfolioData } from "@/hooks/usePortfolioData";
 
 export function PortfolioOverview() {
+  const { holdings, totalPnL, loading } = usePortfolioData();
+
   return (
     <Card className="bg-card border-border">
       <CardHeader>
@@ -19,7 +15,9 @@ export function PortfolioOverview() {
           </CardTitle>
           <div className="text-sm">
             <span className="text-muted-foreground">Total P&L: </span>
-            <span className="font-mono font-bold text-success">+₹8,945</span>
+            <span className={`font-mono font-bold ${totalPnL >= 0 ? 'text-success' : 'text-destructive'}`}>
+              {totalPnL >= 0 ? '+' : ''}₹{totalPnL.toFixed(2)}
+            </span>
           </div>
         </div>
       </CardHeader>
@@ -37,46 +35,60 @@ export function PortfolioOverview() {
               </tr>
             </thead>
             <tbody>
-              {holdings.map((holding, index) => (
-                <tr
-                  key={holding.symbol}
-                  className={`hover:bg-muted/20 transition-colors ${
-                    index !== holdings.length - 1 ? "border-b border-border" : ""
-                  }`}
-                >
-                  <td className="p-3">
-                    <div className="font-mono font-semibold text-sm">{holding.symbol}</div>
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="p-3 text-center text-muted-foreground">
+                    Loading portfolio data...
                   </td>
-                  <td className="p-3 text-right font-mono text-sm">{holding.qty}</td>
-                  <td className="p-3 text-right font-mono text-sm text-muted-foreground">
-                    ₹{holding.avgPrice}
+                </tr>
+              ) : holdings.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="p-3 text-center text-muted-foreground">
+                    No holdings yet
                   </td>
-                  <td className="p-3 text-right font-mono text-sm font-semibold">
-                    ₹{holding.ltp}
-                  </td>
-                  <td
-                    className={`p-3 text-right font-mono text-sm font-semibold ${
-                      holding.trend === "up" ? "text-success" : "text-destructive"
+                </tr>
+              ) : (
+                holdings.map((holding, index) => (
+                  <tr
+                    key={holding.symbol}
+                    className={`hover:bg-muted/20 transition-colors ${
+                      index !== holdings.length - 1 ? "border-b border-border" : ""
                     }`}
                   >
-                    ₹{holding.pnl}
-                  </td>
-                  <td className="p-3 text-right">
-                    <div
-                      className={`flex items-center justify-end gap-1 text-xs font-medium ${
+                    <td className="p-3">
+                      <div className="font-mono font-semibold text-sm">{holding.symbol}</div>
+                    </td>
+                    <td className="p-3 text-right font-mono text-sm">{holding.qty}</td>
+                    <td className="p-3 text-right font-mono text-sm text-muted-foreground">
+                      ₹{holding.avgPrice.toFixed(2)}
+                    </td>
+                    <td className="p-3 text-right font-mono text-sm font-semibold">
+                      ₹{holding.ltp.toFixed(2)}
+                    </td>
+                    <td
+                      className={`p-3 text-right font-mono text-sm font-semibold ${
                         holding.trend === "up" ? "text-success" : "text-destructive"
                       }`}
                     >
-                      {holding.trend === "up" ? (
-                        <TrendingUp className="w-3 h-3" />
-                      ) : (
-                        <TrendingDown className="w-3 h-3" />
-                      )}
-                      <span>{holding.percent}</span>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                      {holding.pnl >= 0 ? '+' : ''}₹{holding.pnl.toFixed(2)}
+                    </td>
+                    <td className="p-3 text-right">
+                      <div
+                        className={`flex items-center justify-end gap-1 text-xs font-medium ${
+                          holding.trend === "up" ? "text-success" : "text-destructive"
+                        }`}
+                      >
+                        {holding.trend === "up" ? (
+                          <TrendingUp className="w-3 h-3" />
+                        ) : (
+                          <TrendingDown className="w-3 h-3" />
+                        )}
+                        <span>{holding.pnlPercent >= 0 ? '+' : ''}{holding.pnlPercent.toFixed(2)}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
