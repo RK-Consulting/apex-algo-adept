@@ -125,6 +125,19 @@ const Settings = () => {
                         </div>
                         <Button variant="outline" onClick={() => handleConnectBroker("Angel One")}>Connect</Button>
                       </div>
+
+                      <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-muted/30">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                            <Wallet className="w-5 h-5 text-primary" />
+                          </div>
+                          <div>
+                            <div className="font-semibold">ICICIDIRECT</div>
+                            <div className="text-xs text-muted-foreground">Not connected</div>
+                          </div>
+                        </div>
+                        <Button variant="outline" onClick={() => handleConnectBroker("ICICIDIRECT")}>Connect</Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
