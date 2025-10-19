@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: alphaforge-postgres
+    environment:
+      POSTGRES_DB: alphaforge
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_password_change_in_production
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend Server
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: alphaforge-backend
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: alphaforge
+      DB_USER: postgres
+      DB_PASSWORD: postgres_password_change_in_production
+      JWT_SECRET: development_jwt_secret_change_in_production
+      JWT_EXPIRES_IN: 7d
+      CREDENTIALS_ENCRYPTION_KEY: development_encryption_key_32_chars_minimum_required
+      LOVABLE_API_KEY: ${LOVABLE_API_KEY}
+      ALLOWED_ORIGINS: http://localhost:5173,http://localhost:3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    command: npm run dev
+
+  # Frontend (React + Vite)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: alphaforge-frontend
+    environment:
+      VITE_API_URL: http://localhost:3000/api
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: npm run dev
+
+volumes:
+  postgres_data:
