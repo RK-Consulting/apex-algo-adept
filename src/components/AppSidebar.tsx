@@ -35,7 +35,7 @@ const bottomItems = [
 
 export function AppSidebar() {
   return (
-    <Sidebar className="border-r border-border w-56">
+    <Sidebar className="border-r border-border w-44">
       <div className="p-6 border-b border-border">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center">
