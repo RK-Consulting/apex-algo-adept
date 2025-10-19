@@ -135,10 +135,21 @@ const Strategies = () => {
   const handleDeployTemplate = async (templateName: string, templateDescription: string, templateRisk: string) => {
     setGeneratingTemplate(templateName);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData.session) {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error('Session error:', sessionError);
         toast({
-          title: "Authentication required",
+          title: "Authentication Error",
+          description: "Failed to verify authentication. Please try logging in again.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (!sessionData?.session) {
+        toast({
+          title: "Authentication Required",
           description: "Please sign in to create strategies",
           variant: "destructive",
         });
@@ -151,7 +162,7 @@ const Strategies = () => {
       else if (templateName.includes("Trend")) tradingStyle = "Swing";
       else if (templateName.includes("Statistical")) tradingStyle = "Positional";
 
-      const { error } = await supabase.functions.invoke('generate-strategy', {
+      const { data, error } = await supabase.functions.invoke('generate-strategy', {
         body: {
           name: templateName,
           trading_style: tradingStyle,
@@ -161,7 +172,14 @@ const Strategies = () => {
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Edge function error:', error);
+        throw new Error(error.message || 'Failed to send request to edge function');
+      }
+
+      if (!data?.success) {
+        throw new Error(data?.error || 'Strategy creation failed');
+      }
 
       toast({
         title: "Success!",
@@ -173,7 +191,7 @@ const Strategies = () => {
       console.error('Error deploying template:', error);
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create strategy",
+        description: error instanceof Error ? error.message : "Failed to create strategy. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -184,17 +202,28 @@ const Strategies = () => {
   const handleDeployAISuggestion = async (suggestion: typeof aiSuggestions[0]) => {
     setGeneratingTemplate(suggestion.name);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData.session) {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error('Session error:', sessionError);
         toast({
-          title: "Authentication required",
+          title: "Authentication Error",
+          description: "Failed to verify authentication. Please try logging in again.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (!sessionData?.session) {
+        toast({
+          title: "Authentication Required",
           description: "Please sign in to create strategies",
           variant: "destructive",
         });
         return;
       }
 
-      const { error } = await supabase.functions.invoke('generate-strategy', {
+      const { data, error } = await supabase.functions.invoke('generate-strategy', {
         body: {
           name: suggestion.name,
           trading_style: "Intraday",
@@ -204,7 +233,14 @@ const Strategies = () => {
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Edge function error:', error);
+        throw new Error(error.message || 'Failed to send request to edge function');
+      }
+
+      if (!data?.success) {
+        throw new Error(data?.error || 'Strategy deployment failed');
+      }
 
       toast({
         title: "Success!",
@@ -216,7 +252,7 @@ const Strategies = () => {
       console.error('Error deploying AI suggestion:', error);
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to deploy strategy",
+        description: error instanceof Error ? error.message : "Failed to deploy strategy. Please try again.",
         variant: "destructive",
       });
     } finally {
