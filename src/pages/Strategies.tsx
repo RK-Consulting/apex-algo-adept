@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Play, Pause, Plus, TrendingUp, Brain, Zap, Target, LineChart } from "lucide-react";
+import { Sparkles, Play, Pause, Plus, TrendingUp, Brain, Zap, Target, LineChart, Loader2 } from "lucide-react";
 import { CreateStrategyDialog } from "@/components/CreateStrategyDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -79,6 +79,7 @@ const Strategies = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [strategies, setStrategies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [generatingTemplate, setGeneratingTemplate] = useState<string | null>(null);
   const { toast } = useToast();
 
   const loadStrategies = async () => {
@@ -128,6 +129,98 @@ const Strategies = () => {
         description: "Failed to update strategy",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleDeployTemplate = async (templateName: string, templateDescription: string, templateRisk: string) => {
+    setGeneratingTemplate(templateName);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        toast({
+          title: "Authentication required",
+          description: "Please sign in to create strategies",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Default trading style based on template
+      let tradingStyle = "Intraday";
+      if (templateName.includes("Scalping")) tradingStyle = "Scalping";
+      else if (templateName.includes("Trend")) tradingStyle = "Swing";
+      else if (templateName.includes("Statistical")) tradingStyle = "Positional";
+
+      const { error } = await supabase.functions.invoke('generate-strategy', {
+        body: {
+          name: templateName,
+          trading_style: tradingStyle,
+          capital_allocation: 500000,
+          risk_level: templateRisk,
+          description: templateDescription,
+        },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Success!",
+        description: `${templateName} strategy has been created`,
+      });
+
+      loadStrategies();
+    } catch (error) {
+      console.error('Error deploying template:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to create strategy",
+        variant: "destructive",
+      });
+    } finally {
+      setGeneratingTemplate(null);
+    }
+  };
+
+  const handleDeployAISuggestion = async (suggestion: typeof aiSuggestions[0]) => {
+    setGeneratingTemplate(suggestion.name);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        toast({
+          title: "Authentication required",
+          description: "Please sign in to create strategies",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { error } = await supabase.functions.invoke('generate-strategy', {
+        body: {
+          name: suggestion.name,
+          trading_style: "Intraday",
+          capital_allocation: 500000,
+          risk_level: suggestion.riskLevel,
+          description: suggestion.description,
+        },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Success!",
+        description: `${suggestion.name} strategy has been deployed`,
+      });
+
+      loadStrategies();
+    } catch (error) {
+      console.error('Error deploying AI suggestion:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to deploy strategy",
+        variant: "destructive",
+      });
+    } finally {
+      setGeneratingTemplate(null);
     }
   };
 
@@ -184,8 +277,21 @@ const Strategies = () => {
                           <Badge variant="outline" className="text-xs">{suggestion.riskLevel}</Badge>
                         </div>
                       </div>
-                      <Button size="sm" variant="outline" className="w-full mt-3 h-8 text-xs">
-                        Deploy Strategy
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="w-full mt-3 h-8 text-xs"
+                        onClick={() => handleDeployAISuggestion(suggestion)}
+                        disabled={generatingTemplate === suggestion.name}
+                      >
+                        {generatingTemplate === suggestion.name ? (
+                          <>
+                            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                            Deploying...
+                          </>
+                        ) : (
+                          "Deploy Strategy"
+                        )}
                       </Button>
                     </div>
                   ))}
@@ -316,8 +422,21 @@ const Strategies = () => {
                           </div>
                         </div>
                         <p className="text-sm text-muted-foreground mb-4">{template.description}</p>
-                        <Button size="sm" variant="outline" className="w-full">
-                          Use Template
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="w-full"
+                          onClick={() => handleDeployTemplate(template.name, template.description, template.risk)}
+                          disabled={generatingTemplate === template.name}
+                        >
+                          {generatingTemplate === template.name ? (
+                            <>
+                              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                              Creating...
+                            </>
+                          ) : (
+                            "Use Template"
+                          )}
                         </Button>
                       </CardContent>
                     </Card>
