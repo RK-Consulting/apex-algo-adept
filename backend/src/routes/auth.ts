@@ -15,9 +15,12 @@ if (!JWT_SECRET) {
   process.exit(1);
 }
 
-// Helper: Create a token
+/**
+ * ✅ Helper: Create a JWT token
+ * - Fixes TS type issue by casting the `expiresIn` value properly.
+ */
 const createToken = (payload: object, expiresIn: string = "1h"): string => {
-  const options: SignOptions = { expiresIn };
+  const options = { expiresIn } as unknown as SignOptions;
   return jwt.sign(payload, JWT_SECRET as string, options);
 };
 
@@ -33,7 +36,6 @@ router.post("/login", async (req: Request, res: Response) => {
     }
 
     const user = await prisma.user.findUnique({ where: { email } });
-
     if (!user) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
@@ -52,7 +54,7 @@ router.post("/login", async (req: Request, res: Response) => {
 });
 
 // ----------------------
-// VERIFY TOKEN (Middleware Example)
+// VERIFY TOKEN
 // ----------------------
 router.get("/verify", (req: Request, res: Response) => {
   try {
@@ -71,7 +73,7 @@ router.get("/verify", (req: Request, res: Response) => {
 });
 
 // ----------------------
-// SIGN-UP (OPTIONAL)
+// USER REGISTER
 // ----------------------
 router.post("/register", async (req: Request, res: Response) => {
   try {
