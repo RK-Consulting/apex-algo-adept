@@ -5,6 +5,7 @@ import authRouter from './routes/auth.js';
 import { strategyRouter } from './routes/strategies.js';
 import { credentialsRouter } from './routes/credentials.js';
 import { marketDataRouter } from './routes/marketData.js';
+import { iciciBrokerRouter } from './routes/iciciBroker.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/logger.js';
 
@@ -44,6 +45,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/strategies', strategyRouter);
 app.use('/api/credentials', credentialsRouter);
 app.use('/api/market-data', marketDataRouter);
+app.use('/api/icici', iciciBrokerRouter);
 
 // Error handling
 app.use(errorHandler);

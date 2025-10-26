@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS public.user_credentials (
     broker_name TEXT NOT NULL,
     api_key TEXT NOT NULL,
     api_secret TEXT,
+    session_token TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(user_id, broker_name)

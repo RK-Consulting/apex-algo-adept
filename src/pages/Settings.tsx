@@ -8,15 +8,21 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Settings as SettingsIcon, User, Shield, Bell, Link2, Wallet, AlertTriangle } from "lucide-react";
 import { BrokerConnectionDialog } from "@/components/BrokerConnectionDialog";
+import { ICICIBrokerDialog } from "@/components/ICICIBrokerDialog";
 import { useState } from "react";
 
 const Settings = () => {
   const [brokerDialogOpen, setBrokerDialogOpen] = useState(false);
+  const [iciciBrokerDialogOpen, setIciciBrokerDialogOpen] = useState(false);
   const [selectedBroker, setSelectedBroker] = useState("");
 
   const handleConnectBroker = (brokerName: string) => {
-    setSelectedBroker(brokerName);
-    setBrokerDialogOpen(true);
+    if (brokerName === "ICICIDIRECT") {
+      setIciciBrokerDialogOpen(true);
+    } else {
+      setSelectedBroker(brokerName);
+      setBrokerDialogOpen(true);
+    }
   };
 
   return (
@@ -271,6 +277,10 @@ const Settings = () => {
         open={brokerDialogOpen}
         onOpenChange={setBrokerDialogOpen}
         brokerName={selectedBroker}
+      />
+      <ICICIBrokerDialog
+        open={iciciBrokerDialogOpen}
+        onOpenChange={setIciciBrokerDialogOpen}
       />
     </SidebarProvider>
   );
