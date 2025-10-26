@@ -31,15 +31,32 @@ export function BrokerConnectionDialog({ open, onOpenChange, brokerName }: Broke
 
     setLoading(true);
     try {
-      const { error } = await supabase.functions.invoke('store-credentials', {
-        body: {
+      // Get the JWT token from Supabase auth
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.access_token) {
+        throw new Error("Not authenticated");
+      }
+
+      // Call the backend API instead of Supabase edge function
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+      const response = await fetch(`${backendUrl}/api/credentials/store`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
           broker_name: brokerName,
           api_key: apiKey,
           api_secret: apiSecret || undefined,
-        },
+        }),
       });
 
-      if (error) throw error;
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to store credentials');
+      }
 
       toast({
         title: "Success",
@@ -53,7 +70,7 @@ export function BrokerConnectionDialog({ open, onOpenChange, brokerName }: Broke
       console.error('Error storing credentials:', error);
       toast({
         title: "Error",
-        description: "Failed to connect broker. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to connect broker. Please try again.",
         variant: "destructive",
       });
     } finally {
