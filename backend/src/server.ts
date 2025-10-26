@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 import express from 'express';
 import cors from 'cors';
-import { authRouter } from './routes/auth.js';
+import authRouter from './routes/auth.js';
 import { strategyRouter } from './routes/strategies.js';
 import { credentialsRouter } from './routes/credentials.js';
 import { marketDataRouter } from './routes/marketData.js';
