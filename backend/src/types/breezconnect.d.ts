@@ -6,6 +6,7 @@ declare module "breezeconnect" {
     getProfile(): Promise<any>;
     getQuotes(params?: any): Promise<any>;
     getPortfolioHoldings(): Promise<any>;
+    getOrderList(): Promise<any>;
     placeOrder(params: any): Promise<any>;
     modifyOrder(params: any): Promise<any>;
     cancelOrder(params: any): Promise<any>;
