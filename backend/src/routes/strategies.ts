@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 import { query } from "../config/database.js";
-import fetch from "node-fetch";
+//import fetch from "node-fetch";
 
 const router = Router();
 
