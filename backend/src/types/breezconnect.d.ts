@@ -1,7 +1,7 @@
 declare module "breezeconnect" {
   export class BreezeConnect {
     constructor();
-    generateSession(apiKey: string, secretKey: string): Promise<any>;
+    generateSession(apiKey: string, apiSecret: string): Promise<any>;
     setToken(token: string): void;
     getProfile(): Promise<any>;
     getQuotes(params: any): Promise<any>;
