@@ -1,3 +1,21 @@
+Ubuntu + Nginx deployment, Brotli, HTTPS, and Cloudflare integration.
+---------------------------------------------------------------------
+
+This setup includes:
+
+🧱 Dockerfile for Backend (Node.js + Express + TypeScript)
+
+⚛️ Dockerfile for Frontend (Vite + React)
+
+🐳 docker-compose.yml (orchestration of backend + frontend + PostgreSQL)
+
+🔒 .env.production mapping
+
+⚙️ Optional PM2 inside container
+
+🌍 Integrated with Nginx reverse proxy (as you already configured manually)
+
+
 #Directory Structure
 =======================
 /var/www/apex-algo-adept/
