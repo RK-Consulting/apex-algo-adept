@@ -21,19 +21,17 @@ app.use(express.json());
 app.use(requestLogger);
 
 // ✅ CORS configuration
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || [
+//const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || [
  // "http://localhost:5173",
  // "https://skillsifter.in",
  // "https://www.skillsifter.in",
-];
+//];
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "").split(",");
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, Postman)
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
+      if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
         console.warn(`🚫 CORS blocked request from: ${origin}`);
@@ -43,6 +41,8 @@ app.use(
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
     credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
   })
 );
 
