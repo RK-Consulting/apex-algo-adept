@@ -1,0 +1,46 @@
+#/var/www/apex-algo-adept/docker-compose.yml
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: alphaforge_db
+    environment:
+      POSTGRES_USER: apexuser
+      POSTGRES_PASSWORD: YourStrongPassword123
+      POSTGRES_DB: apexdb
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - alphaforge_net
+
+  backend:
+    build: ./backend
+    container_name: alphaforge_backend
+    restart: always
+    env_file: ./backend/.env.production
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    networks:
+      - alphaforge_net
+
+  frontend:
+    build: ./frontend
+    container_name: alphaforge_frontend
+    restart: always
+    env_file: ./frontend/.env.production
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - alphaforge_net
+
+volumes:
+  pgdata:
+
+networks:
+  alphaforge_net:
+    driver: bridge
