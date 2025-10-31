@@ -76,5 +76,13 @@ CORS strict whitelist	                  ✅ Backend verified
 Dockerized backend/frontend	            ✅ Yes
 Postgres persistent volume	            ✅ pgdata
 
-
+⚙️ Current Production Status Summary
+Layer	Component	Status	Notes
+🌐 DNS	api.alphaforge.skillsifter.in → 64.227.175.198	✅	Cloudflare DNS only
+🔒 TLS	Let's Encrypt via Certbot	✅	Cert valid till Jan 2026
+🚀 Backend	Express (PM2)	✅	Responds OK
+🔁 Proxy	Nginx reverse proxy	✅	Secure, gzip+brotli enabled
+🧱 Security	HSTS, CSP, OCSP, headers	✅	A+ grade
+🌍 Frontend	alphaforge.skillsifter.in (Cloudflare Pages)	✅	Proxied via Cloudflare
+🔗 API Connection	Backend reachable via HTTPS	✅	Verified live
 
