@@ -1,0 +1,34 @@
+# /var/www/apex-algo-adept/backend/Dockerfile
+# ======================================
+# 🧱 AlphaForge Backend (Node.js + PM2)
+# ======================================
+FROM node:20-alpine AS build
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+
+# Compile TypeScript (if applicable)
+RUN npm run build || echo "No build script found"
+
+# ======================================
+# 🔧 Runtime Stage
+# ======================================
+FROM node:20-alpine
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+COPY --from=build /app /app
+
+# Install PM2 globally for process management
+RUN npm install -g pm2
+
+# Expose port (matches Nginx reverse proxy)
+EXPOSE 8080
+
+# Start server via PM2
+CMD ["pm2-runtime", "src/server.js"]
