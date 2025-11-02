@@ -10,6 +10,15 @@
  
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+CREATE TABLE IF NOT EXISTS user_credentials (
+  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  icici_api_key TEXT,
+  icici_api_secret TEXT,
+  icici_session_token TEXT,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
 ---------------------------------------------------------
 -- 1️⃣ USERS TABLE (Auth)
 ---------------------------------------------------------
