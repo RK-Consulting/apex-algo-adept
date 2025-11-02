@@ -1,5 +1,7 @@
 import dotenv from "dotenv";
 import app from "./app.js";
+import { iciciBacktestRouter } from "./routes/iciciBacktest.js";
+
 
 dotenv.config();
 
