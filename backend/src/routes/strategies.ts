@@ -1,48 +1,44 @@
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 import { query } from "../config/database.js";
-//import fetch from "node-fetch";
+import fetch from "node-fetch";
 
 const router = Router();
 
-// Rate limiting map
+// Simple in-memory rate limiting per user
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 
-// Generate strategy using AI
+/**
+ * POST /api/strategies/generate
+ * Uses AI (Gemini or Lovable) to generate a strategy and store in Postgres
+ */
 router.post("/generate", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const userId = req.user!.id;
     const { name, trading_style, capital_allocation, risk_level, description } = req.body;
 
-    // Rate limiting
+    // --- Rate Limiting: 10 per hour per user ---
     const now = Date.now();
-    const userLimit = rateLimitMap.get(userId);
-
-    if (userLimit) {
-      if (now < userLimit.resetTime) {
-        if (userLimit.count >= 10) {
-          return res.status(429).json({
-            error: "Rate limit exceeded. You can create a maximum of 10 strategies per hour.",
-          });
-        }
-        userLimit.count++;
-      } else {
-        rateLimitMap.set(userId, { count: 1, resetTime: now + 3600000 });
-      }
-    } else {
+    const limit = rateLimitMap.get(userId);
+    if (limit && now < limit.resetTime && limit.count >= 10) {
+      return res.status(429).json({
+        error: "Rate limit exceeded — max 10 strategy generations per hour.",
+      });
+    }
+    if (!limit || now > limit.resetTime) {
       rateLimitMap.set(userId, { count: 1, resetTime: now + 3600000 });
+    } else {
+      limit.count++;
     }
 
-    // Call AI service
+    // --- AI Model Selection ---
     const LOVABLE_API_KEY = process.env.LOVABLE_API_KEY;
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY not configured");
-    }
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -51,208 +47,171 @@ router.post("/generate", authenticateToken, async (req: AuthRequest, res, next) 
           {
             role: "system",
             content:
-              "You are an expert algorithmic trading strategy designer for the Indian stock market. Generate detailed trading strategies with specific entry/exit rules, risk management parameters, and technical indicators. Return structured JSON data only.",
+              "You are an expert Indian stock market strategy designer. Generate structured JSON for a trading strategy.",
           },
           {
             role: "user",
-            content: `Generate a ${risk_level} risk ${trading_style} trading strategy for the Indian stock market.
+            content: `Design a ${risk_level} risk ${trading_style} strategy for Indian markets.
             
-Strategy Name: ${name}
+Name: ${name}
 Capital: ₹${capital_allocation}
 Description: ${description || "Not provided"}
 
-Please provide:
-1. Entry conditions (specific technical indicators and thresholds)
-2. Exit conditions (take profit, stop loss levels)
-3. Position sizing rules
-4. Risk management parameters
-5. Recommended instruments (stocks, indices, derivatives)
-6. Timeframe specifications
-7. Expected metrics (win rate estimate, max drawdown, profit target)
-
-Format the response as a JSON object with these keys: entry_rules, exit_rules, position_sizing, risk_management, recommended_instruments, timeframe, expected_metrics, reasoning.`,
+Return a JSON with:
+entry_rules, exit_rules, position_sizing, risk_management, recommended_instruments, timeframe, expected_metrics.`,
           },
         ],
       }),
     });
 
     if (!aiResponse.ok) {
-      throw new Error(`AI API error: ${aiResponse.status}`);
+      throw new Error(`AI API failed: ${aiResponse.status}`);
     }
 
-    const aiData = (await aiResponse.json()) as {
-      choices: { message: { content: string } }[];
-    };
+    const data = await aiResponse.json();
+    const rawText = data.choices?.[0]?.message?.content || "{}";
+    let parsed: any;
 
-    const strategyContent = aiData.choices[0].message.content;
-
-    // Parse AI response
-    let strategyConfig: any;
     try {
-      const jsonMatch = strategyContent.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        strategyConfig = JSON.parse(jsonMatch[0]);
-      } else {
-        strategyConfig = {
-          raw_response: strategyContent,
-          entry_rules: "See raw_response for details",
-          exit_rules: "See raw_response for details",
-          position_sizing: "See raw_response for details",
-          risk_management: "See raw_response for details",
-          recommended_instruments: ["NIFTY", "BANKNIFTY"],
-          timeframe: trading_style,
-          expected_metrics: {
-            win_rate: "65-75%",
-            max_drawdown: "15-20%",
-            profit_target: "15-25%",
-          },
-        };
-      }
+      const match = rawText.match(/\{[\s\S]*\}/);
+      parsed = match ? JSON.parse(match[0]) : { raw: rawText };
     } catch {
-      strategyConfig = {
-        raw_response: strategyContent,
-        error: "Could not parse structured response",
-      };
+      parsed = { raw: rawText };
     }
 
-    // Save to database
+    // --- Insert into database ---
     const result = await query(
-      `INSERT INTO strategies (
-        user_id, name, description, trading_style, capital_allocation,
-        risk_level, status, ai_generated, strategy_config, performance_data
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      RETURNING *`,
+      `
+      INSERT INTO strategies (
+        user_id, name, description, entry_condition, exit_condition, 
+        risk_management, is_active, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, true, NOW(), NOW())
+      RETURNING *
+      `,
       [
         userId,
         name,
-        description || "AI-generated strategy",
-        trading_style,
-        capital_allocation,
-        risk_level,
-        "paused",
-        true,
-        JSON.stringify(strategyConfig),
-        JSON.stringify({
-          total_trades: 0,
-          win_rate: 0,
-          total_return: 0,
-          max_drawdown: 0,
-        }),
+        description || "AI-generated trading strategy",
+        JSON.stringify(parsed.entry_rules || parsed.entry_condition || {}),
+        JSON.stringify(parsed.exit_rules || parsed.exit_condition || {}),
+        JSON.stringify(parsed.risk_management || {}),
       ]
     );
 
-    res.json({
+    return res.json({
       success: true,
+      message: "Strategy generated and saved successfully.",
       strategy: result.rows[0],
-      message: "Strategy generated successfully",
     });
-  } catch (error) {
-    next(error);
+  } catch (err) {
+    console.error("❌ Strategy generation error:", err);
+    next(err);
   }
 });
 
-// Get all strategies for user
+/**
+ * GET /api/strategies
+ * Fetch all user strategies
+ */
 router.get("/", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const userId = req.user!.id;
-    const result = await query(
+    const { rows } = await query(
       "SELECT * FROM strategies WHERE user_id = $1 ORDER BY created_at DESC",
       [userId]
     );
-    res.json(result.rows);
-  } catch (error) {
-    next(error);
+    res.json(rows);
+  } catch (err) {
+    next(err);
   }
 });
 
-// Get single strategy
+/**
+ * GET /api/strategies/:id
+ * Get a specific strategy by ID
+ */
 router.get("/:id", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const userId = req.user!.id;
     const { id } = req.params;
 
-    const result = await query(
+    const { rows } = await query(
       "SELECT * FROM strategies WHERE id = $1 AND user_id = $2",
       [id, userId]
     );
 
-    if (result.rows.length === 0) {
+    if (rows.length === 0) {
       return res.status(404).json({ error: "Strategy not found" });
     }
-
-    res.json(result.rows[0]);
-  } catch (error) {
-    next(error);
+    res.json(rows[0]);
+  } catch (err) {
+    next(err);
   }
 });
 
-// Update strategy
+/**
+ * PUT /api/strategies/:id
+ * Update an existing strategy
+ */
 router.put("/:id", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const userId = req.user!.id;
     const { id } = req.params;
     const updates = req.body;
 
-    const allowedFields = [
-      "name",
-      "description",
-      "status",
-      "capital_allocation",
-      "strategy_config",
-      "performance_data",
-    ];
-    const setClause: string[] = [];
-    const values: any[] = [];
-    let paramCount = 1;
+    const allowed = ["name", "description", "is_active", "entry_condition", "exit_condition", "risk_management"];
+    const fields = [];
+    const values = [];
+    let i = 1;
 
     for (const [key, value] of Object.entries(updates)) {
-      if (allowedFields.includes(key)) {
-        setClause.push(`${key} = $${paramCount}`);
+      if (allowed.includes(key)) {
+        fields.push(`${key} = $${i}`);
         values.push(typeof value === "object" ? JSON.stringify(value) : value);
-        paramCount++;
+        i++;
       }
     }
 
-    if (setClause.length === 0) {
-      return res.status(400).json({ error: "No valid fields to update" });
-    }
+    if (fields.length === 0) return res.status(400).json({ error: "No valid fields to update" });
 
     values.push(id, userId);
-    const result = await query(
-      `UPDATE strategies SET ${setClause.join(", ")}, updated_at = NOW()
-       WHERE id = $${paramCount} AND user_id = $${paramCount + 1}
+
+    const { rows } = await query(
+      `UPDATE strategies 
+       SET ${fields.join(", ")}, updated_at = NOW()
+       WHERE id = $${i} AND user_id = $${i + 1}
        RETURNING *`,
       values
     );
 
-    if (result.rows.length === 0) {
+    if (rows.length === 0) {
       return res.status(404).json({ error: "Strategy not found" });
     }
 
-    res.json(result.rows[0]);
-  } catch (error) {
-    next(error);
+    res.json({ success: true, strategy: rows[0] });
+  } catch (err) {
+    next(err);
   }
 });
 
-// Delete strategy
+/**
+ * DELETE /api/strategies/:id
+ * Remove a strategy
+ */
 router.delete("/:id", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const userId = req.user!.id;
     const { id } = req.params;
+    const { rows } = await query(
+      "DELETE FROM strategies WHERE id = $1 AND user_id = $2 RETURNING id",
+      [id, userId]
+    );
 
-    const result = await query("DELETE FROM strategies WHERE id = $1 AND user_id = $2 RETURNING id", [
-      id,
-      userId,
-    ]);
+    if (rows.length === 0) return res.status(404).json({ error: "Strategy not found" });
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Strategy not found" });
-    }
-
-    res.json({ success: true, message: "Strategy deleted successfully" });
-  } catch (error) {
-    next(error);
+    res.json({ success: true, message: "Strategy deleted successfully." });
+  } catch (err) {
+    next(err);
   }
 });
 
