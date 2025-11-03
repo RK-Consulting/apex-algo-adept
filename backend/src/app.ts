@@ -26,7 +26,8 @@ const app = express();
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(compression());
-app.use(helmet());
+//app.use(helmet());
+app.use(helmet.default ? helmet.default() : helmet());
 app.use(requestLogger);
 
 // ✅ CORS setup
