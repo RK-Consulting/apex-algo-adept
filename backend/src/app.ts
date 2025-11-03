@@ -1,61 +1,43 @@
 // backend/src/app.ts
 import express from "express";
-//import cors from "cors";
+import cors from "cors";
 import dotenv from "dotenv";
-//import helmet from "helmet";
-import helmetImport from "helmet";
-//import compression from "compression";
-import compressionImport from "compression";
+import helmet from "helmet";
+import compression from "compression";
 import { requestLogger } from "./middleware/logger.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
 // Routers
-import { authRouter } from "./routes/auth.js";
+import authRouter from "./routes/auth.js";
 import { strategyRouter } from "./routes/strategies.js";
 import { credentialsRouter } from "./routes/credentials.js";
-import { marketDataRouter } from "./routes/icici/marketData.js";
+import marketDataRouter from "./routes/icici/marketData.js";
 import { iciciBrokerRouter } from "./routes/iciciBroker.js";
-
-import corsImport from "cors";
-const cors = (corsImport as any).default || corsImport;
-const helmet = (helmetImport as any).default || helmetImport;
-const compression = (compressionImport as any).default || compressionImport;
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
 
-// ✅ Debug check before route registration
-console.log("🔍 Router checks:", {
-  authRouter,
-  strategyRouter,
-  credentialsRouter,
-  marketDataRouter,
-  iciciBrokerRouter,
-});
-
-
 // ✅ Basic middleware
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(compression());
 app.use(helmet());
-//app.use(helmet.default ? helmet.default() : helmet());
 app.use(requestLogger);
 
 // ✅ CORS setup
-const allowedOrigins =
-  (process.env.ALLOWED_ORIGINS || "").split(",").filter(Boolean) || [
-    "http://localhost:5173",
-    "https://skillsifter.in",
-    "https://www.skillsifter.in",
-  ];
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map(s => s.trim())
+  .filter(Boolean);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      // allow requests with no origin (like curl, server-to-server)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
         console.warn(`🚫 CORS blocked request from: ${origin}`);
@@ -78,12 +60,14 @@ app.get("/health", (req, res) => {
   });
 });
 
-// ✅ Route registrations
+// ✅ Route registrations (exports must match: default vs named)
 app.use("/api/auth", authRouter);
 app.use("/api/strategies", strategyRouter);
 app.use("/api/credentials", credentialsRouter);
 app.use("/api/icici/marketData", marketDataRouter);
 app.use("/api/icici", iciciBrokerRouter);
 
+// ✅ Error handling middleware (must be last)
+app.use(errorHandler);
 
 export default app;
