@@ -8,11 +8,12 @@ import { requestLogger } from "./middleware/logger.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
 // Routers
-import authRouter from "./routes/auth.js";
+import { authRouter } from "./routes/auth.js";
 import { strategyRouter } from "./routes/strategies.js";
 import { credentialsRouter } from "./routes/credentials.js";
 import { marketDataRouter } from "./routes/icici/marketData.js";
 import { iciciBrokerRouter } from "./routes/iciciBroker.js";
+
 
 // Load environment variables
 dotenv.config();
