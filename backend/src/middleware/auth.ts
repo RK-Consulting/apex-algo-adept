@@ -33,16 +33,23 @@ export const authenticateToken = (
 
     // Verify the token and extract payload
     const decoded = jwt.verify(token, jwtSecret) as JwtPayload;
+    const userId = decoded.userId || decoded.id;
+    const email = decoded.email;
 
-    if (!decoded || !decoded.userId) {
+    //if (!decoded || !decoded.userId) {
+    //  return res.status(403).json({ error: "Invalid token payload" });
+    //}
+    if (!userId) {
+      console.error("❌ Invalid JWT payload:", decoded);
       return res.status(403).json({ error: "Invalid token payload" });
     }
 
+    req.user = { id: userId, email };
     // Attach the user info to the request object
-    req.user = {
-      id: decoded.userId,
-      email: decoded.email || "",
-    };
+    //req.user = {
+     // id: decoded.userId,
+     // email: decoded.email || "",
+    //};
 
     next();
   } catch (error: any) {
