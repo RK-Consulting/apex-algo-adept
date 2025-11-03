@@ -44,7 +44,7 @@ export function ICICIBrokerDialog({ open, onOpenChange }: ICICIBrokerDialogProps
       }
 
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
-      const response = await fetch(`${backendUrl}/api/icici/login`, {
+      const response = await fetch(`${backendUrl}/api/icici/connect`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
