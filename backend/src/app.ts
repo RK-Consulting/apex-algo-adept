@@ -1,6 +1,6 @@
 // backend/src/app.ts
 import express from "express";
-import cors from "cors";
+//import cors from "cors";
 import dotenv from "dotenv";
 import helmet from "helmet";
 import compression from "compression";
@@ -14,6 +14,8 @@ import { credentialsRouter } from "./routes/credentials.js";
 import { marketDataRouter } from "./routes/icici/marketData.js";
 import { iciciBrokerRouter } from "./routes/iciciBroker.js";
 
+import corsImport from "cors";
+const cors = (corsImport as any).default || corsImport;
 
 // Load environment variables
 dotenv.config();
