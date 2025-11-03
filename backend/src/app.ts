@@ -11,7 +11,7 @@ import { errorHandler } from "./middleware/errorHandler.js";
 import authRouter from "./routes/auth.js";
 import { strategyRouter } from "./routes/strategies.js";
 import { credentialsRouter } from "./routes/credentials.js";
-import { marketDataRouter } from "./routes/marketData.js";
+import { marketDataRouter } from "./routes/icici/marketData.js";
 import { iciciBrokerRouter } from "./routes/iciciBroker.js";
 
 // Load environment variables
@@ -64,7 +64,7 @@ app.get("/health", (req, res) => {
 app.use("/api/auth", authRouter);
 app.use("/api/strategies", strategyRouter);
 app.use("/api/credentials", credentialsRouter);
-app.use("/api/market-data", marketDataRouter);
+app.use("/api/icici/marketData", marketDataRouter);
 app.use("/api/icici", iciciBrokerRouter);
 
 // ✅ Error handling middleware (must be last)
