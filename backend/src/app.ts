@@ -4,7 +4,8 @@ import express from "express";
 import dotenv from "dotenv";
 //import helmet from "helmet";
 import helmetImport from "helmet";
-import compression from "compression";
+//import compression from "compression";
+import compressionImport from "compression";
 import { requestLogger } from "./middleware/logger.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
@@ -18,6 +19,8 @@ import { iciciBrokerRouter } from "./routes/iciciBroker.js";
 import corsImport from "cors";
 const cors = (corsImport as any).default || corsImport;
 const helmet = (helmetImport as any).default || helmetImport;
+const compression = (compressionImport as any).default || compressionImport;
+
 // Load environment variables
 dotenv.config();
 
