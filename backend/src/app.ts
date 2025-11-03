@@ -1,6 +1,7 @@
 // backend/src/app.ts
 import express from "express";
-import cors from "cors";
+//import cors from "cors";
+import corsImport from "cors";
 import dotenv from "dotenv";
 import helmet from "helmet";
 import compression from "compression";
@@ -25,7 +26,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(compression());
 app.use(helmet());
 app.use(requestLogger);
-
+const cors = (corsImport as any).default || corsImport;
 // ✅ CORS setup
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
