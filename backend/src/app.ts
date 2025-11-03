@@ -26,6 +26,16 @@ dotenv.config();
 
 const app = express();
 
+// ✅ Debug check before route registration
+console.log("🔍 Router checks:", {
+  authRouter,
+  strategyRouter,
+  credentialsRouter,
+  marketDataRouter,
+  iciciBrokerRouter,
+});
+
+
 // ✅ Basic middleware
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
@@ -75,14 +85,5 @@ app.use("/api/credentials", credentialsRouter);
 app.use("/api/icici/marketData", marketDataRouter);
 app.use("/api/icici", iciciBrokerRouter);
 
-// ✅ Error handling middleware (must be last)
-app.use(errorHandler);
-console.log("🔍 Router checks:", {
-  authRouter,
-  strategyRouter,
-  credentialsRouter,
-  marketDataRouter,
-  iciciBrokerRouter,
-});
 
 export default app;
