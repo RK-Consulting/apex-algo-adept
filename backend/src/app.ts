@@ -2,7 +2,8 @@
 import express from "express";
 //import cors from "cors";
 import dotenv from "dotenv";
-import helmet from "helmet";
+//import helmet from "helmet";
+import helmetImport from "helmet";
 import compression from "compression";
 import { requestLogger } from "./middleware/logger.js";
 import { errorHandler } from "./middleware/errorHandler.js";
@@ -16,7 +17,7 @@ import { iciciBrokerRouter } from "./routes/iciciBroker.js";
 
 import corsImport from "cors";
 const cors = (corsImport as any).default || corsImport;
-
+const helmet = (helmetImport as any).default || helmetImport;
 // Load environment variables
 dotenv.config();
 
@@ -26,8 +27,8 @@ const app = express();
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(compression());
-//app.use(helmet());
-app.use(helmet.default ? helmet.default() : helmet());
+app.use(helmet());
+//app.use(helmet.default ? helmet.default() : helmet());
 app.use(requestLogger);
 
 // ✅ CORS setup
