@@ -1,50 +1,85 @@
-import { Router } from 'express';
-import { breeze } from '../../config/breeze.js';
-import { pool } from '../../config/database.js';
+import { Router } from "express";
+import { authenticateToken, AuthRequest } from "../../middleware/auth.js";
+import { query } from "../../config/database.js";
+import { getBreezeInstance } from "../../utils/breezeSession.js";
 
 const router = Router();
 
-router.get('/subscribe', async (req, res) => {
+/**
+ * @route GET /api/icici/market/subscribe
+ * @desc Subscribe to a live market feed and store ticks in Postgres
+ */
+router.get("/subscribe/:symbol", authenticateToken, async (req: AuthRequest, res) => {
   try {
-    breeze.wsConnect();
+    const userId = req.user!.id;
+    const { symbol } = req.params;
 
-    breeze.on(async (tick: any) => {
-      const data = tick.data || tick;
-      await pool.query(
-        `INSERT INTO market_ticks(symbol, exchange, last_price, open, high, low, volume, timestamp)
-         VALUES($1,$2,$3,$4,$5,$6,$7, NOW())`,
-        [
-          data.stock_code || data.symbol,
-          data.exchange_code || 'NSE',
-          data.ltp || data.last_price,
-          data.open,
-          data.high,
-          data.low,
-          data.ttq || data.volume,
-        ]
-      );
+    // Create a Breeze instance for this user (with their saved ICICI credentials)
+    const breeze = await getBreezeInstance(userId);
+    await breeze.wsConnect();
+
+    console.log(`📡 Connected to Breeze WebSocket for ${symbol}`);
+
+    // On receiving live ticks
+    breeze.onTicks = async (tick: any) => {
+      try {
+        const data = tick.data || tick;
+        await query(
+          `INSERT INTO market_ticks 
+            (symbol, exchange, last_price, open, high, low, volume, timestamp)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())`,
+          [
+            data.stock_code || data.symbol,
+            data.exchange_code || "NSE",
+            data.ltp || data.last_price,
+            data.open,
+            data.high,
+            data.low,
+            data.ttq || data.volume,
+          ]
+        );
+      } catch (dbErr) {
+        console.error("❌ Tick insert error:", dbErr);
+      }
+    };
+
+    // Subscribe to live feed
+    await breeze.subscribeFeeds({
+      exchangeCode: "NSE",
+      stockCode: symbol.toUpperCase(),
     });
 
-    await breeze.subscribeFeeds({ exchangeCode: 'NSE', stockCode: 'RELIANCE' });
-    res.json({ success: true, message: 'Subscribed to live feed for RELIANCE' });
+    res.json({
+      success: true,
+      message: `Subscribed to live feed for ${symbol.toUpperCase()}`,
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to subscribe' });
+    console.error("❌ Market Subscribe Error:", err);
+    res.status(500).json({ error: "Failed to subscribe to market feed" });
   }
 });
 
-router.get('/quotes/:symbol', async (req, res) => {
+/**
+ * @route GET /api/icici/market/quotes/:symbol
+ * @desc Fetch current quote from Breeze API
+ */
+router.get("/quotes/:symbol", authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const symbol = req.params.symbol.toUpperCase();
+    const userId = req.user!.id;
+    const { symbol } = req.params;
+
+    const breeze = await getBreezeInstance(userId);
+
     const resp = await breeze.getQuotes({
-      stockCode: symbol,
-      exchangeCode: 'NSE',
-      productType: 'cash',
+      stockCode: symbol.toUpperCase(),
+      exchangeCode: "NSE",
+      productType: "cash",
     });
-    res.json(resp);
+
+    res.json({ success: true, data: resp });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Quote fetch failed' });
+    console.error("❌ Quote Fetch Error:", err);
+    res.status(500).json({ error: "Failed to fetch quote" });
   }
 });
 
