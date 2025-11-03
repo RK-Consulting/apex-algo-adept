@@ -77,5 +77,12 @@ app.use("/api/icici", iciciBrokerRouter);
 
 // ✅ Error handling middleware (must be last)
 app.use(errorHandler);
+console.log("🔍 Router checks:", {
+  authRouter,
+  strategyRouter,
+  credentialsRouter,
+  marketDataRouter,
+  iciciBrokerRouter,
+});
 
 export default app;
