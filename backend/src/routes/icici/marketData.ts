@@ -1,3 +1,4 @@
+// backend/src/routes/icici/marketData.ts
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../../middleware/auth.js";
 import { query } from "../../config/database.js";
@@ -6,7 +7,7 @@ import { getBreezeInstance } from "../../utils/breezeSession.js";
 const router = Router();
 
 /**
- * @route GET /api/icici/market/subscribe
+ * @route GET /api/icici/marketData/subscribe/:symbol
  * @desc Subscribe to a live market feed and store ticks in Postgres
  */
 router.get("/subscribe/:symbol", authenticateToken, async (req: AuthRequest, res) => {
@@ -16,12 +17,19 @@ router.get("/subscribe/:symbol", authenticateToken, async (req: AuthRequest, res
 
     // Create a Breeze instance for this user (with their saved ICICI credentials)
     const breeze = await getBreezeInstance(userId);
-    await breeze.wsConnect();
 
-    console.log(`📡 Connected to Breeze WebSocket for ${symbol}`);
+    // Ensure websocket is connected
+    if (typeof breeze.wsConnect === "function") {
+      await breeze.wsConnect();
+      console.log(`📡 Connected to Breeze WebSocket for ${symbol}`);
+    } else {
+      console.warn("⚠️ breeze.wsConnect not available on Breeze instance");
+    }
 
-    // On receiving live ticks
-    breeze.onTicks = async (tick: any) => {
+    // On receiving live ticks — matching Breeze SDK callback shape
+    // breeze.onTicks = (tick) => { ... } OR breeze.on = (event, cb) depending on SDK version.
+    // We'll support both common patterns: set onTicks or on('ticks')
+    const handleTick = async (tick: any) => {
       try {
         const data = tick.data || tick;
         await query(
@@ -29,13 +37,13 @@ router.get("/subscribe/:symbol", authenticateToken, async (req: AuthRequest, res
             (symbol, exchange, last_price, open, high, low, volume, timestamp)
            VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())`,
           [
-            data.stock_code || data.symbol,
+            (data.stock_code || data.symbol || "").toString().toUpperCase(),
             data.exchange_code || "NSE",
-            data.ltp || data.last_price,
-            data.open,
-            data.high,
-            data.low,
-            data.ttq || data.volume,
+            data.ltp ?? data.last_price ?? null,
+            data.open ?? null,
+            data.high ?? null,
+            data.low ?? null,
+            data.ttq ?? data.volume ?? null,
           ]
         );
       } catch (dbErr) {
@@ -43,10 +51,27 @@ router.get("/subscribe/:symbol", authenticateToken, async (req: AuthRequest, res
       }
     };
 
+    // Attach tick handlers based on SDK
+    if (typeof breeze.onTicks === "function") {
+      breeze.onTicks = handleTick;
+    } else if (typeof breeze.on === "function") {
+      // some SDK versions use breeze.on("ticks", callback)
+      breeze.on("ticks", handleTick);
+      // also try generic 'on' fallback for order/other events
+      breeze.on("order_update", (ev: any) => {
+        // noop for now; could store order updates if needed
+        console.log("order_update", ev);
+      });
+    } else {
+      console.warn("⚠️ Breeze SDK does not expose onTicks or on(event,..). Live ticks may not be delivered.");
+    }
+
     // Subscribe to live feed
     await breeze.subscribeFeeds({
       exchangeCode: "NSE",
       stockCode: symbol.toUpperCase(),
+      getExchangeQuotes: true,
+      getMarketDepth: false,
     });
 
     res.json({
@@ -60,7 +85,7 @@ router.get("/subscribe/:symbol", authenticateToken, async (req: AuthRequest, res
 });
 
 /**
- * @route GET /api/icici/market/quotes/:symbol
+ * @route GET /api/icici/marketData/quotes/:symbol
  * @desc Fetch current quote from Breeze API
  */
 router.get("/quotes/:symbol", authenticateToken, async (req: AuthRequest, res) => {
@@ -83,4 +108,4 @@ router.get("/quotes/:symbol", authenticateToken, async (req: AuthRequest, res) =
   }
 });
 
-export { router as marketRouter };
+export default router;
