@@ -15,27 +15,27 @@ const Index = () => {
       <div className="min-h-screen flex w-full bg-background">
         <AppSidebar />
         <main className="flex-1 overflow-auto">
-          <div className="container mx-auto p-6 space-y-6">
+          <div className="container mx-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
                   AlphaForge
                 </h1>
                 <p className="text-muted-foreground text-sm">
                   AI-Powered Algorithmic Trading Platform
                 </p>
               </div>
-              <div className="flex gap-2">
-                <div className="px-4 py-2 rounded-lg bg-card border border-border">
+              <div className="flex gap-2 w-full sm:w-auto">
+                <div className="px-3 sm:px-4 py-2 rounded-lg bg-card border border-border flex-1 sm:flex-initial">
                   <div className="text-xs text-muted-foreground">Portfolio Value</div>
-                  <div className="text-xl font-mono font-bold text-success">
+                  <div className="text-lg sm:text-xl font-mono font-bold text-success">
                     ₹{totalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                   </div>
                 </div>
-                <div className="px-4 py-2 rounded-lg bg-card border border-border">
+                <div className="px-3 sm:px-4 py-2 rounded-lg bg-card border border-border flex-1 sm:flex-initial">
                   <div className="text-xs text-muted-foreground">Today's P&L</div>
-                  <div className={`text-xl font-mono font-bold ${totalPnL >= 0 ? 'text-success' : 'text-destructive'}`}>
+                  <div className={`text-lg sm:text-xl font-mono font-bold ${totalPnL >= 0 ? 'text-success' : 'text-destructive'}`}>
                     {totalPnL >= 0 ? '+' : ''}₹{totalPnL.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                   </div>
                 </div>
