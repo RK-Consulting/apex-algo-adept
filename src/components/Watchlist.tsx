@@ -1,32 +1,64 @@
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useMarketData } from "@/hooks/useMarketData";
 
-const watchlist = [
-  { symbol: "RELIANCE", price: "2,456.70", change: "+23.45", percent: "+0.96%", trend: "up" },
-  { symbol: "TCS", price: "3,789.20", change: "-12.30", percent: "-0.32%", trend: "down" },
-  { symbol: "INFY", price: "1,567.45", change: "+45.60", percent: "+2.99%", trend: "up" },
-  { symbol: "HDFCBANK", price: "1,678.90", change: "+8.75", percent: "+0.52%", trend: "up" },
-  { symbol: "ICICIBANK", price: "987.35", change: "-5.20", percent: "-0.52%", trend: "down" },
-];
+const defaultWatchlist = ["NIFTY", "BANKNIFTY", "RELIANCE", "TCS", "INFY"];
 
 export function Watchlist() {
   const navigate = useNavigate();
-  const { data: liveData } = useMarketData([
-    { symbol: "NIFTY", exchange: "NSE" },
-    { symbol: "BANKNIFTY", exchange: "NSE" },
-    { symbol: "RELIANCE", exchange: "NSE" },
-    { symbol: "TCS", exchange: "NSE" },
-    { symbol: "INFY", exchange: "NSE" },
-  ]);
+  const [watchlistData, setWatchlistData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Merge live data with static data
-  const watchlistWithLiveData = watchlist.map((stock, index) => ({
-    ...stock,
-    ...(liveData[index] || {})
-  }));
+  useEffect(() => {
+    const fetchQuotes = async () => {
+      try {
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+          setLoading(false);
+          return;
+        }
+
+        const backendUrl = import.meta.env.VITE_BACKEND_URL;
+        
+        const quotes = await Promise.allSettled(
+          defaultWatchlist.map(async (symbol) => {
+            const response = await fetch(`${backendUrl}/api/icici/quote/${symbol}`, {
+              headers: { "Authorization": `Bearer ${token}` },
+            });
+            
+            if (!response.ok) throw new Error(`Failed to fetch ${symbol}`);
+            
+            const result = await response.json();
+            const quoteData = result.quote?.Success?.[0] || {};
+            
+            return {
+              symbol,
+              price: parseFloat(quoteData.ltp || quoteData.LastPrice || 0).toFixed(2),
+              change: parseFloat(quoteData.change || 0).toFixed(2),
+              percent: parseFloat(quoteData.change_percent || 0).toFixed(2),
+              trend: parseFloat(quoteData.change || 0) >= 0 ? "up" : "down",
+            };
+          })
+        );
+
+        const successfulQuotes = quotes
+          .filter((result) => result.status === "fulfilled")
+          .map((result: any) => result.value);
+
+        setWatchlistData(successfulQuotes);
+      } catch (error) {
+        console.error("Error fetching watchlist:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchQuotes();
+    const interval = setInterval(fetchQuotes, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <Card className="bg-card border-border">
@@ -37,34 +69,42 @@ export function Watchlist() {
         </Button>
       </CardHeader>
       <CardContent className="space-y-2">
-        {watchlistWithLiveData.map((item) => (
-          <div
-            key={item.symbol}
-            onClick={() => navigate(`/stock/${item.symbol}`)}
-            className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-all cursor-pointer border border-transparent hover:border-border"
-          >
-            <div>
-              <div className="font-mono font-semibold text-sm">{item.symbol}</div>
-              <div className="text-xs text-muted-foreground">NSE</div>
-            </div>
-            <div className="text-right">
-              <div className="font-mono font-bold text-sm">₹{item.price}</div>
-              <div
-                className={`flex items-center gap-1 text-xs font-medium ${
-                  item.trend === "up" ? "text-success" : "text-destructive"
-                }`}
-              >
-                {item.trend === "up" ? (
-                  <TrendingUp className="w-3 h-3" />
-                ) : (
-                  <TrendingDown className="w-3 h-3" />
-                )}
-                <span>{item.change}</span>
-                <span className="text-[10px]">({item.percent})</span>
+        {loading ? (
+          <div className="text-center text-sm text-muted-foreground py-4">Loading...</div>
+        ) : watchlistData.length === 0 ? (
+          <div className="text-center text-sm text-muted-foreground py-4">
+            Connect to ICICI broker to view live data
+          </div>
+        ) : (
+          watchlistData.map((item) => (
+            <div
+              key={item.symbol}
+              onClick={() => navigate(`/stock/${item.symbol}`)}
+              className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-all cursor-pointer border border-transparent hover:border-border"
+            >
+              <div>
+                <div className="font-mono font-semibold text-sm">{item.symbol}</div>
+                <div className="text-xs text-muted-foreground">NSE</div>
+              </div>
+              <div className="text-right">
+                <div className="font-mono font-bold text-sm">₹{item.price}</div>
+                <div
+                  className={`flex items-center gap-1 text-xs font-medium ${
+                    item.trend === "up" ? "text-success" : "text-destructive"
+                  }`}
+                >
+                  {item.trend === "up" ? (
+                    <TrendingUp className="w-3 h-3" />
+                  ) : (
+                    <TrendingDown className="w-3 h-3" />
+                  )}
+                  <span>{item.change >= 0 ? '+' : ''}{item.change}</span>
+                  <span className="text-[10px]">({item.percent >= 0 ? '+' : ''}{item.percent}%)</span>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </CardContent>
     </Card>
   );
