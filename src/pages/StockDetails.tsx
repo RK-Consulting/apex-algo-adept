@@ -1,33 +1,20 @@
-import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { AppSidebar } from "@/components/AppSidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { StockChart } from "@/components/StockChart";
-import { generateChartData, useMarketData } from "@/hooks/useMarketData";
+import { useMarketData } from "@/hooks/useMarketData";
 
 const StockDetails = () => {
   const { symbol } = useParams<{ symbol: string }>();
   const navigate = useNavigate();
-  const [chartData, setChartData] = useState<any[]>([]);
   
-  const { data: marketData } = useMarketData([
+  const { data: marketData, loading } = useMarketData([
     { symbol: symbol || "NIFTY", exchange: "NSE" }
   ]);
 
-  const stockInfo = marketData[0] || {
-    symbol: symbol || "NIFTY",
-    price: 0,
-    change: 0,
-    change_percent: 0,
-  };
-
-  useEffect(() => {
-    // Generate chart data when component mounts
-    const data = generateChartData(stockInfo.symbol, stockInfo.price);
-    setChartData(data);
-  }, [stockInfo.symbol, stockInfo.price]);
+  const stockInfo = marketData[0];
 
   return (
     <SidebarProvider>
@@ -44,13 +31,21 @@ const StockDetails = () => {
               Back
             </Button>
 
-            <StockChart
-              symbol={stockInfo.symbol}
-              data={chartData}
-              currentPrice={stockInfo.price}
-              change={stockInfo.change}
-              changePercent={stockInfo.change_percent}
-            />
+            {loading ? (
+              <div className="text-center text-muted-foreground py-8">Loading...</div>
+            ) : !stockInfo ? (
+              <div className="text-center text-muted-foreground py-8">
+                Connect to ICICI broker to view stock data
+              </div>
+            ) : (
+              <StockChart
+                symbol={stockInfo.symbol}
+                data={[]}
+                currentPrice={stockInfo.price}
+                change={stockInfo.change}
+                changePercent={stockInfo.change_percent}
+              />
+            )}
           </div>
         </main>
       </div>
