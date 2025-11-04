@@ -18,9 +18,9 @@ const StockDetails = () => {
 
   const stockInfo = marketData[0] || {
     symbol: symbol || "NIFTY",
-    price: 19500,
-    change: 125.50,
-    change_percent: 0.65,
+    price: 0,
+    change: 0,
+    change_percent: 0,
   };
 
   useEffect(() => {

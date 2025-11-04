@@ -3,7 +3,7 @@ import { TrendingUp, TrendingDown, Activity } from "lucide-react";
 import { usePortfolioData } from "@/hooks/usePortfolioData";
 
 export function PortfolioOverview() {
-  const { holdings, totalPnL, loading } = usePortfolioData();
+  const { holdings, totalPnL, loading, error } = usePortfolioData();
 
   return (
     <Card className="bg-card border-border">
@@ -39,6 +39,12 @@ export function PortfolioOverview() {
                 <tr>
                   <td colSpan={6} className="p-3 text-center text-muted-foreground">
                     Loading portfolio data...
+                  </td>
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan={6} className="p-3 text-center text-muted-foreground">
+                    {error === "Not authenticated" ? "Please login to view portfolio" : "Connect to ICICI broker in Settings"}
                   </td>
                 </tr>
               ) : holdings.length === 0 ? (

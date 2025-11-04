@@ -1,46 +1,86 @@
 import { useState, useEffect } from "react";
-import { useMarketData } from "./useMarketData";
-
-// Mock portfolio holdings - in a real app, this would come from a database
-const mockHoldings = [
-  { symbol: "RELIANCE", exchange: "NSE", qty: 50, avgPrice: 2380.00 },
-  { symbol: "TCS", exchange: "NSE", qty: 25, avgPrice: 3850.00 },
-  { symbol: "INFY", exchange: "NSE", qty: 75, avgPrice: 1498.00 },
-  { symbol: "HDFCBANK", exchange: "NSE", qty: 40, avgPrice: 1645.00 },
-];
 
 export const usePortfolioData = () => {
-  const symbols = mockHoldings.map(h => ({ symbol: h.symbol, exchange: h.exchange }));
-  const { data: marketData, loading } = useMarketData(symbols);
   const [portfolioData, setPortfolioData] = useState<any[]>([]);
   const [totalValue, setTotalValue] = useState(0);
   const [totalPnL, setTotalPnL] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (marketData.length > 0) {
-      const enrichedHoldings = mockHoldings.map(holding => {
-        const liveData = marketData.find(d => d.symbol === holding.symbol);
-        const ltp = liveData?.price || holding.avgPrice;
-        const pnl = (ltp - holding.avgPrice) * holding.qty;
-        const pnlPercent = ((ltp - holding.avgPrice) / holding.avgPrice) * 100;
+    const fetchPortfolio = async () => {
+      try {
+        setLoading(true);
+        setError(null);
         
-        return {
-          ...holding,
-          ltp,
-          pnl,
-          pnlPercent,
-          trend: pnl >= 0 ? "up" : "down",
-        };
-      });
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+          setError("Not authenticated");
+          setLoading(false);
+          return;
+        }
 
-      const totalVal = enrichedHoldings.reduce((sum, h) => sum + (h.ltp * h.qty), 0);
-      const totalP = enrichedHoldings.reduce((sum, h) => sum + h.pnl, 0);
+        const backendUrl = import.meta.env.VITE_BACKEND_URL;
+        const response = await fetch(`${backendUrl}/api/icici/portfolio`, {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+          },
+        });
 
-      setPortfolioData(enrichedHoldings);
-      setTotalValue(totalVal);
-      setTotalPnL(totalP);
-    }
-  }, [marketData]);
+        if (!response.ok) {
+          throw new Error("Failed to fetch portfolio");
+        }
 
-  return { holdings: portfolioData, totalValue, totalPnL, loading };
+        const result = await response.json();
+        
+        if (result.success && result.portfolio?.Success) {
+          const holdings = result.portfolio.Success || [];
+          
+          const enrichedHoldings = holdings.map((holding: any) => {
+            const avgPrice = parseFloat(holding.average_price || holding.AveragePrice || 0);
+            const ltp = parseFloat(holding.ltp || holding.LastPrice || avgPrice);
+            const qty = parseInt(holding.quantity || holding.Quantity || 0);
+            const pnl = (ltp - avgPrice) * qty;
+            const pnlPercent = avgPrice > 0 ? ((ltp - avgPrice) / avgPrice) * 100 : 0;
+            
+            return {
+              symbol: holding.stock_code || holding.StockCode || "",
+              exchange: holding.exchange_code || holding.ExchangeCode || "NSE",
+              qty,
+              avgPrice,
+              ltp,
+              pnl,
+              pnlPercent,
+              trend: pnl >= 0 ? "up" : "down",
+            };
+          });
+
+          const totalVal = enrichedHoldings.reduce((sum: number, h: any) => sum + (h.ltp * h.qty), 0);
+          const totalP = enrichedHoldings.reduce((sum: number, h: any) => sum + h.pnl, 0);
+
+          setPortfolioData(enrichedHoldings);
+          setTotalValue(totalVal);
+          setTotalPnL(totalP);
+        } else {
+          setPortfolioData([]);
+          setTotalValue(0);
+          setTotalPnL(0);
+        }
+      } catch (err) {
+        console.error("Error fetching portfolio:", err);
+        setError(err instanceof Error ? err.message : "Failed to fetch portfolio");
+        setPortfolioData([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPortfolio();
+    
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchPortfolio, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return { holdings: portfolioData, totalValue, totalPnL, loading, error };
 };
