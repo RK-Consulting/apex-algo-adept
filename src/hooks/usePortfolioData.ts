@@ -4,6 +4,7 @@ export const usePortfolioData = () => {
   const [portfolioData, setPortfolioData] = useState<any[]>([]);
   const [totalValue, setTotalValue] = useState(0);
   const [totalPnL, setTotalPnL] = useState(0);
+  const [totalInvested, setTotalInvested] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,31 +41,38 @@ export const usePortfolioData = () => {
             const avgPrice = parseFloat(holding.average_price || holding.AveragePrice || 0);
             const ltp = parseFloat(holding.ltp || holding.LastPrice || avgPrice);
             const qty = parseInt(holding.quantity || holding.Quantity || 0);
-            const pnl = (ltp - avgPrice) * qty;
+            const investedValue = avgPrice * qty;
+            const currentValue = ltp * qty;
+            const pnl = currentValue - investedValue;
             const pnlPercent = avgPrice > 0 ? ((ltp - avgPrice) / avgPrice) * 100 : 0;
             
             return {
               symbol: holding.stock_code || holding.StockCode || "",
               exchange: holding.exchange_code || holding.ExchangeCode || "NSE",
-              qty,
-              avgPrice,
+              quantity: qty,
+              average_price: avgPrice,
               ltp,
+              invested_value: investedValue,
+              current_value: currentValue,
               pnl,
               pnlPercent,
               trend: pnl >= 0 ? "up" : "down",
             };
           });
 
-          const totalVal = enrichedHoldings.reduce((sum: number, h: any) => sum + (h.ltp * h.qty), 0);
+          const totalVal = enrichedHoldings.reduce((sum: number, h: any) => sum + h.current_value, 0);
           const totalP = enrichedHoldings.reduce((sum: number, h: any) => sum + h.pnl, 0);
+          const totalInv = enrichedHoldings.reduce((sum: number, h: any) => sum + h.invested_value, 0);
 
           setPortfolioData(enrichedHoldings);
           setTotalValue(totalVal);
           setTotalPnL(totalP);
+          setTotalInvested(totalInv);
         } else {
           setPortfolioData([]);
           setTotalValue(0);
           setTotalPnL(0);
+          setTotalInvested(0);
         }
       } catch (err) {
         console.error("Error fetching portfolio:", err);
@@ -82,5 +90,5 @@ export const usePortfolioData = () => {
     return () => clearInterval(interval);
   }, []);
 
-  return { holdings: portfolioData, totalValue, totalPnL, loading, error };
+  return { holdings: portfolioData, totalValue, totalPnL, totalInvested, loading, error };
 };

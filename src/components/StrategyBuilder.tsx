@@ -69,15 +69,15 @@ export function StrategyBuilder() {
   return (
     <Card className="bg-card border-border">
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-accent" />
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+            <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-accent" />
             AI Strategy Builder
           </CardTitle>
           <Button 
             variant="default" 
             size="sm" 
-            className="gap-2"
+            className="gap-2 w-full sm:w-auto"
             onClick={() => setDialogOpen(true)}
           >
             <Plus className="w-4 h-4" />

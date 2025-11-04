@@ -116,13 +116,9 @@ export function TradingPanel() {
               </div>
             </div>
             <div className="p-3 rounded-lg bg-muted/30 border border-border">
-              <div className="flex justify-between text-xs mb-1">
+              <div className="flex justify-between text-xs">
                 <span className="text-muted-foreground">Total Value</span>
                 <span className="font-mono font-semibold">₹{calculateTotal(buyQuantity, buyPrice)}</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">Available Margin</span>
-                <span className="font-mono font-semibold text-success">₹2,45,000</span>
               </div>
             </div>
             <Button 
@@ -170,13 +166,9 @@ export function TradingPanel() {
               </div>
             </div>
             <div className="p-3 rounded-lg bg-muted/30 border border-border">
-              <div className="flex justify-between text-xs mb-1">
+              <div className="flex justify-between text-xs">
                 <span className="text-muted-foreground">Total Value</span>
                 <span className="font-mono font-semibold">₹{calculateTotal(sellQuantity, sellPrice)}</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">Holdings</span>
-                <span className="font-mono font-semibold">0 shares</span>
               </div>
             </div>
             <Button 
