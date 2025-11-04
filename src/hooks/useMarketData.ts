@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
 
 export const useMarketData = (symbols: { symbol: string; exchange: string }[]) => {
   const [data, setData] = useState<any[]>([]);
@@ -8,16 +7,46 @@ export const useMarketData = (symbols: { symbol: string; exchange: string }[]) =
   useEffect(() => {
     const fetchMarketData = async () => {
       try {
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+          setLoading(false);
+          return;
+        }
+
         setLoading(true);
+        const backendUrl = import.meta.env.VITE_BACKEND_URL;
         
-        // Call the market-stream function
-        const { data: marketData, error } = await supabase.functions.invoke('market-stream', {
-          body: { symbols },
-        });
+        const quotes = await Promise.allSettled(
+          symbols.map(async (symbolInfo) => {
+            const response = await fetch(`${backendUrl}/api/icici/quote/${symbolInfo.symbol}`, {
+              headers: { "Authorization": `Bearer ${token}` },
+            });
+            
+            if (!response.ok) throw new Error(`Failed to fetch ${symbolInfo.symbol}`);
+            
+            const result = await response.json();
+            const quoteData = result.quote?.Success?.[0] || {};
+            
+            return {
+              symbol: symbolInfo.symbol,
+              exchange: symbolInfo.exchange,
+              price: parseFloat(quoteData.ltp || quoteData.LastPrice || 0),
+              change: parseFloat(quoteData.change || 0),
+              change_percent: parseFloat(quoteData.change_percent || 0),
+              volume: parseInt(quoteData.volume || 0),
+              open: parseFloat(quoteData.open || 0),
+              high: parseFloat(quoteData.high || 0),
+              low: parseFloat(quoteData.low || 0),
+              previous_close: parseFloat(quoteData.prev_close || 0),
+            };
+          })
+        );
 
-        if (error) throw error;
+        const successfulQuotes = quotes
+          .filter((result) => result.status === "fulfilled")
+          .map((result: any) => result.value);
 
-        setData(marketData.data || []);
+        setData(successfulQuotes);
       } catch (error) {
         console.error('Error fetching market data:', error);
       } finally {
@@ -28,8 +57,8 @@ export const useMarketData = (symbols: { symbol: string; exchange: string }[]) =
     if (symbols.length > 0) {
       fetchMarketData();
       
-      // Refresh every 5 seconds
-      const interval = setInterval(fetchMarketData, 5000);
+      // Refresh every 30 seconds
+      const interval = setInterval(fetchMarketData, 30000);
       return () => clearInterval(interval);
     }
   }, [symbols]);
@@ -37,24 +66,3 @@ export const useMarketData = (symbols: { symbol: string; exchange: string }[]) =
   return { data, loading };
 };
 
-// Generate mock historical data for charts
-export const generateChartData = (symbol: string, basePrice: number) => {
-  const data = [];
-  const now = new Date();
-  
-  for (let i = 100; i >= 0; i--) {
-    const time = new Date(now.getTime() - i * 5 * 60 * 1000); // 5-minute intervals
-    const randomChange = (Math.random() - 0.5) * (basePrice * 0.02);
-    const price = basePrice + randomChange;
-    
-    data.push({
-      time: time.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-      price: parseFloat(price.toFixed(2)),
-      volume: Math.floor(Math.random() * 1000000 + 100000),
-      rsi: Math.random() * 100,
-      macd: (Math.random() - 0.5) * 10,
-    });
-  }
-  
-  return data;
-};
