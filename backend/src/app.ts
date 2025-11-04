@@ -32,7 +32,13 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
   .map(s => s.trim())
   .filter(Boolean);
-
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://alphaforge.skillsifter.in",
+  "https://www.alphaforge.skillsifter.in",
+  "https://skillsifter.in",
+  "https://www.skillsifter.in",
+];
 app.use(
   cors({
     origin: (origin, callback) => {
