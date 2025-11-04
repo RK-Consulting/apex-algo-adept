@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { Loader2, ExternalLink } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -19,6 +18,8 @@ export function ICICIBrokerDialog({ open, onOpenChange }: ICICIBrokerDialogProps
   const [sessionToken, setSessionToken] = useState("");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+
+  const backendUrl = import.meta.env.VITE_BACKEND_URL;
 
   const getSessionUrl = () => {
     if (!apiKey.trim()) return "#";
@@ -35,20 +36,23 @@ export function ICICIBrokerDialog({ open, onOpenChange }: ICICIBrokerDialogProps
       return;
     }
 
+    const token = localStorage.getItem("authToken");
+    if (!token) {
+      toast({
+        title: "Session expired",
+        description: "Please login again",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session?.access_token) {
-        throw new Error("Not authenticated");
-      }
-
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
       const response = await fetch(`${backendUrl}/api/icici/connect`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
         },
         body: JSON.stringify({
           api_key: apiKey,
@@ -57,27 +61,23 @@ export function ICICIBrokerDialog({ open, onOpenChange }: ICICIBrokerDialogProps
         }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to connect to ICICI Direct');
-      }
-
       const result = await response.json();
+
+      if (!response.ok) throw new Error(result.error || "Failed to connect ICICI");
 
       toast({
         title: "Success",
-        description: result.message || "ICICI Direct connected successfully",
+        description: "ICICI Direct connected successfully"
       });
-      
+
       setApiKey("");
       setApiSecret("");
       setSessionToken("");
       onOpenChange(false);
-    } catch (error) {
-      console.error('Error connecting to ICICI Direct:', error);
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to connect. Please check your credentials.",
+        description: error.message,
         variant: "destructive",
       });
     } finally {
@@ -91,78 +91,45 @@ export function ICICIBrokerDialog({ open, onOpenChange }: ICICIBrokerDialogProps
         <DialogHeader>
           <DialogTitle>Connect to ICICI Direct (Breeze)</DialogTitle>
           <DialogDescription>
-            Enter your ICICI Direct API credentials to enable trading via Breeze API.
+            Enter your ICICI Direct API credentials to enable trading.
           </DialogDescription>
         </DialogHeader>
 
-        <Alert>
+        <Alert className="mb-2">
           <AlertDescription className="text-sm">
-            <strong>Step 1:</strong> Enter your API Key below<br />
-            <strong>Step 2:</strong> Click "Get Session Token" to login<br />
-            <strong>Step 3:</strong> Copy the session token and paste it here
+            <b>Steps:</b><br/>
+            1️⃣ Enter API Key<br/>
+            2️⃣ Click “Get Session Token” and login<br/>
+            3️⃣ Copy token → paste here
           </AlertDescription>
         </Alert>
 
         <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="apiKey">API Key *</Label>
-            <Input
-              id="apiKey"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Enter your API key"
-              disabled={loading}
-            />
+          <div>
+            <Label>API Key *</Label>
+            <Input value={apiKey} onChange={(e) => setApiKey(e.target.value)} disabled={loading}/>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="apiSecret">API Secret *</Label>
-            <Input
-              id="apiSecret"
-              type="password"
-              value={apiSecret}
-              onChange={(e) => setApiSecret(e.target.value)}
-              placeholder="Enter your API secret"
-              disabled={loading}
-            />
+          <div>
+            <Label>API Secret *</Label>
+            <Input type="password" value={apiSecret} onChange={(e) => setApiSecret(e.target.value)} disabled={loading}/>
           </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="sessionToken">Session Token *</Label>
-              <Button
-                variant="link"
-                size="sm"
-                className="h-auto p-0"
-                onClick={() => window.open(getSessionUrl(), '_blank')}
-                disabled={!apiKey.trim() || loading}
-              >
-                Get Session Token <ExternalLink className="ml-1 h-3 w-3" />
+          <div>
+            <div className="flex justify-between items-center">
+              <Label>Session Token *</Label>
+              <Button variant="link" onClick={() => window.open(getSessionUrl(), "_blank")} disabled={!apiKey || loading}>
+                Get Session Token <ExternalLink className="ml-1 h-3 w-3"/>
               </Button>
             </div>
-            <Input
-              id="sessionToken"
-              value={sessionToken}
-              onChange={(e) => setSessionToken(e.target.value)}
-              placeholder="Paste session token here"
-              disabled={loading}
-            />
-            <p className="text-xs text-muted-foreground">
-              Click "Get Session Token" above, login, and copy the token from the URL
-            </p>
+            <Input value={sessionToken} onChange={(e) => setSessionToken(e.target.value)} disabled={loading}/>
           </div>
         </div>
 
-        <div className="flex justify-end gap-3">
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={loading}
-          >
-            Cancel
-          </Button>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>Cancel</Button>
           <Button onClick={handleConnect} disabled={loading}>
-            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {loading && <Loader2 className="animate-spin mr-2 h-4 w-4"/>}
             Connect
           </Button>
         </div>
