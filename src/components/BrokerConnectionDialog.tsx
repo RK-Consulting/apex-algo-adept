@@ -4,75 +4,55 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
 
-interface BrokerConnectionDialogProps {
+interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   brokerName: string;
 }
 
-export function BrokerConnectionDialog({ open, onOpenChange, brokerName }: BrokerConnectionDialogProps) {
+export function BrokerConnectionDialog({ open, onOpenChange, brokerName }: Props) {
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  
+  const backendUrl = import.meta.env.VITE_BACKEND_URL;
 
   const handleConnect = async () => {
     if (!apiKey.trim()) {
-      toast({
-        title: "Error",
-        description: "API Key is required",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "API Key is required", variant: "destructive" });
+      return;
+    }
+
+    const token = localStorage.getItem("authToken");
+    if (!token) {
+      toast({ title: "Session expired", description: "Please login again", variant: "destructive" });
       return;
     }
 
     setLoading(true);
     try {
-      // Get the JWT token from Supabase auth
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session?.access_token) {
-        throw new Error("Not authenticated");
-      }
-
-      // Call the backend API instead of Supabase edge function
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
-      const response = await fetch(`${backendUrl}/api/credentials/store`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
+      const res = await fetch(`${backendUrl}/api/credentials/store`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}` 
         },
-        body: JSON.stringify({
-          broker_name: brokerName,
-          api_key: apiKey,
-          api_secret: apiSecret || undefined,
-        }),
+        body: JSON.stringify({ broker_name: brokerName, api_key: apiKey, api_secret: apiSecret }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to store credentials');
-      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
 
-      toast({
-        title: "Success",
-        description: `${brokerName} connected successfully`,
-      });
-      
+      toast({ title: "Success", description: `${brokerName} connected` });
+
       setApiKey("");
       setApiSecret("");
       onOpenChange(false);
-    } catch (error) {
-      console.error('Error storing credentials:', error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to connect broker. Please try again.",
-        variant: "destructive",
-      });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -83,43 +63,24 @@ export function BrokerConnectionDialog({ open, onOpenChange, brokerName }: Broke
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Connect to {brokerName}</DialogTitle>
-          <DialogDescription>
-            Enter your {brokerName} API credentials. They will be encrypted and stored securely.
-          </DialogDescription>
+          <DialogDescription>Credentials stored securely on server.</DialogDescription>
         </DialogHeader>
+
         <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="apiKey">API Key *</Label>
-            <Input
-              id="apiKey"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Enter your API key"
-              disabled={loading}
-            />
+          <div>
+            <Label>API Key *</Label>
+            <Input value={apiKey} onChange={e => setApiKey(e.target.value)} disabled={loading}/>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="apiSecret">API Secret</Label>
-            <Input
-              id="apiSecret"
-              type="password"
-              value={apiSecret}
-              onChange={(e) => setApiSecret(e.target.value)}
-              placeholder="Enter your API secret (optional)"
-              disabled={loading}
-            />
+          <div>
+            <Label>API Secret (optional)</Label>
+            <Input type="password" value={apiSecret} onChange={e => setApiSecret(e.target.value)} disabled={loading}/>
           </div>
         </div>
-        <div className="flex justify-end gap-3">
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={loading}
-          >
-            Cancel
-          </Button>
+
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>Cancel</Button>
           <Button onClick={handleConnect} disabled={loading}>
-            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {loading && <Loader2 className="animate-spin mr-2 h-4 w-4"/>}
             Connect
           </Button>
         </div>
