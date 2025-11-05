@@ -26,7 +26,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(compression());
 app.use(helmet());
 app.use(requestLogger);
-const cors = (corsImport as any).default || corsImport;
+//const cors = (corsImport as any).default || corsImport;
 // ✅ CORS setup
 //const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
  // .split(",")
