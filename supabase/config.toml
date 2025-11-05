@@ -3,9 +3,6 @@ project_id = "yzfyjltbfxjqbuebggas"
 [functions.generate-strategy]
 verify_jwt = true
 
-[functions.market-stream]
-verify_jwt = false
-
 [functions.store-credentials]
 verify_jwt = true
 
