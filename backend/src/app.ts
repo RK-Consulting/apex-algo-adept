@@ -1,7 +1,7 @@
 // backend/src/app.ts
 import express from "express";
-//import cors from "cors";
-import corsImport from "cors";
+import cors from "cors";
+//import corsImport from "cors";
 import dotenv from "dotenv";
 import helmet from "helmet";
 import compression from "compression";
@@ -28,14 +28,16 @@ app.use(helmet());
 app.use(requestLogger);
 const cors = (corsImport as any).default || corsImport;
 // ✅ CORS setup
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
-  .split(",")
-  .map(s => s.trim())
-  .filter(Boolean);
+//const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+ // .split(",")
+ // .map(s => s.trim())
+ // .filter(Boolean);
 const allowedOrigins = [
   "http://localhost:5173",
   "https://alphaforge.skillsifter.in",
+  "https://api.alphaforge.skillsifter.in",
   "https://www.alphaforge.skillsifter.in",
+  "https://www.api.alphaforge.skillsifter.in",
   "https://skillsifter.in",
   "https://www.skillsifter.in",
 ];
