@@ -2,7 +2,7 @@
 import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
-import { query } from '../config/database.js';
+import { query } from '../../config/database.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
