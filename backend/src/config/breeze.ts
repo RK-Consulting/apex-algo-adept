@@ -24,6 +24,8 @@ breeze.setApiKey(API_KEY); // Set the appKey
 export async function initBreezeSession(): Promise<void> {
   try {
     // API_SECRET is guaranteed to be string here
+    // Re-declare to help TypeScript narrow the type
+    const secret: string = API_SECRET; // ← This fixes TS2345
     const session = await breeze.generateSession(API_SECRET);
     console.log('Breeze session initialized:', session);
   } catch (error: any) {
