@@ -146,13 +146,15 @@ router.post("/order", authenticateToken, async (req: AuthRequest, res, next) => 
     const order = await breeze.placeOrder({
       stockCode,
       exchangeCode,
-      productType,                   // correct field
+      productType,
       action,
       orderType,
       quantity,
-      price: price || undefined,
+      price: price ? String(price) : undefined,
       validity,
-      validityDate: new Date().toISOString(),
+      disclosedQuantity: undefined,
+      stoploss: undefined,
+      triggerPrice: undefined,
       userRemark: "AlphaForge Order",
     });
 
