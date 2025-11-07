@@ -69,7 +69,8 @@ entry_rules, exit_rules, position_sizing, risk_management, recommended_instrumen
     }
 
     const data = await aiResponse.json();
-    const rawText = data.choices?.[0]?.message?.content || "{}";
+    //const rawText = data.choices?.[0]?.message?.content || "{}";
+    const rawText = (data as any).choices?.[0]?.message?.content || "{}";
     let parsed: any;
 
     try {
