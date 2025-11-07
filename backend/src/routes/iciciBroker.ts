@@ -98,29 +98,53 @@ router.get("/portfolio", authenticateToken, async (req: AuthRequest, res, next) 
    GET /api/icici/orders
    Get order history (last 7 days)
 -------------------------------------------------------------- */
-router.get("/orders", authenticateToken, async (req: AuthRequest, res, next) => {
+router.post("/order", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const breeze = await getBreezeInstance(req.user!.id);
-    const today = new Date();
-    const fromDate = new Date(today);
-    fromDate.setDate(today.getDate() - 7);
 
-    // getOrderList takes **no** arguments
-    const orders = await breeze.getOrderList();
+    const {
+      stockCode,
+      exchangeCode = "NSE",
+      productType = "cash",
+      action = "buy",
+      orderType = "market",
+      quantity = "1",
+      price = "",
+      validity = "day",
+    } = req.body as {
+      stockCode?: string;
+      exchangeCode?: string;
+      productType?: string;
+      action?: string;
+      orderType?: string;
+      quantity?: string | number;
+      price?: string | number;
+      validity?: string;
+    };
 
-    // If you need to filter locally:
-    const filtered = orders.filter((o: any) => {
-      const orderDate = new Date(o.order_date);
-      return orderDate >= fromDate && orderDate <= today;
+    if (!stockCode) {
+      return res.status(400).json({ error: "stockCode is required." });
+    }
+
+    const order = await breeze.placeOrder({
+      stockCode,
+      exchangeCode,
+      productType,
+      action,
+      orderType,
+      quantity: String(quantity),
+      price: price ? String(price) : undefined,
+      validity,
+      userRemark: "AlphaForge Order",
     });
 
-    res.json({ success: true, orders: filtered });
-  } catch (err) {
-    console.error("Get Orders Error:", err);
+    res.json({ success: true, order });
+  } catch (err: any) {
+    console.error("Place Order Error:", err.message || err);
+    res.status(500).json({ error: "Order placement failed", details: err.message });
     next(err);
   }
 });
-
 /* --------------------------------------------------------------
    POST /api/icici/order
    Place a new order
