@@ -1,6 +1,6 @@
 // src/utils/breezeSession.ts
 import { query } from "../config/database.js";
-import BreezeConnect from "breezeconnect";
+import { BreezeConnect } from "breezeconnect";
 
 export async function getBreezeInstance(userId: string): Promise<any> {
   const creds = await query(
