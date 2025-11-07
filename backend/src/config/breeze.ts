@@ -13,9 +13,12 @@ if (!API_KEY || !API_SECRET) {
 }
 
 // Initialize BreezeConnect with API key
-const breeze = new BreezeConnect({
-  appKey: API_KEY,
-});
+const breeze = new BreezeConnect();
+breeze.setApiKey(API_KEY);
+
+//const breeze = new BreezeConnect({
+//  appKey: API_KEY,
+//});
 
 // Function to generate session (must be called after login)
 export async function initBreezeSession(): Promise<void> {
