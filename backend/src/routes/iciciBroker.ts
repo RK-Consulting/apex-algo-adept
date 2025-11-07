@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 import { query } from "../config/database.js";
-import BreezeConnect from "breezeconnect"; // ✅ modern import style
+import { BreezeConnect } from "breezeconnect"; // ✅ modern import style
 
 const router = Router();
 
