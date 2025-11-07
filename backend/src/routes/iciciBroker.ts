@@ -135,7 +135,7 @@ router.post("/order", authenticateToken, async (req: AuthRequest, res, next) => 
       quantity: String(quantity),
       price: price ? String(price) : undefined,
       validity,
-      userRemark: "AlphaForge Order",
+      //userRemark: "AlphaForge Order",
     });
 
     res.json({ success: true, order });
@@ -179,7 +179,7 @@ router.post("/order", authenticateToken, async (req: AuthRequest, res, next) => 
       disclosedQuantity: undefined,
       stoploss: undefined,
       triggerPrice: undefined,
-      userRemark: "AlphaForge Order",
+      //userRemark: "AlphaForge Order",
     });
 
     res.json({ success: true, order });
