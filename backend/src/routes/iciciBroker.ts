@@ -1,14 +1,15 @@
+// src/routes/iciciBroker.ts
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 import { query } from "../config/database.js";
-import { BreezeConnect } from "breezeconnect"; // ✅ modern import style
+import { BreezeConnect } from "breezeconnect"; // official SDK
 
 const router = Router();
 
 /**
- * 🧠 Helper — Create Breeze Instance with user's stored credentials
+ * Helper — create a Breeze instance using the user’s stored credentials
  */
-async function getBreezeInstance(userId: string) {
+async function getBreezeInstance(userId: string): Promise<BreezeConnect> {
   const { rows } = await query(
     `SELECT icici_api_key, icici_api_secret, icici_session_token
      FROM user_credentials WHERE user_id = $1`,
@@ -20,79 +21,83 @@ async function getBreezeInstance(userId: string) {
   }
 
   const { icici_api_key, icici_api_secret, icici_session_token } = rows[0];
-  if (!icici_api_key || !icici_api_secret || !icici_session_token) {
-    throw new Error("Incomplete ICICI credentials — please reauthenticate.");
+
+  if (!icici_api_key || !icici_api_secret) {
+    throw new Error("Incomplete ICICI credentials — please re‑authenticate.");
   }
 
-  //const breeze = new BreezeConnect({ appKey: icici_api_key });
-  //await breeze.generateSession(icici_api_secret, icici_session_token);
-  const breeze = new BreezeConnect();
-  await breeze.generateSession(icici_api_key, icici_api_secret);
+  // ---- NEW SDK INITIALISATION ----
+  const breeze = new BreezeConnect();          // no args
+  breeze.setApiKey(icici_api_key);             // set appKey
+  // generateSession needs **only** the secret (session token is returned)
+  await breeze.generateSession(icici_api_secret);
+  // If you have a cached session token you can set it:
+  if (icici_session_token) breeze.setSessionToken(icici_session_token);
+
   return breeze;
 }
 
-/**
- * @route POST /api/icici/connect
- * 🔐 Save user’s ICICI Breeze API credentials
- */
+/* --------------------------------------------------------------
+   POST /api/icici/connect
+   Save user’s ICICI Breeze API credentials
+-------------------------------------------------------------- */
 router.post("/connect", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const { api_key, api_secret, session_token } = req.body;
-
     if (!api_key || !api_secret || !session_token) {
-      return res.status(400).json({ error: "All fields (api_key, api_secret, session_token) are required." });
+      return res.status(400).json({ error: "All fields required." });
     }
 
-    // store or update in DB
     await query(
       `INSERT INTO user_credentials (user_id, icici_api_key, icici_api_secret, icici_session_token)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (user_id)
-       DO UPDATE SET icici_api_key = $2, icici_api_secret = $3, icici_session_token = $4, updated_at = NOW()`,
+       DO UPDATE SET icici_api_key = $2, icici_api_secret = $3,
+                     icici_session_token = $4, updated_at = NOW()`,
       [req.user!.id, api_key, api_secret, session_token]
     );
 
-    res.json({ success: true, message: "ICICI Direct Breeze credentials stored successfully." });
+    res.json({ success: true, message: "ICICI credentials stored." });
   } catch (err) {
-    console.error("❌ ICICI Connect Error:", err);
+    console.error("ICICI Connect Error:", err);
     next(err);
   }
 });
 
-/**
- * @route GET /api/icici/funds
- * 💰 Fetch available funds
- */
+/* --------------------------------------------------------------
+   GET /api/icici/funds
+   Fetch available funds
+-------------------------------------------------------------- */
 router.get("/funds", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const breeze = await getBreezeInstance(req.user!.id);
-    const funds = await breeze.getFundDetails();
+    const funds = await breeze.getFunds();          // correct method
     res.json({ success: true, funds });
   } catch (err) {
-    console.error("❌ Fetch Funds Error:", err);
+    console.error("Fetch Funds Error:", err);
     next(err);
   }
 });
 
-/**
- * @route GET /api/icici/portfolio
- * 📊 Get portfolio holdings
- */
+/* --------------------------------------------------------------
+   GET /api/icici/portfolio
+   Get holdings
+-------------------------------------------------------------- */
 router.get("/portfolio", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const breeze = await getBreezeInstance(req.user!.id);
-    const portfolio = await breeze.Holdings();
+    const portfolio = await breeze.getHoldings();   // correct method
     res.json({ success: true, portfolio });
   } catch (err) {
-    console.error("❌ Portfolio Fetch Error:", err);
+    console.error("Portfolio Fetch Error:", err);
     next(err);
   }
 });
 
-/**
- * @route GET /api/icici/orders
- * 📜 Get order history
- */
+/* --------------------------------------------------------------
+   GET /api/icici/orders
+   Get order history (last 7 days)
+-------------------------------------------------------------- */
 router.get("/orders", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const breeze = await getBreezeInstance(req.user!.id);
@@ -100,30 +105,33 @@ router.get("/orders", authenticateToken, async (req: AuthRequest, res, next) => 
     const fromDate = new Date(today);
     fromDate.setDate(today.getDate() - 7);
 
-    const orders = await breeze.getOrderList({
-      exchangeCode: "NSE",
-      fromDate: fromDate.toISOString(),
-      toDate: today.toISOString(),
+    // getOrderList takes **no** arguments
+    const orders = await breeze.getOrderList();
+
+    // If you need to filter locally:
+    const filtered = orders.filter((o: any) => {
+      const orderDate = new Date(o.order_date);
+      return orderDate >= fromDate && orderDate <= today;
     });
 
-    res.json({ success: true, orders });
+    res.json({ success: true, orders: filtered });
   } catch (err) {
-    console.error("❌ Get Orders Error:", err);
+    console.error("Get Orders Error:", err);
     next(err);
   }
 });
 
-/**
- * @route POST /api/icici/order
- * 🟢 Place a new order
- */
+/* --------------------------------------------------------------
+   POST /api/icici/order
+   Place a new order
+-------------------------------------------------------------- */
 router.post("/order", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const breeze = await getBreezeInstance(req.user!.id);
     const {
       stockCode,
       exchangeCode = "NSE",
-      product = "cash",
+      productType = "cash",          // renamed from `product`
       action = "buy",
       orderType = "market",
       quantity = "1",
@@ -138,11 +146,11 @@ router.post("/order", authenticateToken, async (req: AuthRequest, res, next) => 
     const order = await breeze.placeOrder({
       stockCode,
       exchangeCode,
-      product,
+      productType,                   // correct field
       action,
       orderType,
       quantity,
-      price,
+      price: price || undefined,
       validity,
       validityDate: new Date().toISOString(),
       userRemark: "AlphaForge Order",
@@ -150,37 +158,34 @@ router.post("/order", authenticateToken, async (req: AuthRequest, res, next) => 
 
     res.json({ success: true, order });
   } catch (err) {
-    console.error("❌ Place Order Error:", err);
+    console.error("Place Order Error:", err);
     next(err);
   }
 });
 
-/**
- * @route DELETE /api/icici/order/:orderId
- * 🔴 Cancel order
- */
+/* --------------------------------------------------------------
+   DELETE /api/icici/order/:orderId
+   Cancel an order
+-------------------------------------------------------------- */
 router.delete("/order/:orderId", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const { orderId } = req.params;
     if (!orderId) return res.status(400).json({ error: "orderId required" });
 
     const breeze = await getBreezeInstance(req.user!.id);
-    const response = await breeze.cancelOrder({
-      exchangeCode: "NSE",
-      orderId,
-    });
+    const response = await breeze.cancelOrder({ orderId }); // only orderId
 
     res.json({ success: true, response });
   } catch (err) {
-    console.error("❌ Cancel Order Error:", err);
+    console.error("Cancel Order Error:", err);
     next(err);
   }
 });
 
-/**
- * @route GET /api/icici/quote/:symbol
- * 📈 Get live quote for stock
- */
+/* --------------------------------------------------------------
+   GET /api/icici/quote/:symbol
+   Live quote
+-------------------------------------------------------------- */
 router.get("/quote/:symbol", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const { symbol } = req.params;
@@ -195,31 +200,38 @@ router.get("/quote/:symbol", authenticateToken, async (req: AuthRequest, res, ne
 
     res.json({ success: true, quote });
   } catch (err) {
-    console.error("❌ Get Quote Error:", err);
+    console.error("Get Quote Error:", err);
     next(err);
   }
 });
 
-/**
- * @route GET /api/icici/stream
- * 🔄 (Future Use) Websocket live feed subscription endpoint
- */
+/* --------------------------------------------------------------
+   GET /api/icici/stream
+   WebSocket live feed (demo – returns immediately)
+-------------------------------------------------------------- */
 router.get("/stream", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const breeze = await getBreezeInstance(req.user!.id);
-    breeze.connect();
+    breeze.connect();                     // correct method
 
-    /** breeze.onMessage = (ticks: any) => {
-      console.log("📡 Ticks:", ticks);
-    }; */
-    // After calling breeze.connect()
-    breeze.on('message', (ticks: any) => {
+    breeze.on("message", (ticks: any) => {
       console.log("Ticks:", ticks);
+      // You could push to a socket.io room, SSE, etc.
     });
-    
-    res.json({ success: true, message: "Live stream connected via Breeze WebSocket" });
+
+    breeze.on("open", () => {
+      console.log("WebSocket opened");
+      // Example subscription
+      breeze.subscribeFeeds({
+        stockCode: "RELIANCE",
+        exchangeCode: "NSE",
+        productType: "cash",
+      });
+    });
+
+    res.json({ success: true, message: "WebSocket started (check server logs)" });
   } catch (err) {
-    console.error("❌ WebSocket Error:", err);
+    console.error("WebSocket Error:", err);
     next(err);
   }
 });
