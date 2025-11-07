@@ -207,11 +207,10 @@ router.get("/quote/:symbol", authenticateToken, async (req: AuthRequest, res, ne
 router.get("/stream", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const breeze = await getBreezeInstance(req.user!.id);
-    //breeze.wsConnect();
     breeze.connectWS();
 
-    //breeze.onTicks = (ticks: any) => {console.log("📡 Ticks:", ticks);
-    breeze.onMessage = (ticks: any) => console.log("📡 Ticks:", ticks);
+    breeze.onMessage = (ticks: any) => {
+      console.log("📡 Ticks:", ticks);
     };
 
     res.json({ success: true, message: "Live stream connected via Breeze WebSocket" });
