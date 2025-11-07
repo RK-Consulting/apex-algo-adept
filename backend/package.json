@@ -17,24 +17,25 @@
     "dotenv": "^16.4.5",
     "pg": "^8.12.0",
     "jsonwebtoken": "^9.0.2",
-    "bcrypt": "^5.1.1",
-    "bcryptjs": "^2.4.3",           # ← Use bcryptjs (has types)
+    "bcryptjs": "^2.4.3",
     "uuid": "^10.0.0",
     "node-fetch": "^3.3.2",
-    "breezeconnect": "^1.0.29",
-    "helmet": "^7.1.0",           
-    "compression": "^1.7.4"            
+    "breezeconnect": "1.0.29",
+    "helmet": "^7.1.0",
+    "compression": "^1.7.4"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/cors": "^2.8.17",
     "@types/pg": "^8.11.6",
     "@types/jsonwebtoken": "^9.0.6",
-    "@types/bcrypt": "^5.0.2",
+    "@types/bcryptjs": "^2.4.6",
     "@types/uuid": "^10.0.0",
     "@types/node": "^20.14.0",
     "typescript": "^5.5.0",
-    "tsx": "^4.15.0"
+    "tsx": "^4.15.0",
+    "@types/helmet": "^4.0.0",
+    "@types/compression": "^1.7.5"
   },
   "engines": {
     "node": ">=18.0.0"
