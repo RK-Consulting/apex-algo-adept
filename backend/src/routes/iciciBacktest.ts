@@ -1,3 +1,4 @@
+// src/routes/iciciBacktest.ts
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 import { query } from "../config/database.js";
@@ -6,41 +7,52 @@ import { BreezeConnect } from "breezeconnect";
 const router = Router();
 
 /**
- * Helper — Initialize Breeze Instance with stored credentials
+ * Helper — Initialize Breeze instance using stored user credentials
  */
-async function getBreezeInstance(userId: string) {
+async function getBreezeInstance(userId: string): Promise<BreezeConnect> {
   const { rows } = await query(
     `SELECT icici_api_key, icici_api_secret, icici_session_token
      FROM user_credentials WHERE user_id = $1`,
     [userId]
   );
 
-  if (rows.length === 0) throw new Error("Missing ICICI credentials.");
-  const { icici_api_key, icici_api_secret, icici_session_token } = rows[0];
-  if (!icici_api_key || !icici_api_secret || !icici_session_token)
-    throw new Error("Incomplete ICICI credentials. Please re-connect.");
+  if (rows.length === 0) {
+    throw new Error("Missing ICICI credentials.");
+  }
 
-  //const breeze = new BreezeConnect({ appKey: icici_api_key });
-  //await breeze.generateSession(icici_api_secret, icici_session_token);
+  const { icici_api_key, icici_api_secret } = rows[0];
+
+  if (!icici_api_key || !icici_api_secret) {
+    throw new Error("Incomplete ICICI credentials. Please re-connect.");
+  }
+
   const breeze = new BreezeConnect();
-  await breeze.generateSession(icici_api_key, icici_api_secret);
+  breeze.setApiKey(icici_api_key);
+  await breeze.generateSession(icici_api_secret); // Only 1 arg
+
   return breeze;
 }
 
 /**
- * @route POST /api/icici/backtest
- * @desc Run backtest on stored strategy using Breeze OHLC data
+ * POST /api/icici/backtest
+ * Run backtest using historical OHLC data from Breeze
  */
 router.post("/backtest", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const userId = req.user!.id;
-    const { strategyId, symbol, exchange = "NSE", fromDate, toDate } = req.body;
+    const {
+      strategyId,
+      symbol,
+      exchange = "NSE",
+      fromDate = "2025-01-01T07:00:00.000Z",
+      toDate = new Date().toISOString(),
+    } = req.body;
 
     if (!strategyId || !symbol) {
       return res.status(400).json({ error: "strategyId and symbol are required" });
     }
 
-    // ✅ Fetch strategy configuration from DB
+    // Fetch strategy config
     const { rows: stratRows } = await query(
       `SELECT strategy_config FROM strategies WHERE id = $1 AND user_id = $2`,
       [strategyId, userId]
@@ -53,40 +65,41 @@ router.post("/backtest", authenticateToken, async (req: AuthRequest, res, next) 
     const strategy = stratRows[0].strategy_config;
     const breeze = await getBreezeInstance(userId);
 
-    // ✅ Fetch historical OHLC data from Breeze API
-    const ohlcData = await breeze.getHistoricalDatav2({
+    // Correct method name: getHistoricalDataV2
+    const ohlcResponse = await breeze.getHistoricalDataV2({
       interval: "1day",
-      fromDate: fromDate || "2025-01-01T07:00:00.000Z",
-      toDate: toDate || new Date().toISOString(),
+      fromDate,
+      toDate,
       stockCode: symbol,
       exchangeCode: exchange,
       productType: "cash",
     });
 
-    const candles = ohlcData?.Success || ohlcData?.success || ohlcData?.data || [];
+    const candles = ohlcResponse?.Success || ohlcResponse?.success || ohlcResponse?.data || [];
 
-    if (!candles || candles.length === 0) {
+    if (!Array.isArray(candles) || candles.length === 0) {
       return res.status(400).json({ error: "No OHLC data returned from Breeze API" });
     }
 
-    // ✅ Basic Backtesting Engine
+    // Backtest logic
     let positionOpen = false;
     let entryPrice = 0;
     let pnl = 0;
     let trades = 0;
     let wins = 0;
 
-    // Example: Use strategy rules (you can expand later)
-    const stopLoss = strategy?.risk_management?.stop_loss || 1.5; // %
-    const takeProfit = strategy?.risk_management?.take_profit || 3.0; // %
+    const stopLossPct = strategy?.risk_management?.stop_loss || 1.5;
+    const takeProfitPct = strategy?.risk_management?.take_profit || 3.0;
 
     for (const candle of candles) {
-      const close = parseFloat(candle.close);
-      const high = parseFloat(candle.high);
-      const low = parseFloat(candle.low);
+      const close = parseFloat(candle.close || candle.Close || "0");
+      const high = parseFloat(candle.high || candle.High || "0");
+      const low = parseFloat(candle.low || candle.Low || "0");
+
+      if (isNaN(close) || isNaN(high) || isNaN(low)) continue;
 
       if (!positionOpen) {
-        // Example entry rule: random / RSI-based can be added later
+        // Simple entry: 40% chance (replace with real signal later)
         if (Math.random() > 0.6) {
           positionOpen = true;
           entryPrice = close;
@@ -96,36 +109,35 @@ router.post("/backtest", authenticateToken, async (req: AuthRequest, res, next) 
         const gain = ((high - entryPrice) / entryPrice) * 100;
         const loss = ((entryPrice - low) / entryPrice) * 100;
 
-        if (gain >= takeProfit) {
-          pnl += (takeProfit / 100) * entryPrice;
+        if (gain >= takeProfitPct) {
+          pnl += (takeProfitPct / 100) * entryPrice;
           wins++;
           positionOpen = false;
-        } else if (loss >= stopLoss) {
-          pnl -= (stopLoss / 100) * entryPrice;
+        } else if (loss >= stopLossPct) {
+          pnl -= (stopLossPct / 100) * entryPrice;
           positionOpen = false;
         }
       }
     }
 
-    const winRate = trades ? ((wins / trades) * 100).toFixed(2) : 0;
-    const avgPnL = trades ? (pnl / trades).toFixed(2) : 0;
+    // Safe string conversion
+    const winRateStr = trades > 0 ? ((wins / trades) * 100).toFixed(2) : "0";
+    const avgPnLStr = trades > 0 ? (pnl / trades).toFixed(2) : "0";
 
-    // ✅ Save results to DB
+    const performance = {
+      total_trades: trades,
+      win_rate: parseFloat(winRateStr),        // string → number
+      total_pnl: parseFloat(pnl.toFixed(2)),
+      avg_pnl_per_trade: parseFloat(avgPnLStr), // string → number
+      test_period: { fromDate, toDate },
+    };
+
+    // Save to DB
     await query(
       `UPDATE strategies
        SET performance_data = $1, updated_at = NOW()
        WHERE id = $2 AND user_id = $3`,
-      [
-        JSON.stringify({
-          total_trades: trades,
-          win_rate: parseFloat(winRate),
-          total_pnl: parseFloat(pnl.toFixed(2)),
-          avg_pnl_per_trade: parseFloat(avgPnL),
-          test_period: { fromDate, toDate },
-        }),
-        strategyId,
-        userId,
-      ]
+      [JSON.stringify(performance), strategyId, userId]
     );
 
     res.json({
@@ -133,14 +145,14 @@ router.post("/backtest", authenticateToken, async (req: AuthRequest, res, next) 
       backtest: {
         trades,
         wins,
-        winRate,
+        winRate: winRateStr,
         pnl: pnl.toFixed(2),
-        avgPnL,
+        avgPnL: avgPnLStr,
         strategy,
       },
     });
-  } catch (err) {
-    console.error("❌ Backtest Error:", err);
+  } catch (err: any) {
+    console.error("Backtest Error:", err.message || err);
     next(err);
   }
 });
