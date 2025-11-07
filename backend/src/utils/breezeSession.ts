@@ -15,7 +15,9 @@ export async function getBreezeInstance(userId: string): Promise<any> {
 
   const { icici_api_key, icici_api_secret, icici_token } = creds.rows[0];
 
-  const breeze = new BreezeConnect({ appKey: icici_api_key });
-  await breeze.generateSession(icici_api_secret, icici_token);
+  //const breeze = new BreezeConnect({ appKey: icici_api_key });
+  //await breeze.generateSession(icici_api_secret, icici_token);
+  const breeze = new BreezeConnect();
+  await breeze.generateSession(icici_api_key, icici_api_secret);
   return breeze;
 }
