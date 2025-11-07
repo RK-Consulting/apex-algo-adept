@@ -24,8 +24,10 @@ async function getBreezeInstance(userId: string) {
     throw new Error("Incomplete ICICI credentials — please reauthenticate.");
   }
 
-  const breeze = new BreezeConnect({ appKey: icici_api_key });
-  await breeze.generateSession(icici_api_secret, icici_session_token);
+  //const breeze = new BreezeConnect({ appKey: icici_api_key });
+  //await breeze.generateSession(icici_api_secret, icici_session_token);
+  const breeze = new BreezeConnect();
+  await breeze.generateSession(icici_api_key, icici_api_secret);
   return breeze;
 }
 
