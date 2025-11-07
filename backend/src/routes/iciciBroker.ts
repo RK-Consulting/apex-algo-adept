@@ -81,7 +81,7 @@ router.get("/funds", authenticateToken, async (req: AuthRequest, res, next) => {
 router.get("/portfolio", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const breeze = await getBreezeInstance(req.user!.id);
-    const portfolio = await breeze.getPortfolioHoldings();
+    const portfolio = await breeze.Holdings();
     res.json({ success: true, portfolio });
   } catch (err) {
     console.error("❌ Portfolio Fetch Error:", err);
