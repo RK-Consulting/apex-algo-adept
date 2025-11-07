@@ -19,11 +19,11 @@ router.get("/subscribe/:symbol", authenticateToken, async (req: AuthRequest, res
     const breeze = await getBreezeInstance(userId);
 
     // Ensure websocket is connected
-    if (typeof breeze.wsConnect === "function") {
-      await breeze.wsConnect();
+    if (typeof breeze.Connect === "function") {
+      await breeze.Connect();
       console.log(`📡 Connected to Breeze WebSocket for ${symbol}`);
     } else {
-      console.warn("⚠️ breeze.wsConnect not available on Breeze instance");
+      console.warn("⚠️ breeze.Connect not available on Breeze instance");
     }
 
     // On receiving live ticks — matching Breeze SDK callback shape
