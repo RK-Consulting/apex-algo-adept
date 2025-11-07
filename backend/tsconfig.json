@@ -1,6 +1,5 @@
 {
   "compilerOptions": {
-    "type": "module",
     "target": "ES2020",
     "module": "CommonJS",                   // 👈 Critical fix
     "lib": ["ES2020"],
