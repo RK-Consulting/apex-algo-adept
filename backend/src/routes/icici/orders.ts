@@ -35,7 +35,7 @@ router.post('/order', authenticateToken, async (req: AuthRequest, res) => {
       quantity,
       price: price || undefined,
       validity,
-      validityDate: new Date().toISOString(),
+      //validityDate: new Date().toISOString(),
       userRemark: 'AlphaForge Order',
     });
 
