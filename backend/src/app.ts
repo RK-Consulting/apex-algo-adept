@@ -24,7 +24,27 @@ const app = express();
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(compression());
-app.use(helmet());
+//app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      scriptSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        "'unsafe-eval'",
+        "https://www.google-analytics.com",
+        "https://gc.kis.v2.scr.kaspersky-labs.com",
+        "wss://gc.kis.v2.scr.kaspersky-labs.com",
+        "https://static.cloudflareinsights.com" // ← ADD THIS
+      ],
+      connectSrc: [
+        "'self'",
+        "https://api.alphaforge.skillsifter.in",
+        "wss://gc.kis.v2.scr.kaspersky-labs.com"
+      ],
+    },
+  },
+}));
 app.use(requestLogger);
 //const cors = (corsImport as any).default || corsImport;
 // ✅ CORS setup
