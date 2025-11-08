@@ -28,7 +28,7 @@ export async function initBreezeSession(): Promise<void> {
     //const secret: string = API_SECRET; // ← This fixes TS2345
     
     const session = await breeze.generateSession(API_SECRET);
-    const secret = API_SECRET!; // Non-null assertion (safe after validation)
+    //const secret = API_SECRET!; // Non-null assertion (safe after validation)
     console.log('Breeze session initialized:', session);
   } catch (error: any) {
     const message = error?.message || String(error);
