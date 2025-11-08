@@ -27,7 +27,7 @@ export async function initBreezeSession(): Promise<void> {
     // Re-declare to help TypeScript narrow the type
     //const secret: string = API_SECRET; // ← This fixes TS2345
     
-    const session = await breeze.generateSession(API_SECRET);
+    const session = await breeze.generateSession(API_SECRET!);
     //const secret = API_SECRET!; // Non-null assertion (safe after validation)
     console.log('Breeze session initialized:', session);
   } catch (error: any) {
