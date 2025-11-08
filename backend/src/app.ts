@@ -44,6 +44,9 @@ app.use(helmet({
       ],
     },
   },
+  crossOriginEmbedderPolicy: false,
+  crossOriginOpenerPolicy: false,
+  crossOriginResourcePolicy: false,
 }));
 app.use(requestLogger);
 //const cors = (corsImport as any).default || corsImport;
