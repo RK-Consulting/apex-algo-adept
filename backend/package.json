@@ -39,6 +39,9 @@
   "overrides": {
     "axios": "1.8.2"
   },
+  "resolutions": {
+    "axios": "1.8.2"
+  }
   "engines": {
     "node": ">=18.0.0"
   }
