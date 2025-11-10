@@ -17,7 +17,70 @@ import { iciciBrokerRouter } from "./routes/iciciBroker.js";
 
 // Load environment variables
 dotenv.config();
+//const cors = (corsImport as any).default || corsImport;
+// ✅ CORS setup
+//const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+ // .split(",")
+ // .map(s => s.trim())
+ // .filter(Boolean);
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://alphaforge.skillsifter.in",
+  "https://api.alphaforge.skillsifter.in",
+  "https://www.alphaforge.skillsifter.in",
+  "https://www.api.alphaforge.skillsifter.in",
+  "https://skillsifter.in",
+  "https://www.skillsifter.in",
+];
 
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests without an Origin (e.g. curl, Postman)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      console.warn(`🚫 CORS blocked request from: ${origin}`);
+      return callback(new Error("CORS not allowed from this origin"), false);
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+      "Origin",
+    ],
+    exposedHeaders: ["Content-Length", "X-Knowledge-Base-ID"],
+  })
+);
+
+// Handle preflight (OPTIONS) globally
+app.options("*", cors());
+/*app.use(
+  cors({
+    origin: (origin, callback) => {
+      // allow requests with no origin (like curl, server-to-server)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.warn(`🚫 CORS blocked request from: ${origin}`);
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    //allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",           // ← ADD THIS
+      "X-Requested-With",
+      "Accept",
+      "Origin"
+    ],
+  })
+); */
 const app = express();
 
 // ✅ Basic middleware
@@ -49,45 +112,6 @@ app.use(helmet({
   crossOriginResourcePolicy: false,
 }));
 app.use(requestLogger);
-//const cors = (corsImport as any).default || corsImport;
-// ✅ CORS setup
-//const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
- // .split(",")
- // .map(s => s.trim())
- // .filter(Boolean);
-const allowedOrigins = [
-  "http://localhost:5173",
-  "https://alphaforge.skillsifter.in",
-  "https://api.alphaforge.skillsifter.in",
-  "https://www.alphaforge.skillsifter.in",
-  "https://www.api.alphaforge.skillsifter.in",
-  "https://skillsifter.in",
-  "https://www.skillsifter.in",
-];
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // allow requests with no origin (like curl, server-to-server)
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        console.warn(`🚫 CORS blocked request from: ${origin}`);
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    //allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",           // ← ADD THIS
-      "X-Requested-With",
-      "Accept",
-      "Origin"
-    ],
-  })
-);
 
 // ✅ Health check endpoint
 app.get("/health", (req, res) => {
