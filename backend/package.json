@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Standalone backend server for AlphaForge trading platform",
   "main": "dist/server.js",
-  "type": "module",
+  "type": "commonjs",
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
