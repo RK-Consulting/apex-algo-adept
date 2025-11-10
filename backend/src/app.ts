@@ -27,10 +27,10 @@ const allowedOrigins = [
   "http://localhost:5173",
   "https://alphaforge.skillsifter.in",
   "https://api.alphaforge.skillsifter.in",
-  "https://www.alphaforge.skillsifter.in",
-  "https://www.api.alphaforge.skillsifter.in",
-  "https://skillsifter.in",
-  "https://www.skillsifter.in",
+  //"https://www.alphaforge.skillsifter.in",
+  //"https://www.api.alphaforge.skillsifter.in",
+  //"https://skillsifter.in",
+  //"https://www.skillsifter.in",
 ];
 
 app.use(
