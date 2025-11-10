@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,18 +18,25 @@ interface ICICIBrokerDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function ICICIBrokerDialog({ open, onOpenChange }: ICICIBrokerDialogProps) {
+export function ICICIBrokerDialog({
+  open,
+  onOpenChange,
+}: ICICIBrokerDialogProps) {
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
   const [sessionToken, setSessionToken] = useState("");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  const backendUrl = import.meta.env.VITE_BACKEND_URL;
+  // ✅ fallback ensures backend URL is always available in production
+  const backendUrl =
+    import.meta.env.VITE_BACKEND_URL || "https://api.alphaforge.skillsifter.in";
 
   const getSessionUrl = () => {
     if (!apiKey.trim()) return "#";
-    return `https://api.icicidirect.com/apiuser/login?api_key=${encodeURIComponent(apiKey)}`;
+    return `https://api.icicidirect.com/apiuser/login?api_key=${encodeURIComponent(
+      apiKey
+    )}`;
   };
 
   const handleConnect = async () => {
@@ -36,12 +49,15 @@ export function ICICIBrokerDialog({ open, onOpenChange }: ICICIBrokerDialogProps
       return;
     }
 
-    const token = localStorage.getItem("authToken");
+    // ✅ FIX: check both token storage names to match backend login output
+    const token =
+      localStorage.getItem("authToken") || localStorage.getItem("token");
+
     if (!token) {
       toast({
         title: "Session expired",
-        description: "Please login again",
-        variant: "destructive"
+        description: "Please login again.",
+        variant: "destructive",
       });
       return;
     }
@@ -52,7 +68,7 @@ export function ICICIBrokerDialog({ open, onOpenChange }: ICICIBrokerDialogProps
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           api_key: apiKey,
@@ -61,13 +77,20 @@ export function ICICIBrokerDialog({ open, onOpenChange }: ICICIBrokerDialogProps
         }),
       });
 
-      const result = await response.json();
+      // ✅ Handle backend errors (including HTML 403 responses)
+      let result;
+      try {
+        result = await response.json();
+      } catch {
+        throw new Error(`Unexpected response (${response.status})`);
+      }
 
-      if (!response.ok) throw new Error(result.error || "Failed to connect ICICI");
+      if (!response.ok)
+        throw new Error(result.error || "Failed to connect ICICI Direct.");
 
       toast({
         title: "Success",
-        description: "ICICI Direct connected successfully"
+        description: "ICICI Direct connected successfully ✅",
       });
 
       setApiKey("");
@@ -75,9 +98,12 @@ export function ICICIBrokerDialog({ open, onOpenChange }: ICICIBrokerDialogProps
       setSessionToken("");
       onOpenChange(false);
     } catch (error: any) {
+      console.error("❌ ICICI Connect Error:", error);
       toast({
         title: "Error",
-        description: error.message,
+        description:
+          error.message ||
+          "Connection failed. Please verify credentials or try again later.",
         variant: "destructive",
       });
     } finally {
@@ -97,9 +123,12 @@ export function ICICIBrokerDialog({ open, onOpenChange }: ICICIBrokerDialogProps
 
         <Alert className="mb-2">
           <AlertDescription className="text-sm">
-            <b>Steps:</b><br/>
-            1️⃣ Enter API Key<br/>
-            2️⃣ Click “Get Session Token” and login<br/>
+            <b>Steps:</b>
+            <br />
+            1️⃣ Enter API Key
+            <br />
+            2️⃣ Click “Get Session Token” and log in
+            <br />
             3️⃣ Copy token → paste here
           </AlertDescription>
         </Alert>
@@ -107,29 +136,52 @@ export function ICICIBrokerDialog({ open, onOpenChange }: ICICIBrokerDialogProps
         <div className="space-y-4 py-4">
           <div>
             <Label>API Key *</Label>
-            <Input value={apiKey} onChange={(e) => setApiKey(e.target.value)} disabled={loading}/>
+            <Input
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              disabled={loading}
+            />
           </div>
 
           <div>
             <Label>API Secret *</Label>
-            <Input type="password" value={apiSecret} onChange={(e) => setApiSecret(e.target.value)} disabled={loading}/>
+            <Input
+              type="password"
+              value={apiSecret}
+              onChange={(e) => setApiSecret(e.target.value)}
+              disabled={loading}
+            />
           </div>
 
           <div>
             <div className="flex justify-between items-center">
               <Label>Session Token *</Label>
-              <Button variant="link" onClick={() => window.open(getSessionUrl(), "_blank")} disabled={!apiKey || loading}>
-                Get Session Token <ExternalLink className="ml-1 h-3 w-3"/>
+              <Button
+                variant="link"
+                onClick={() => window.open(getSessionUrl(), "_blank")}
+                disabled={!apiKey || loading}
+              >
+                Get Session Token <ExternalLink className="ml-1 h-3 w-3" />
               </Button>
             </div>
-            <Input value={sessionToken} onChange={(e) => setSessionToken(e.target.value)} disabled={loading}/>
+            <Input
+              value={sessionToken}
+              onChange={(e) => setSessionToken(e.target.value)}
+              disabled={loading}
+            />
           </div>
         </div>
 
         <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>Cancel</Button>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={loading}
+          >
+            Cancel
+          </Button>
           <Button onClick={handleConnect} disabled={loading}>
-            {loading && <Loader2 className="animate-spin mr-2 h-4 w-4"/>}
+            {loading && <Loader2 className="animate-spin mr-2 h-4 w-4" />}
             Connect
           </Button>
         </div>
