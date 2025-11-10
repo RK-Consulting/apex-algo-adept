@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 import { query } from "../config/database.js";
-import fetch from "node-fetch";
 
 const router = Router();
 
@@ -52,7 +51,7 @@ router.post("/generate", authenticateToken, async (req: AuthRequest, res, next) 
           {
             role: "user",
             content: `Design a ${risk_level} risk ${trading_style} strategy for Indian markets.
-            
+
 Name: ${name}
 Capital: ₹${capital_allocation}
 Description: ${description || "Not provided"}
@@ -69,7 +68,6 @@ entry_rules, exit_rules, position_sizing, risk_management, recommended_instrumen
     }
 
     const data = await aiResponse.json();
-    //const rawText = data.choices?.[0]?.message?.content || "{}";
     const rawText = (data as any).choices?.[0]?.message?.content || "{}";
     let parsed: any;
 
