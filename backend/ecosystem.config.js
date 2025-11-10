@@ -7,8 +7,27 @@
  *   pm2 restart apex-backend
  *   pm2 monit
  */
-
 module.exports = {
+  apps: [
+    {
+      name: 'alphaforge-api',
+      script: 'dist/server.js',
+      cwd: '/var/www/apex-algo-adept/backend',
+      exec_mode: 'fork',        // ✅ force single-process mode
+      instances: 1,
+      env_production: {
+        NODE_ENV: 'production',
+        PORT: 8080
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '200M',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss'
+    }
+  ]
+};
+
+/* module.exports = {
   apps: [
     {
       name: "apex-backend",
@@ -41,4 +60,4 @@ module.exports = {
       time: true, // add timestamp to logs
     },
   ],
-};
+}; */
