@@ -22,17 +22,18 @@ async function getBreezeInstance(userId: string): Promise<BreezeConnect> {
 
   const { icici_api_key, icici_api_secret, icici_session_token } = rows[0];
 
-  if (!icici_api_key || !icici_api_secret) {
-    throw new Error("Incomplete ICICI credentials — please re‑authenticate.");
+  if (!icici_api_key || !icici_api_secret || !icici_session_token) {
+    throw new Error("Incomplete ICICI credentials — please re-authenticate.");
   }
 
-  // ---- NEW SDK INITIALISATION ----
-  const breeze = new BreezeConnect();          // no args
-  breeze.setApiKey(icici_api_key);             // set appKey
-  // generateSession needs **only** the secret (session token is returned)
-  await breeze.generateSession(icici_api_secret);
-  // If you have a cached session token you can set it:
-  if (icici_session_token) breeze.setSessionToken(icici_session_token);
+  // ---- NEW SDK INITIALISATION (Corrected) ----
+  const breeze = new BreezeConnect();
+  breeze.setApiKey(icici_api_key);
+
+  // ✅ Must pass BOTH: secret and session token
+  await breeze.generateSession(icici_api_secret, icici_session_token);
+
+  console.log("✅ Breeze session generated successfully for user:", userId);
 
   return breeze;
 }
