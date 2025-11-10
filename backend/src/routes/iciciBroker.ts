@@ -8,7 +8,7 @@ const router = Router();
 
 /**
  * Helper — create a Breeze instance using the user’s stored credentials
- */
+ * BREEZE v1.x */
 async function getBreezeInstance(userId: string): Promise<BreezeConnect> {
   const { rows } = await query(
     `SELECT icici_api_key, icici_api_secret, icici_session_token
@@ -23,14 +23,13 @@ async function getBreezeInstance(userId: string): Promise<BreezeConnect> {
   const { icici_api_key, icici_api_secret, icici_session_token } = rows[0];
 
   if (!icici_api_key || !icici_api_secret || !icici_session_token) {
-    throw new Error("Incomplete ICICI credentials — please re-authenticate.");
+    throw new Error("Incomplete ICICI credentials — please reauthenticate.");
   }
 
-  // ---- NEW SDK INITIALISATION (Corrected) ----
-  const breeze = new BreezeConnect();
-  breeze.setApiKey(icici_api_key);
+  // ✅ For current BreezeConnect version (v1.x)
+  const breeze = new BreezeConnect({ appKey: icici_api_key });
 
-  // ✅ Must pass BOTH: secret and session token
+  // generateSession(secret, sessionToken)
   await breeze.generateSession(icici_api_secret, icici_session_token);
 
   console.log("✅ Breeze session generated successfully for user:", userId);
