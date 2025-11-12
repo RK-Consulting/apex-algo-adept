@@ -33,14 +33,17 @@ async function getBreezeInstance(userId: string): Promise<BreezeConnect> {
     throw new Error("Missing ICICI credentials or session token.");
   }
 
-  const breeze = new BreezeConnect({ apiKey: icici_api_key });
+  // ✅ Correct for your installed SDK version
+  const breeze = new BreezeConnect();
+  breeze.setApiKey(icici_api_key);
 
-  // ✅ Proper call (2 arguments)
+  // Proper two-argument call for v1.x SDK
   await breeze.generateSession(icici_api_secret, icici_session_token);
 
   console.log("✅ Breeze session active for user:", userId);
   return breeze;
 }
+
 
 /* --------------------------------------------------------------
    POST /api/icici/connect
