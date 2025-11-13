@@ -10,6 +10,7 @@
     "start": "node dist/server.js",
     "migrate": "node dist/scripts/migrate.js",
     "seed": "node dist/scripts/seed.js"
+    "refresh:icici": "node dist/scripts/refreshIciciSession.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
