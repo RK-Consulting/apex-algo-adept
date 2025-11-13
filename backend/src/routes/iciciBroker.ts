@@ -3,13 +3,14 @@ import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 import { query } from "../config/database.js";
 import { BreezeConnect } from "breezeconnect";
+import { getBreezeInstance } from "../utils/breezeSession.js";
 
 const router = Router();
 
 /**
  * Helper: Create a Breeze instance using stored or .env credentials
  */
-async function getBreezeInstance(userId: string): Promise<BreezeConnect> {
+/* async function getBreezeInstance(userId: string): Promise<BreezeConnect> {
   const { rows } = await query(
     `SELECT icici_api_key, icici_api_secret, icici_session_token
      FROM user_credentials WHERE user_id = $1`,
@@ -48,8 +49,7 @@ async function getBreezeInstance(userId: string): Promise<BreezeConnect> {
   console.log("✅ Breeze instance initialized for user:", userId);
   return breeze;
 }
-
-
+*/
 
 /* --------------------------------------------------------------
    POST /api/icici/connect
