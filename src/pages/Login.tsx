@@ -16,35 +16,49 @@ const Login = () => {
   const [password, setPassword] = useState("");
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  e.preventDefault();
+  setLoading(true);
 
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+  try {
+    const backendUrl =
+      import.meta.env.VITE_BACKEND_URL || "https://api.alphaforge.skillsifter.in";
 
-      if (error) throw error;
+    const res = await fetch(`${backendUrl}/api/auth/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, password }),
+    });
 
-      toast({
-        title: "Success!",
-        description: "You've been logged in successfully",
-      });
+    const data = await res.json();
 
-      navigate("/");
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to login",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
+    if (!res.ok) {
+      throw new Error(data.error || "Login failed");
     }
-  };
 
-  return (
+    // 🎯 Save backend JWT
+    localStorage.setItem("token", data.token);
+
+    toast({
+      title: "Success!",
+      description: "You've been logged in successfully",
+    });
+
+    navigate("/");
+  } catch (error) {
+    toast({
+      title: "Error",
+      description:
+        error instanceof Error ? error.message : "Failed to login",
+      variant: "destructive",
+    });
+  } finally {
+    setLoading(false);
+  }
+};
+
+return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
