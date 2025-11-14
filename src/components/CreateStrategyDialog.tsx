@@ -4,39 +4,28 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Brain, Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
 
 const strategySchema = z.object({
-  name: z.string()
-    .trim()
-    .min(1, "Name is required")
-    .max(100, "Name must be less than 100 characters")
-    .regex(/^[a-zA-Z0-9\s\-]+$/, "Name can only contain letters, numbers, spaces, and hyphens"),
+  name: z.string().trim().min(1).max(100),
   trading_style: z.enum(["Scalping", "Intraday", "Swing", "Positional"]),
-  capital_allocation: z.number()
-    .min(1000, "Minimum capital is ₹1,000")
-    .max(100000000, "Maximum capital is ₹10 crore"),
+  capital_allocation: z.number().min(1000).max(100000000),
   risk_level: z.enum(["Low", "Medium", "High"]),
-  description: z.string()
-    .trim()
-    .max(1000, "Description must be less than 1000 characters")
-    .optional()
-    .default("")
+  description: z.string().max(1000).optional(),
 });
 
-interface CreateStrategyDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onStrategyCreated?: () => void;
-}
-
-export function CreateStrategyDialog({ open, onOpenChange, onStrategyCreated }: CreateStrategyDialogProps) {
+export function CreateStrategyDialog({ open, onOpenChange, onStrategyCreated }) {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+
+  const backendUrl =
+    import.meta.env.VITE_BACKEND_URL || "https://api.alphaforge.skillsifter.in";
+
+  const token = localStorage.getItem("authToken");
+
   const [formData, setFormData] = useState({
     name: "",
     trading_style: "Intraday",
@@ -45,57 +34,46 @@ export function CreateStrategyDialog({ open, onOpenChange, onStrategyCreated }: 
     description: "",
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData.session) {
-        toast({
-          title: "Authentication required",
-          description: "Please sign in to create strategies",
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
-      }
-
-      // Validate inputs
-      const validationResult = strategySchema.safeParse({
-        name: formData.name,
-        trading_style: formData.trading_style,
+      const validation = strategySchema.safeParse({
+        ...formData,
         capital_allocation: parseFloat(formData.capital_allocation),
-        risk_level: formData.risk_level,
-        description: formData.description || "",
       });
 
-      if (!validationResult.success) {
-        const firstError = validationResult.error.errors[0];
+      if (!validation.success) {
         toast({
           title: "Validation Error",
-          description: firstError.message,
+          description: validation.error.errors[0].message,
           variant: "destructive",
         });
         setLoading(false);
         return;
       }
 
-      const validatedData = validationResult.data;
-
-      const { error } = await supabase.functions.invoke('generate-strategy', {
-        body: validatedData,
+      const res = await fetch(`${backendUrl}/api/strategies/ai`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(validation.data),
       });
 
-      if (error) throw error;
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to generate strategy");
 
       toast({
         title: "Success!",
-        description: "AI has generated your trading strategy",
+        description: "AI generated your strategy.",
       });
 
       onStrategyCreated?.();
       onOpenChange(false);
+
       setFormData({
         name: "",
         trading_style: "Intraday",
@@ -106,7 +84,7 @@ export function CreateStrategyDialog({ open, onOpenChange, onStrategyCreated }: 
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to generate strategy",
+        description: error.message,
         variant: "destructive",
       });
     } finally {
@@ -119,32 +97,35 @@ export function CreateStrategyDialog({ open, onOpenChange, onStrategyCreated }: 
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-2xl">
-            <Brain className="w-6 h-6 text-accent" />
-            Create AI-Powered Strategy
+            <Brain className="w-6 h-6 text-accent" /> Create AI Strategy
           </DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Input grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
             <div className="space-y-2">
-              <Label htmlFor="name">Strategy Name *</Label>
+              <Label>Name *</Label>
               <Input
-                id="name"
-                placeholder="e.g., My Momentum Strategy"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, name: e.target.value })
+                }
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="trading_style">Trading Style *</Label>
+              <Label>Trading Style *</Label>
               <Select
                 value={formData.trading_style}
-                onValueChange={(value) => setFormData({ ...formData, trading_style: value })}
+                onValueChange={(v) =>
+                  setFormData({ ...formData, trading_style: v })
+                }
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Select" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Scalping">Scalping</SelectItem>
@@ -156,80 +137,67 @@ export function CreateStrategyDialog({ open, onOpenChange, onStrategyCreated }: 
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="capital">Capital Allocation (₹) *</Label>
+              <Label>Capital (₹) *</Label>
               <Input
-                id="capital"
                 type="number"
-                placeholder="500000"
                 value={formData.capital_allocation}
-                onChange={(e) => setFormData({ ...formData, capital_allocation: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, capital_allocation: e.target.value })
+                }
                 required
-                min="1000"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="risk_level">Risk Level *</Label>
+              <Label>Risk Level *</Label>
               <Select
                 value={formData.risk_level}
-                onValueChange={(value) => setFormData({ ...formData, risk_level: value })}
+                onValueChange={(v) =>
+                  setFormData({ ...formData, risk_level: v })
+                }
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Select" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Low">Low Risk</SelectItem>
-                  <SelectItem value="Medium">Medium Risk</SelectItem>
-                  <SelectItem value="High">High Risk</SelectItem>
+                  <SelectItem value="Low">Low</SelectItem>
+                  <SelectItem value="Medium">Medium</SelectItem>
+                  <SelectItem value="High">High</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
 
+          {/* Description */}
           <div className="space-y-2">
-            <Label htmlFor="description">Strategy Description</Label>
+            <Label>Description</Label>
             <Textarea
-              id="description"
-              placeholder="Describe your strategy goals, preferred indicators, market conditions..."
               value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="min-h-32"
+              onChange={(e) =>
+                setFormData({ ...formData, description: e.target.value })
+              }
             />
           </div>
 
-          <div className="p-4 rounded-lg bg-accent/10 border border-accent/20">
-            <div className="flex items-start gap-3">
-              <Brain className="w-5 h-5 text-accent flex-shrink-0 mt-1" />
-              <div>
-                <h4 className="font-semibold text-sm mb-1">AI Strategy Generation</h4>
-                <p className="text-xs text-muted-foreground">
-                  Our AI will analyze your requirements and generate optimized entry/exit rules, 
-                  risk management parameters, and technical indicator configurations tailored for 
-                  the Indian stock market.
-                </p>
-              </div>
-            </div>
-          </div>
-
+          {/* Action buttons */}
           <div className="flex gap-3">
             <Button type="submit" className="flex-1" disabled={loading}>
               {loading ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Generating...
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating...
                 </>
               ) : (
                 <>
-                  <Brain className="w-4 h-4 mr-2" />
-                  Generate Strategy
+                  <Brain className="w-4 h-4 mr-2" /> Generate Strategy
                 </>
               )}
             </Button>
+
             <Button
               type="button"
               variant="outline"
-              onClick={() => onOpenChange(false)}
               disabled={loading}
+              onClick={() => onOpenChange(false)}
             >
               Cancel
             </Button>
