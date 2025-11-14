@@ -1,3 +1,4 @@
+// apex-algo-adept/src/pages/Strategies.tsx
 import { useState, useEffect } from "react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
