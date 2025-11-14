@@ -1,23 +1,40 @@
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
 
+  const backendUrl =
+    import.meta.env.VITE_BACKEND_URL || "https://api.alphaforge.skillsifter.in";
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setAuthenticated(!!session);
+    const token =
+      localStorage.getItem("authToken") || localStorage.getItem("token");
+
+    if (!token) {
+      setAuthenticated(false);
       setLoading(false);
-    });
+      return;
+    }
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setAuthenticated(!!session);
-    });
-
-    return () => subscription.unsubscribe();
+    // Validate token with backend
+    fetch(`${backendUrl}/api/auth/verify`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+      .then((res) => {
+        if (res.ok) {
+          setAuthenticated(true);
+        } else {
+          setAuthenticated(false);
+        }
+      })
+      .catch(() => setAuthenticated(false))
+      .finally(() => setLoading(false));
   }, []);
 
   if (loading) {
