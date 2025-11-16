@@ -1,41 +1,48 @@
 // src/config/breeze.ts
-import { BreezeConnect } from 'breezeconnect';
-import dotenv from 'dotenv';
+/**
+ * 🚨 IMPORTANT NOTICE:
+ * Breeze should NOT be initialized globally anymore.
+ *
+ * Your backend now uses per-user ICICI credentials stored in Postgres,
+ * and all authenticated sessions must be generated via:
+ *
+ *    getBreezeInstance(userId)
+ *
+ * located in: src/utils/breezeSession.ts
+ *
+ * This file provides a safe stub ONLY to prevent old imports from breaking.
+ * DO NOT use this exported instance for live trading, quotes or orders.
+ */
 
-dotenv.config();
+import { BreezeConnect } from "breezeconnect";
 
-// --- SAFE & STRICT environment variable access ---
-const API_KEY = process.env.ICICI_API_KEY;
-const API_SECRET = process.env.ICICI_API_SECRET;
-
-// Validate at startup
-if (!API_KEY) {
-  throw new Error('ICICI_API_KEY is missing in .env');
-}
-if (!API_SECRET) {
-  throw new Error('ICICI_API_SECRET is missing in .env');
-}
-
-// --- Initialize Breeze SDK ---
+// ⚠️ Create a low-privilege placeholder instance.
+// This instance should NOT be used for trading or data fetching.
+// It allows legacy imports to stay functional without breaking the app.
 const breeze = new BreezeConnect();
-breeze.setApiKey(API_KEY); // Set the appKey
 
-// --- Generate session (called once at startup) ---
-export async function initBreezeSession(): Promise<void> {
-  try {
-    // API_SECRET is guaranteed to be string here
-    // Re-declare to help TypeScript narrow the type
-    //const secret: string = API_SECRET; // ← This fixes TS2345
-    
-    const session = await breeze.generateSession(API_SECRET!);
-    //const secret = API_SECRET!; // Non-null assertion (safe after validation)
-    console.log('Breeze session initialized:', session);
-  } catch (error: any) {
-    const message = error?.message || String(error);
-    console.error('Breeze session init failed:', message);
-    throw new Error(`Breeze session failed: ${message}`);
-  }
+// Soft warning to remind developers
+if (process.env.NODE_ENV !== "production") {
+  console.warn(
+    "[WARN] src/config/breeze.ts loaded. This global Breeze instance is deprecated. " +
+      "Use getBreezeInstance(userId) instead."
+  );
 }
 
-// --- Export the configured breeze instance ---
+/**
+ * @deprecated DO NOT USE.
+ * Exported only to avoid breaking legacy code.
+ * Live trading must always use getBreezeInstance().
+ */
 export { breeze };
+
+/**
+ * @deprecated DO NOT USE.
+ * Included for backward compatibility ONLY.
+ */
+export async function initBreezeSession(): Promise<void> {
+  console.warn(
+    "[WARN] initBreezeSession() called — this function is no longer required. " +
+      "All sessions are now user-specific via getBreezeInstance()."
+  );
+}
