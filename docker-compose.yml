@@ -1,26 +1,30 @@
-version: '3.8'
+version: "3.9"
 
 services:
-  # PostgreSQL Database
+  # --------------------------------------------
+  # PostgreSQL Database (LOCAL DEV ONLY)
+  # --------------------------------------------
   postgres:
     image: postgres:15-alpine
     container_name: alphaforge-postgres
     environment:
-      POSTGRES_DB: alphaforge
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres_password_change_in_production
+      POSTGRES_DB: apexdb
+      POSTGRES_USER: apexuser
+      POSTGRES_PASSWORD: apex_password_dev
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U apexuser"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Backend Server
+  # --------------------------------------------
+  # Backend API
+  # --------------------------------------------
   backend:
     build:
       context: ./backend
@@ -28,19 +32,24 @@ services:
     container_name: alphaforge-backend
     environment:
       NODE_ENV: development
-      PORT: 3000
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: alphaforge
-      DB_USER: postgres
-      DB_PASSWORD: postgres_password_change_in_production
-      JWT_SECRET: development_jwt_secret_change_in_production
-      JWT_EXPIRES_IN: 7d
-      CREDENTIALS_ENCRYPTION_KEY: development_encryption_key_32_chars_minimum_required
-      LOVABLE_API_KEY: ${LOVABLE_API_KEY}
-      ALLOWED_ORIGINS: http://localhost:5173,http://localhost:3000
+      PORT: 8080
+
+      # database connection inside docker
+      DATABASE_URL: postgres://apexuser:apex_password_dev@postgres:5432/apexdb
+
+      JWT_SECRET: development_secret_change_me
+      CREDENTIALS_ENCRYPTION_KEY: dev_encryption_key_32_chars
+
+      # ICICI (local dev)
+      ICICI_API_KEY: ${ICICI_API_KEY}
+      ICICI_API_SECRET: ${ICICI_API_SECRET}
+      ICICI_REDIRECT_URL: http://localhost:5173
+      ICICI_PRIMARY_IP: 127.0.0.1
+
+      ALLOWED_ORIGINS: http://localhost:5173
+
     ports:
-      - "3000:3000"
+      - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -49,18 +58,20 @@ services:
       - /app/node_modules
     command: npm run dev
 
+  # --------------------------------------------
   # Frontend (React + Vite)
+  # --------------------------------------------
   frontend:
     build:
-      context: .
+      context: ./frontend
       dockerfile: Dockerfile.frontend
     container_name: alphaforge-frontend
     environment:
-      VITE_API_URL: http://localhost:3000/api
+      VITE_BACKEND_URL: http://localhost:8080
     ports:
       - "5173:5173"
     volumes:
-      - .:/app
+      - ./frontend:/app
       - /app/node_modules
     command: npm run dev
 
