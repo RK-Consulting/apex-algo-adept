@@ -33,7 +33,7 @@ const Login = () => {
       }
 
       // 🎯 Save backend JWT
-      localStorage.setItem("token", data.token);
+      localStorage.setItem("authToken", data.token);
 
       toast({
         title: "Success!",
