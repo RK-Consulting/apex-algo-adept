@@ -1,71 +1,100 @@
 // src/routes/icici/orders.ts
-import { Router } from 'express';
-import { breeze } from '../../config/breeze.js';
-import { authenticateToken, AuthRequest } from '../../middleware/auth.js';
+import { Router } from "express";
+import { authenticateToken, AuthRequest } from "../../middleware/auth.js";
+import { getBreezeInstance } from "../../utils/breezeSession.js";
+import { mapSymbolForBreeze } from "../../utils/symbolMapper.js";
+import debug from "debug";
 
 const router = Router();
+const log = debug("apex:icici:orders");
 
 /**
  * POST /api/icici/orders/order
  * Place a new order
  */
-router.post('/order', authenticateToken, async (req: AuthRequest, res) => {
+router.post("/order", authenticateToken, async (req: AuthRequest, res) => {
   try {
+    const userId = req.user!.id;
+
     const {
       stockCode,
-      exchangeCode = 'NSE',
-      productType = 'cash',   // 'product' → 'productType'
-      action = 'buy',
-      orderType = 'market',
-      quantity = '1',
-      price = '',
-      validity = 'day',
+      exchangeCode = "NSE",
+      productType = "cash",
+      action = "buy",
+      orderType = "market",
+      quantity = "1",
+      price = "",
+      validity = "day",
     } = req.body;
 
     if (!stockCode) {
-      return res.status(400).json({ error: 'stockCode is required' });
+      return res.status(400).json({ error: "stockCode is required" });
     }
 
-    const order = await breeze.placeOrder({
-      stockCode,
+    const mapped = mapSymbolForBreeze(stockCode);
+
+    const breeze = await getBreezeInstance(userId);
+
+    const payload: any = {
+      stockCode: mapped.payload, // mapped symbol (RELIANCE / NIFTY 50)
       exchangeCode,
-      productType,           // Correct field name
+      productType,
       action,
       orderType,
-      quantity,
-      price: price || undefined,
+      quantity: String(quantity),
       validity,
-      //validityDate: new Date().toISOString(),
-      //userRemark: 'AlphaForge Order',
-    });
+    };
 
-    res.json({ success: true, order });
+    if (price) payload.price = String(price);
+
+    log("📨 Order payload:", payload);
+
+    const order = await breeze.placeOrder(payload);
+
+    return res.json({ success: true, order });
   } catch (err: any) {
-    console.error('Order placement failed:', err.message || err);
-    res.status(500).json({ error: 'Order placement failed', details: err.message });
+    log("Order placement failed:", err);
+    return res.status(500).json({
+      error: "Order placement failed",
+      details: err?.message || err,
+    });
   }
 });
 
 /**
  * GET /api/icici/orders/orders
- * Get recent order history (last 7 days)
+ * Get user's order history (last 7 days)
  */
-router.get('/orders', authenticateToken, async (req: AuthRequest, res) => {
+router.get("/orders", authenticateToken, async (req: AuthRequest, res) => {
   try {
-    // getOrderList() takes NO arguments
+    const userId = req.user!.id;
+    const breeze = await getBreezeInstance(userId);
+
+    // Breeze uses getOrderList() for recent orders
     const orders = await breeze.getOrderList();
 
-    // Filter locally for last 7 days
     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const recentOrders = orders.filter((order: any) => {
-      const orderTime = new Date(order.order_date || order.transaction_time).getTime();
-      return orderTime >= sevenDaysAgo;
+
+    const recentOrders = (orders || []).filter((order: any) => {
+      const t =
+        order.order_date ||
+        order.transaction_time ||
+        order.time_stamp ||
+        null;
+
+      if (!t) return false;
+
+      const ts = new Date(t).getTime();
+      return ts >= sevenDaysAgo;
     });
 
-    res.json({ success: true, orders: recentOrders });
+    return res.json({ success: true, orders: recentOrders });
   } catch (err: any) {
-    console.error('Failed to fetch orders:', err.message || err);
-    res.status(500).json({ error: 'Failed to fetch orders', details: err.message });
+    log("Failed to fetch orders:", err);
+    return res.status(500).json({
+      error: "Failed to fetch orders",
+      details: err?.message || err,
+    });
   }
 });
 
