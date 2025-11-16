@@ -1,7 +1,19 @@
 // src/utils/breezeSession.ts
 import { query } from "../config/database.js";
 import { BreezeConnect } from "breezeconnect";
+import debug from "debug";
 
+const log = debug("apex:icici:breeze");
+
+// simple in-memory cache for Breeze instances per user (server restart clears cache)
+const breezeCache = new Map<string, { breeze: BreezeConnect; expiresAt: number }>();
+
+/**
+ * Get Breeze instance for a user:
+ * - reads stored credentials from user_credentials table (fallback to env)
+ * - ensures session token present and valid (regenerates if needed)
+ * - stores refreshed session_token back to DB
+ */
 export async function getBreezeInstance(userId: string): Promise<BreezeConnect> {
   const { rows } = await query(
     `SELECT icici_api_key, icici_api_secret, icici_session_token
