@@ -2,110 +2,77 @@
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 import { query } from "../config/database.js";
-import { BreezeConnect } from "breezeconnect";
-import { getBreezeInstance } from "../utils/breezeSession.js";
+import { getBreezeInstance, invalidateBreezeInstance } from "../utils/breezeSession.js";
+import { mapSymbolForBreeze } from "../utils/symbolMapper.js";
+import debug from "debug";
 
+const log = debug("apex:icici:broker");
 const router = Router();
-
-/**
- * Helper: Create a Breeze instance using stored or .env credentials
- */
-/* async function getBreezeInstance(userId: string): Promise<BreezeConnect> {
-  const { rows } = await query(
-    `SELECT icici_api_key, icici_api_secret, icici_session_token
-     FROM user_credentials WHERE user_id = $1`,
-    [userId]
-  );
-
-  let icici_api_key: string;
-  let icici_api_secret: string;
-  let icici_session_token: string;
-
-  if (rows.length > 0) {
-    ({ icici_api_key, icici_api_secret, icici_session_token } = rows[0]);
-  } else {
-    // fallback to .env
-    icici_api_key = process.env.ICICI_API_KEY || "";
-    icici_api_secret = process.env.ICICI_API_SECRET || "";
-    icici_session_token = process.env.ICICI_SESSION_TOKEN || "";
-  }
-
-  if (!icici_api_key || !icici_api_secret) {
-    throw new Error("Missing ICICI API credentials (api_key/api_secret).");
-  }
-
-  // ✅ Compatible with breezeconnect v1.0.29
-  const breeze = new BreezeConnect();
-  breeze.setApiKey(icici_api_key);
-
-  // Generate a new session using secret only (this returns a token internally)
-  const sessionData = await breeze.generateSession(icici_api_secret);
-
-  // If you have a stored token, reuse it (optional)
-  if (icici_session_token) {
-    breeze.setSessionToken(icici_session_token);
-  }
-
-  console.log("✅ Breeze instance initialized for user:", userId);
-  return breeze;
-}
-*/
 
 /* --------------------------------------------------------------
    POST /api/icici/connect
    Save user's ICICI credentials in database
 -------------------------------------------------------------- */
-router.post("/connect", authenticateToken, async (req: AuthRequest, res, next) => {
+router.post("/connect", authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { api_key, api_secret, session_token } = req.body;
+    const { api_key, api_secret, session_token, refresh_token } = req.body;
 
     if (!api_key || !api_secret || !session_token) {
-      return res.status(400).json({ error: "All fields required." });
+      return res.status(400).json({ error: "api_key, api_secret, session_token required" });
     }
 
     await query(
-      `INSERT INTO user_credentials (user_id, icici_api_key, icici_api_secret, icici_session_token)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO user_credentials 
+       (user_id, icici_api_key, icici_api_secret, icici_session_token, refresh_token, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,NOW(),NOW())
        ON CONFLICT (user_id)
-       DO UPDATE SET icici_api_key = EXCLUDED.icici_api_key,
-                     icici_api_secret = EXCLUDED.icici_api_secret,
-                     icici_session_token = EXCLUDED.icici_session_token,
-                     updated_at = NOW()`,
-      [req.user!.id, api_key, api_secret, session_token]
+       DO UPDATE SET 
+         icici_api_key = EXCLUDED.icici_api_key,
+         icici_api_secret = EXCLUDED.icici_api_secret,
+         icici_session_token = EXCLUDED.icici_session_token,
+         refresh_token = EXCLUDED.refresh_token,
+         updated_at = NOW()`,
+      [req.user!.id, api_key, api_secret, session_token, refresh_token || null]
     );
 
-    res.json({ success: true, message: "ICICI credentials saved." });
-  } catch (err) {
-    console.error("ICICI Connect Error:", err);
-    next(err);
+    // Clear cached Breeze instance for user
+    invalidateBreezeInstance(req.user!.id);
+
+    return res.json({ success: true, message: "ICICI credentials saved." });
+  } catch (err: any) {
+    log("ICICI Connect Error:", err);
+    return res.status(500).json({ error: "ICICI connect failed", details: err.message });
   }
 });
 
 /* --------------------------------------------------------------
    GET /api/icici/funds
 -------------------------------------------------------------- */
-router.get("/funds", authenticateToken, async (req: AuthRequest, res, next) => {
+router.get("/funds", authenticateToken, async (req: AuthRequest, res) => {
   try {
     const breeze = await getBreezeInstance(req.user!.id);
     const funds = await breeze.getFunds();
-    res.json({ success: true, funds });
-  } catch (err) {
-    console.error("Fetch Funds Error:", err);
-    next(err);
+    return res.json({ success: true, funds });
+  } catch (err: any) {
+    log("Funds Fetch Error:", err);
+    return res.status(500).json({ error: "Unable to fetch funds", details: err.message });
   }
 });
 
 /* --------------------------------------------------------------
    GET /api/icici/portfolio
 -------------------------------------------------------------- */
-router.get("/portfolio", authenticateToken, async (req: AuthRequest, res, next) => {
+router.get("/portfolio", authenticateToken, async (req: AuthRequest, res) => {
   try {
     const breeze = await getBreezeInstance(req.user!.id);
-    const portfolio = await breeze.getHoldings();
-    res.json({ success: true, portfolio });
-  } catch (err) {
-    console.error("Portfolio Fetch Error:", err);
-    next(err);
+
+    // Correct Portfolio API
+    const holdings = await breeze.getPortfolioHoldings("NSE");
+
+    return res.json({ success: true, holdings });
+  } catch (err: any) {
+    log("Portfolio Error:", err);
+    return res.status(500).json({ error: "Unable to fetch portfolio", details: err.message });
   }
 });
 
@@ -113,9 +80,10 @@ router.get("/portfolio", authenticateToken, async (req: AuthRequest, res, next) 
    POST /api/icici/order
    Place an order
 -------------------------------------------------------------- */
-router.post("/order", authenticateToken, async (req: AuthRequest, res, next) => {
+router.post("/order", authenticateToken, async (req: AuthRequest, res) => {
   try {
     const breeze = await getBreezeInstance(req.user!.id);
+
     const {
       stockCode,
       exchangeCode = "NSE",
@@ -128,56 +96,84 @@ router.post("/order", authenticateToken, async (req: AuthRequest, res, next) => 
     } = req.body;
 
     if (!stockCode) {
-      return res.status(400).json({ error: "stockCode is required." });
+      return res.status(400).json({ error: "stockCode is required" });
     }
 
-    const order = await breeze.placeOrder({
-      stockCode,
+    const mapped = mapSymbolForBreeze(stockCode);
+
+    const payload: any = {
+      stockCode: mapped.payload,
       exchangeCode,
       productType,
       action,
       orderType,
-      quantity,
-      price: price ? String(price) : undefined,
+      quantity: String(quantity),
       validity,
-    });
+    };
 
-    res.json({ success: true, order });
+    if (price) payload.price = String(price);
+
+    log("Order Payload:", payload);
+
+    const response = await breeze.placeOrder(payload);
+
+    return res.json({ success: true, order: response });
   } catch (err: any) {
-    console.error("Place Order Error:", err.message || err);
-    res.status(500).json({ error: "Order placement failed", details: err.message });
+    log("Order Error:", err);
+    return res.status(500).json({ error: "Order failed", details: err.message });
   }
 });
 
 /* --------------------------------------------------------------
    DELETE /api/icici/order/:orderId
 -------------------------------------------------------------- */
-router.delete("/order/:orderId", authenticateToken, async (req: AuthRequest, res, next) => {
+router.delete("/order/:orderId", authenticateToken, async (req: AuthRequest, res) => {
   try {
     const breeze = await getBreezeInstance(req.user!.id);
     const response = await breeze.cancelOrder({ orderId: req.params.orderId });
-    res.json({ success: true, response });
-  } catch (err) {
-    console.error("Cancel Order Error:", err);
-    next(err);
+    return res.json({ success: true, response });
+  } catch (err: any) {
+    log("Cancel Order Error:", err);
+    return res.status(500).json({ error: "Cancel order failed", details: err.message });
   }
 });
 
 /* --------------------------------------------------------------
    GET /api/icici/quote/:symbol
 -------------------------------------------------------------- */
-router.get("/quote/:symbol", authenticateToken, async (req: AuthRequest, res, next) => {
+router.get("/quote/:symbol", authenticateToken, async (req: AuthRequest, res) => {
   try {
+    const symbol = req.params.symbol;
+    const mapped = mapSymbolForBreeze(symbol);
     const breeze = await getBreezeInstance(req.user!.id);
-    const quote = await breeze.getQuotes({
-      stockCode: req.params.symbol,
-      exchangeCode: "NSE",
-      productType: "cash",
-    });
-    res.json({ success: true, quote });
-  } catch (err) {
-    console.error("Get Quote Error:", err);
-    next(err);
+
+    let quote;
+
+    if (mapped.type === "index") {
+      // NIFTY, BANKNIFTY, SENSEX:
+      if (typeof (breeze as any).getIndexQuotes === "function") {
+        quote = await (breeze as any).getIndexQuotes({ index: mapped.payload });
+      } else {
+        // fallback (older SDK)
+        quote = await breeze.getQuotes({
+          stockCode: mapped.payload,
+          exchangeCode: "NSE",
+          productType: "cash",
+        });
+      }
+    } else {
+      // Stock quote
+      quote = await breeze.getQuotes({
+        stockCode: mapped.payload,
+        exchangeCode: "NSE",
+        productType: "cash",
+      });
+    }
+
+    return res.json({ success: true, quote });
+  } catch (err: any) {
+    log("Quote Error:", err);
+    return res.status(500).json({ error: "Quote fetch failed", details: err.message });
   }
 });
 
