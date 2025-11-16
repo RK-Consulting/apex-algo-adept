@@ -3,12 +3,21 @@ import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../../middleware/auth.js";
 import { query } from "../../config/database.js";
 import { getBreezeInstance } from "../../utils/breezeSession.js";
+import { mapSymbolForBreeze } from "../../utils/symbolMapper.js";
+import debug from "debug";
 
 const router = Router();
+const log = debug("apex:icici:market");
 
 /**
- * GET /api/icici/marketData/subscribe/:symbol
- * Subscribe to live market feed and store ticks in DB
+ * SUBSCRIBE TO ICICI LIVE MARKET FEED
+ * -----------------------------------
+ * This version:
+ *  - Uses updated Breeze SDK
+ *  - Correctly handles index vs stock tokens
+ *  - Stores ticks safely
+ *  - Avoids deprecated .connect()
+ *  - Supports only valid subscribeFeeds() format
  */
 router.get("/subscribe/:symbol", authenticateToken, async (req: AuthRequest, res) => {
   try {
@@ -19,87 +28,66 @@ router.get("/subscribe/:symbol", authenticateToken, async (req: AuthRequest, res
       return res.status(400).json({ error: "Symbol is required" });
     }
 
+    const mapped = mapSymbolForBreeze(symbol);
     const breeze = await getBreezeInstance(userId);
 
-    // Connect WebSocket
-    if (typeof breeze.connect === "function") {
-      breeze.connect();
-      console.log(`Connected to Breeze WebSocket for ${symbol}`);
-    }
-
-    // Handle incoming ticks
+    // --- HANDLE TICK EVENTS ---
     const handleTick = async (tick: any) => {
       try {
-        const data = tick.data || tick;
+        const d = tick?.data || tick;
+
+        const stockCode =
+          (d.stock_code || d.symbol || mapped.payload || symbol).toString().toUpperCase();
+
         await query(
           `INSERT INTO market_ticks
             (symbol, exchange, last_price, open, high, low, volume, timestamp)
            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
           [
-            (data.stock_code || data.symbol || "").toString().toUpperCase(),
-            data.exchange_code || "NSE",
-            data.ltp ?? data.last_price ?? null,
-            data.open ?? null,
-            data.high ?? null,
-            data.low ?? null,
-            data.ttq ?? data.volume ?? null,
+            stockCode,
+            d.exchange_code || "NSE",
+            d.ltp ?? d.last_price ?? null,
+            d.open ?? null,
+            d.high ?? null,
+            d.low ?? null,
+            d.ttq ?? d.volume ?? null,
           ]
         );
       } catch (dbErr: any) {
-        console.error("Tick insert error:", dbErr.message || dbErr);
+        log("Tick insert error:", dbErr.message || dbErr);
       }
     };
 
-    // Use event emitter: breeze.on('message', ...)
-    if (typeof breeze.on === "function") {
-      breeze.on("message", handleTick);
-      console.log(`Subscribed to ticks for ${symbol}`);
-    } else {
-      console.warn("Breeze SDK does not support .on() — live ticks disabled");
-    }
+    // SUBSCRIBE TO FEEDS
+    // Breeze V2 uses subscribeFeeds(), no connect() required.
+    breeze.on?.("message", handleTick);
 
-    // Subscribe to feed
-    breeze.subscribeFeeds({
-      stockCode: symbol.toUpperCase(),
-      exchangeCode: "NSE",
-      productType: "cash",
-    });
+    const feedArgs =
+      mapped.type === "index"
+        ? {
+            stockCode: mapped.payload, // EX: "NIFTY 50"
+            exchangeCode: "NSE",
+          }
+        : {
+            stockCode: mapped.payload, // EX: "RELIANCE"
+            exchangeCode: "NSE",
+            productType: "cash",
+          };
 
-    res.json({
+    await breeze.subscribeFeeds(feedArgs);
+
+    log(`📡 Subscribed to live feed for ${mapped.payload}`);
+
+    return res.json({
       success: true,
-      message: `Subscribed to live feed for ${symbol.toUpperCase()}`,
+      message: `Subscribed to live feed for ${mapped.payload}`,
     });
   } catch (err: any) {
-    console.error("Market Subscribe Error:", err.message || err);
+    log("Market Subscribe Error:", err.message || err);
     res.status(500).json({ error: "Failed to subscribe to market feed" });
   }
 });
 
 /**
- * GET /api/icici/marketData/quotes/:symbol
- * Fetch current quote
- */
-router.get("/quotes/:symbol", authenticateToken, async (req: AuthRequest, res) => {
-  try {
-    const userId = req.user!.id;
-    const { symbol } = req.params;
-
-    if (!symbol) {
-      return res.status(400).json({ error: "Symbol is required" });
-    }
-
-    const breeze = await getBreezeInstance(userId);
-    const resp = await breeze.getQuotes({
-      stockCode: symbol.toUpperCase(),
-      exchangeCode: "NSE",
-      productType: "cash",
-    });
-
-    res.json({ success: true, data: resp });
-  } catch (err: any) {
-    console.error("Quote Fetch Error:", err.message || err);
-    res.status(500).json({ error: "Failed to fetch quote" });
-  }
-});
-
-export default router;
+ * GET LIVE QUOTES (STOCK / INDEX)
+ * --------------------------*
