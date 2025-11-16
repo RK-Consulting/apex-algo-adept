@@ -2,26 +2,25 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 
-export default defineConfig(({ mode }) => ({
+export default defineConfig({
   server: {
-    host: "::",
-    port: 5173, // Vite default port
+    host: "0.0.0.0",
+    port: 5173,
+
+    // Local dev → Backend proxy
     proxy: {
       "/api": {
-        target: "http://localhost:8080", // Backend API
+        target: "http://localhost:8080",
         changeOrigin: true,
-        secure: false,
       },
     },
   },
 
-  plugins: [
-    react(),   // Removed lovable-tagger (Cloudflare incompatible)
-  ],
+  plugins: [react()],
 
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(__dirname, "src"),
     },
   },
-}));
+});
