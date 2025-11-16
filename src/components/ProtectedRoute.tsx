@@ -12,6 +12,8 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const token =
       localStorage.getItem("authToken") || localStorage.getItem("token");
+      console.log("[ProtectedRoute] Token found:", !!token); // ← DEBUG
+      console.log("[ProtectedRoute] Backend URL:", backendUrl); // ← DEBUG
 
     if (!token) {
       setAuthenticated(false);
