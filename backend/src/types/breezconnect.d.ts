@@ -1,31 +1,47 @@
-// src/types/breezconnect.d.ts
+// backend/src/types/breezeconnect.d.ts
 declare module "breezeconnect" {
   /**
-   * Official ICICI Breeze SDK (v1.0.29)
-   * https://www.npmjs.com/package/breezeconnect
+   * Type definitions for ICICI BreezeConnect SDK (v1.0.32)
+   * Updated for latest API behavior and WebSocket feed structure.
    */
   export class BreezeConnect {
     constructor();
 
-    /** Set API key (appKey) */
+    /** Set your Breeze API key (appKey) */
     setApiKey(apiKey: string): void;
 
-    /** Generate session using API secret */
-    generateSession(apiSecret: string): Promise<any>;
+    /**
+     * Generate session using API secret.
+     * Breeze internally generates session_token.
+     */
+    generateSession(apiSecret: string): Promise<{
+      status?: string;
+      success?: boolean;
+      session_token?: string;
+      data?: { session_token?: string };
+    }>;
 
-    /** Set cached session token */
+    /** Reuse stored Breeze session token */
     setSessionToken(token: string): void;
 
-    // === Market Data ===
-    getQuotes(params?: {
-      stockCode?: string;
-      exchangeCode?: string;
+    /* ============================================================
+       MARKET DATA
+    ============================================================ */
+
+    /** Get real-time market quotes */
+    getQuotes(params: {
+      stockCode: string;
+      exchangeCode: string;
       productType?: string;
       expiryDate?: string;
       right?: string;
       strikePrice?: string;
-    }): Promise<any>;
+    }): Promise<{
+      success?: boolean;
+      data?: any;
+    }>;
 
+    /** Latest OHLC API */
     getHistoricalDataV2(params: {
       interval: string;
       fromDate: string;
@@ -33,17 +49,36 @@ declare module "breezeconnect" {
       stockCode: string;
       exchangeCode: string;
       productType?: string;
-    }): Promise<any>;
+    }): Promise<{
+      success?: boolean;
+      Success?: any[];
+      data?: any[];
+    }>;
 
-    // === Portfolio ===
+    /* ============================================================
+       PORTFOLIO
+    ============================================================ */
+
+    /** Fetch available funds */
     getFunds(): Promise<any>;
-    getHoldings(exchangeCode?: string): Promise<any>;
-    getPortfolioHoldings(exchangeCode?: string): Promise<any>;
-    getPortfolioPositions(): Promise<any>;
 
-    // === Orders ===
+    /** Holdings (preferred new API) */
+    getPortfolioHoldings(exchangeCode?: string): Promise<any[]>;
+
+    /** Fallback older API */
+    getHoldings(exchangeCode?: string): Promise<any[]>;
+
+    /** Open positions */
+    getPortfolioPositions(): Promise<any[]>;
+
+    /* ============================================================
+       ORDERS
+    ============================================================ */
+
+    /** List all recent orders */
     getOrderList(): Promise<any[]>;
 
+    /** Place a new order */
     placeOrder(params: {
       stockCode: string;
       exchangeCode: string;
@@ -59,8 +94,10 @@ declare module "breezeconnect" {
       expiryDate?: string;
       right?: string;
       strikePrice?: string;
+      userRemark?: string;
     }): Promise<any>;
 
+    /** Modify an order */
     modifyOrder(params: {
       orderId: string;
       quantity?: string | number;
@@ -71,12 +108,23 @@ declare module "breezeconnect" {
       triggerPrice?: string | number;
     }): Promise<any>;
 
+    /** Cancel order */
     cancelOrder(params: { orderId: string }): Promise<any>;
 
-    // === WebSocket ===
+    /* ============================================================
+       WEBSOCKET (REAL-TIME FEED)
+    ============================================================ */
+
+    /** Open WebSocket connection */
     connect(): void;
+
+    /** Close WebSocket connection */
     disconnect(): void;
 
+    /**
+     * Subscribe to Breeze WebSocket feeds
+     * feedType defaults internally (LTP feed)
+     */
     subscribeFeeds(params: {
       stockCode: string;
       exchangeCode: string;
@@ -84,9 +132,10 @@ declare module "breezeconnect" {
       expiryDate?: string;
       right?: string;
       strikePrice?: string;
-      feedType?: string;
+      feedType?: string; // "1" | "2" | "3" depending on feed type
     }): void;
 
+    /** Unsubscribe feed */
     unsubscribeFeeds(params: {
       stockCode: string;
       exchangeCode: string;
@@ -96,9 +145,15 @@ declare module "breezeconnect" {
       strikePrice?: string;
     }): void;
 
-    // Events
+    /* ============================================================
+       EVENTS (WebSocket)
+    ============================================================ */
+
     on(event: "message", listener: (data: any) => void): this;
-    on(event: "open" | "close" | "error", listener: () => void): this;
+    on(event: "open", listener: () => void): this;
+    on(event: "close", listener: () => void): this;
+    on(event: "error", listener: (error: any) => void): this;
+
     off(event: string, listener: (...args: any[]) => void): this;
   }
 }
