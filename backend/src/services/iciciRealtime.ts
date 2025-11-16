@@ -1,96 +1,134 @@
 // backend/services/iciciRealtime.ts
-import WebSocket from "ws";
 import debug from "debug";
 import { getBreezeInstance } from "../utils/breezeSession.js";
 
 const log = debug("apex:icici:realtime");
 
-// Simple manager — supports opening a websocket for a user's breeze session.
-// It is not a full pub/sub solution; you can call `startUserStream(userId, onMessage)` from routes or controllers.
-type MsgHandler = (data: any) => void;
+export type MsgHandler = (tick: any) => void;
 
 interface StreamHandle {
-  ws?: WebSocket;
-  reconnectAttempts: number;
+  breeze: any;
+  subscribedSymbols: Set<string>;
   handler: MsgHandler;
+  connected: boolean;
 }
 
-const handles = new Map<string, StreamHandle>();
+const streams = new Map<string, StreamHandle>();
 
-export async function startUserStream(userId: string, handler: MsgHandler) {
-  if (handles.has(userId)) {
-    log("Stream already active for %s", userId);
-    return handles.get(userId);
+/**
+ * Start realtime stream for a user
+ */
+export async function startUserStream(
+  userId: string,
+  handler: MsgHandler
+) {
+  if (streams.has(userId)) {
+    log("Stream already active for user %s", userId);
+    return streams.get(userId);
   }
 
-  // create a handle with reconnect logic
-  const handle: StreamHandle = { reconnectAttempts: 0, handler };
-  handles.set(userId, handle);
+  log("Starting realtime stream for user %s", userId);
 
-  const connect = async () => {
-    try {
-      const breeze = await getBreezeInstance(userId);
-      // Breeze Connect may expose the socket URL or manage websocket internally.
-      // If you need to use Breeeze's internal realtime helper, call it here.
-      // Otherwise, connect to the wss endpoint with the session token:
-      const sessionToken = (breeze as any).sessionToken || (breeze as any).getSessionToken?.();
-      if (!sessionToken) throw new Error("Missing session token for realtime");
+  const breeze = await getBreezeInstance(userId);
 
-      const wsUrl = `wss://api.icicidirect.com/some/realtime/path?session_token=${sessionToken}`; // replace with exact Breeze URL if available
-      const ws = new WebSocket(wsUrl);
-
-      handle.ws = ws;
-      handle.reconnectAttempts = 0;
-
-      ws.on("open", () => log("WS opened for user %s", userId));
-      ws.on("message", (msg) => {
-        try {
-          const data = JSON.parse(String(msg));
-          handler(data);
-        } catch (e) {
-          log("WS parse error: %O", e);
-        }
-      });
-
-      ws.on("close", (code, reason) => {
-        log("WS closed for %s code=%d reason=%s", userId, code, String(reason));
-        // try reconnect
-        scheduleReconnect();
-      });
-
-      ws.on("error", (err) => {
-        log("WS error for %s: %O", userId, err);
-        // close and reconnect
-        try { ws.terminate(); } catch (e) {}
-      });
-
-      function scheduleReconnect() {
-        handle.reconnectAttempts++;
-        const delay = Math.min(30000, 1000 * Math.pow(2, Math.min(6, handle.reconnectAttempts)));
-        log("Scheduling reconnect for %s in %dms", userId, delay);
-        setTimeout(connect, delay);
-      }
-    } catch (err) {
-      log("Failed to start stream for %s: %O", userId, err);
-      // schedule reconnect attempt
-      handle.reconnectAttempts++;
-      const delay = Math.min(30000, 1000 * Math.pow(2, Math.min(6, handle.reconnectAttempts)));
-      setTimeout(connect, delay);
-    }
+  const stream: StreamHandle = {
+    breeze,
+    handler,
+    subscribedSymbols: new Set(),
+    connected: false,
   };
+  streams.set(userId, stream);
 
-  // initial connect
-  connect();
+  // Attach event listeners BEFORE connect()
+  breeze.on("open", () => {
+    log("WS opened for user %s", userId);
+    stream.connected = true;
+  });
 
-  return handle;
+  breeze.on("close", () => {
+    log("WS closed for user %s", userId);
+    stream.connected = false;
+  });
+
+  breeze.on("error", (err: any) => {
+    log("WS error for %s: %O", userId, err);
+  });
+
+  breeze.on("message", (msg: any) => {
+    try {
+      handler(msg); // deliver ticks to consumer
+    } catch (e) {
+      log("Tick handler error for %s: %O", userId, e);
+    }
+  });
+
+  // Now open websocket
+  breeze.connect();
+
+  return stream;
 }
 
+/**
+ * Subscribe a user to a specific symbol
+ */
+export async function subscribeSymbol(
+  userId: string,
+  symbol: string,
+  exchangeCode: string = "NSE"
+) {
+  const stream = streams.get(userId);
+  if (!stream) throw new Error("Realtime stream not started");
+
+  if (stream.subscribedSymbols.has(symbol)) return;
+
+  stream.subscribedSymbols.add(symbol);
+
+  stream.breeze.subscribeFeeds({
+    stockCode: symbol,
+    exchangeCode,
+    productType: "cash",
+  });
+
+  log("User %s subscribed to %s", userId, symbol);
+}
+
+/**
+ * Unsubscribe symbol
+ */
+export async function unsubscribeSymbol(
+  userId: string,
+  symbol: string,
+  exchangeCode: string = "NSE"
+) {
+  const stream = streams.get(userId);
+  if (!stream) return;
+
+  if (!stream.subscribedSymbols.has(symbol)) return;
+
+  stream.subscribedSymbols.delete(symbol);
+
+  stream.breeze.unsubscribeFeeds({
+    stockCode: symbol,
+    exchangeCode,
+    productType: "cash",
+  });
+
+  log("User %s unsubscribed from %s", userId, symbol);
+}
+
+/**
+ * Stop real-time streaming for a user
+ */
 export function stopUserStream(userId: string) {
-  const handle = handles.get(userId);
-  if (!handle) return;
+  const stream = streams.get(userId);
+  if (!stream) return;
+
   try {
-    handle.ws?.close();
-  } catch (e) {}
-  handles.delete(userId);
-  log("Stopped stream for %s", userId);
+    stream.breeze.disconnect();
+  } catch (e) {
+    log("Error closing WS for %s: %O", userId, e);
+  }
+
+  streams.delete(userId);
+  log("Stopped realtime stream for user %s", userId);
 }
