@@ -1,29 +1,32 @@
 {
   "compilerOptions": {
+    /* Modern output for Vite/ESBuild */
     "target": "ES2020",
-    "useDefineForClassFields": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
+
+    /* Correct module system for Vite */
     "module": "ESNext",
-    "skipLibCheck": true,
-
-    /* Bundler mode */
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "isolatedModules": true,
-    "moduleDetection": "force",
-    "noEmit": true,
-    "jsx": "react-jsx",
 
-    /* Linting */
+    /* Required for React + Vite */
+    "jsx": "react-jsx",
+    "isolatedModules": true,
+    "noEmit": true,
+
+    /* TS behavior */
+    "skipLibCheck": true,
     "strict": false,
+    "noImplicitAny": false,
+
+    /* Keep unused flags OFF for UI-heavy project */
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noImplicitAny": false,
     "noFallthroughCasesInSwitch": false,
 
+    /* Fix alias resolution (IMPORTANT) */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["src/*"]
     }
   },
   "include": ["src"]
