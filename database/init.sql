@@ -1,23 +1,9 @@
--- AlphaForge Database Schema
--- Compatible with PostgreSQL 12+
 -- ======================================================
---  AlphaForge / Apex Algo Adept PostgreSQL Initialization
+-- AlphaForge / Apex Algo Adept — PostgreSQL Schema
+-- Updated to match latest backend code (Nov 2025)
 -- ======================================================
--- Run this only once to initialize your database
--- Compatible with psql or docker-entrypoint-initdb.d
--- ======================================================
--- Create auth schema for user management
- 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE TABLE IF NOT EXISTS user_credentials (
-  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-  icici_api_key TEXT,
-  icici_api_secret TEXT,
-  icici_session_token TEXT,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 ---------------------------------------------------------
 -- 1️⃣ USERS TABLE (Auth)
@@ -35,25 +21,21 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
 ---------------------------------------------------------
--- 2️⃣ ICICI / BROKER CREDENTIALS TABLE
+-- 2️⃣ USER CREDENTIALS (ICICI API KEYS + SESSIONS)
+-- aligns with backend/utils/breezeSession.ts
 ---------------------------------------------------------
-CREATE TABLE IF NOT EXISTS broker_credentials (
-    id SERIAL PRIMARY KEY,
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    broker_name VARCHAR(100) NOT NULL DEFAULT 'ICICI',
-    app_key VARCHAR(255) NOT NULL,
-    app_secret VARCHAR(255) NOT NULL,
-    session_token TEXT,
-    is_active BOOLEAN DEFAULT TRUE,
-    last_connected TIMESTAMP,
+CREATE TABLE IF NOT EXISTS user_credentials (
+    user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    icici_api_key TEXT,
+    icici_api_secret TEXT,
+    icici_session_token TEXT,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_broker_user ON broker_credentials(user_id);
-
 ---------------------------------------------------------
--- 3️⃣ STRATEGIES TABLE
+-- 3️⃣ STRATEGIES TABLE (AI + User Strategies)
+-- Updated to support performance_data (backtesting)
 ---------------------------------------------------------
 CREATE TABLE IF NOT EXISTS strategies (
     id SERIAL PRIMARY KEY,
@@ -63,6 +45,7 @@ CREATE TABLE IF NOT EXISTS strategies (
     entry_condition JSONB,
     exit_condition JSONB,
     risk_management JSONB,
+    performance_data JSONB,          -- NEW (required by backtest)
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
@@ -71,29 +54,29 @@ CREATE TABLE IF NOT EXISTS strategies (
 CREATE INDEX IF NOT EXISTS idx_strategies_user ON strategies(user_id);
 
 ---------------------------------------------------------
--- 4️⃣ MARKET DATA LOGS TABLE (Real-Time Data)
+-- 4️⃣ MARKET TICKS TABLE (Real-Time Feed Storage)
+-- REQUIRED by backend/routes/icici/marketData.ts
 ---------------------------------------------------------
-CREATE TABLE IF NOT EXISTS market_data (
+CREATE TABLE IF NOT EXISTS market_ticks (
     id BIGSERIAL PRIMARY KEY,
     symbol VARCHAR(50) NOT NULL,
     exchange VARCHAR(20) DEFAULT 'NSE',
-    price NUMERIC(12,2),
-    change NUMERIC(12,2),
-    change_percent NUMERIC(8,2),
-    volume BIGINT,
+    last_price NUMERIC(12,2),
     open NUMERIC(12,2),
     high NUMERIC(12,2),
     low NUMERIC(12,2),
-    previous_close NUMERIC(12,2),
+    volume BIGINT,
     timestamp TIMESTAMP DEFAULT NOW(),
     inserted_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_market_data_symbol ON market_data(symbol);
-CREATE INDEX IF NOT EXISTS idx_market_data_timestamp ON market_data(timestamp);
+CREATE INDEX IF NOT EXISTS idx_ticks_symbol ON market_ticks(symbol);
+CREATE INDEX IF NOT EXISTS idx_ticks_timestamp ON market_ticks(timestamp);
 
 ---------------------------------------------------------
--- 5️⃣ ORDERS TABLE (Executed / Placed Orders)
+-- 5️⃣ ORDERS TABLE (Broker Orders)
+-- updated: productType instead of product
+-- aligns with backend/routes/iciciBroker.ts
 ---------------------------------------------------------
 CREATE TABLE IF NOT EXISTS orders (
     id BIGSERIAL PRIMARY KEY,
@@ -102,7 +85,7 @@ CREATE TABLE IF NOT EXISTS orders (
     order_id VARCHAR(100),
     stock_code VARCHAR(50),
     exchange_code VARCHAR(20),
-    product VARCHAR(50),
+    product_type VARCHAR(50),        -- NEW: matches backend order placement
     action VARCHAR(10),
     order_type VARCHAR(20),
     quantity INT,
@@ -157,14 +140,12 @@ BEGIN
         INSERT INTO users (email, password_hash, full_name, role)
         VALUES (
             'admin@alphaforge.in',
-            '$2a$10$1Z2M.6uA2XbXfCjCjCIOwO0ltHk9D0IXmM/4hZ3L2S/6/4N7CQKXm', -- bcrypt hash for 'Admin@123'
+            '$2a$10$1Z2M.6uA2XbXfCjCjCIOwO0ltHk9D0IXmM/4hZ3L2S/6/4N7CQKXm', -- bcrypt('Admin@123')
             'System Admin',
             'admin'
         );
-        RAISE NOTICE '✅ Default admin created: admin@alphaforge.in / Admin@123';
+        RAISE NOTICE 'Default admin created: admin@alphaforge.in / Admin@123';
     END IF;
 END $$;
 
----------------------------------------------------------
--- END OF INIT SCRIPT
----------------------------------------------------------
+-- END OF SCHEMA
