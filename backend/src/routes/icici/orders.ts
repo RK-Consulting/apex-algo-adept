@@ -9,7 +9,7 @@ const router = Router();
 const log = debug("apex:icici:orders");
 
 /**
- * POST /api/icici/orders/order
+ * POST /api/icici/order
  * Place a new order
  */
 router.post("/order", authenticateToken, async (req: AuthRequest, res) => {
@@ -32,11 +32,10 @@ router.post("/order", authenticateToken, async (req: AuthRequest, res) => {
     }
 
     const mapped = mapSymbolForBreeze(stockCode);
-
     const breeze = await getBreezeInstance(userId);
 
     const payload: any = {
-      stockCode: mapped.payload, // mapped symbol (RELIANCE / NIFTY 50)
+      stockCode: mapped.payload,
       exchangeCode,
       productType,
       action,
@@ -62,15 +61,14 @@ router.post("/order", authenticateToken, async (req: AuthRequest, res) => {
 });
 
 /**
- * GET /api/icici/orders/orders
- * Get user's order history (last 7 days)
+ * GET /api/icici/orders
+ * Get user's order history (past 7 days)
  */
 router.get("/orders", authenticateToken, async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.id;
     const breeze = await getBreezeInstance(userId);
 
-    // Breeze uses getOrderList() for recent orders
     const orders = await breeze.getOrderList();
 
     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
@@ -80,6 +78,7 @@ router.get("/orders", authenticateToken, async (req: AuthRequest, res) => {
         order.order_date ||
         order.transaction_time ||
         order.time_stamp ||
+        order.orderTimestamp ||
         null;
 
       if (!t) return false;
@@ -98,4 +97,4 @@ router.get("/orders", authenticateToken, async (req: AuthRequest, res) => {
   }
 });
 
-export { router as orderRouter };
+export { router as iciciOrdersRouter };
