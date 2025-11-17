@@ -10,25 +10,24 @@ const router = Router();
 
 /**
  * GET /api/icici/me
- * Breeze session heartbeat
+ * Validates Breeze session by calling a guaranteed-supported API
  */
 router.get("/me", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const userId = req.user!.id;
-
     const breeze = await getBreezeInstance(userId);
 
-    // Primary call supported in Breeze API (works reliably)
-    const response = await breeze.getCustomerDetails();
+    // Validate session using a safe supported method
+    const testResponse = await breeze.getPortfolioHoldings({});
 
     return res.json({
       success: true,
       session: "ACTIVE",
-      details: response,
+      response: testResponse,
     });
-  } catch (err: any) {
-    log("❌ /api/icici/me:", err);
 
+  } catch (err: any) {
+    log("❌ /api/icici/me Error:", err);
     return res.status(401).json({
       success: false,
       session: "INVALID",
@@ -38,3 +37,4 @@ router.get("/me", authenticateToken, async (req: AuthRequest, res, next) => {
 });
 
 export { router as iciciMeRouter };
+
