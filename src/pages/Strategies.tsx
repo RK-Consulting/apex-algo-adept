@@ -71,8 +71,11 @@ const Strategies = () => {
   // 🔥 Load strategies from your backend
   // -------------------------------------
   const loadStrategies = async () => {
-    const token = getToken();
-    if (!token) return;
+   const token = getToken();
+   if (!token) {
+      console.warn("⛔ No token yet — skipping loadStrategies()");
+      return;
+   }
 
     try {
       const res = await fetch(`${backendUrl}/api/strategies`, {
