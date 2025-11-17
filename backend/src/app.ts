@@ -4,57 +4,51 @@ import cors from "cors";
 import dotenv from "dotenv";
 import helmet from "helmet";
 import compression from "compression";
+
 import { requestLogger } from "./middleware/logger.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
-// Routers
+// === Routers ===
 import authRouter from "./routes/auth.js";
 import { strategyRouter } from "./routes/strategies.js";
 import { credentialsRouter } from "./routes/credentials.js";
-import { iciciOrdersRouter } from "./routes/icici/orders.js";
-import { iciciPortfolioRouter } from "./routes/icici/portfolio.js";
+
+import { orderRouter } from "./routes/icici/orders.js";
+import { portfolioRouter } from "./routes/icici/portfolio.js";
 import { marketDataRouter } from "./routes/icici/marketData.js";
-import { iciciBrokerRouter } from "./routes/iciciBroker.js";
+import { iciciConnectRouter } from "./routes/icici/connect.js";
 import { iciciBacktestRouter } from "./routes/iciciBacktest.js";
 import { iciciMeRouter } from "./routes/icici/me.js";
-
+import { iciciBrokerRouter } from "./routes/iciciBroker.js";
 
 dotenv.config();
 
 const app = express();
 
 /* -------------------------------------------------------
-   1) CORS CONFIGURATION — ROCK SOLID & FUTURE-PROOF
-   - Uses .env for dynamic origins
-   - Auto-allows preflight for all routes
-   - Logs rejected origins
-   - Supports credentials (cookies, auth headers)
+   1) CORS CONFIG
 ------------------------------------------------------- */
-const rawOrigins = process.env.ALLOWED_ORIGINS || "";
-const allowedOrigins = rawOrigins
+const allowed = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
   .map((o) => o.trim())
-  .filter(Boolean)
-  .concat([
-    "http://localhost:5173",
-    "http://localhost:4173",
-    "https://alphaforge.skillsifter.in",
-    "https://www.alphaforge.skillsifter.in",
-  ]);
+  .filter(Boolean);
+
+const allowedOrigins = [
+  ...allowed,
+  "http://localhost:5173",
+  "http://localhost:4173",
+  "https://alphaforge.skillsifter.in",
+  "https://www.alphaforge.skillsifter.in",
+];
 
 console.log("CORS Allowed Origins:", allowedOrigins);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow tools like Postman, curl, or server-to-server (no origin)
       if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      console.warn(`CORS REJECTED: ${origin}`);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      console.warn("CORS BLOCKED:", origin);
       return callback(new Error("Not allowed by CORS"), false);
     },
     credentials: true,
@@ -68,16 +62,15 @@ app.use(
       "Cache-Control",
     ],
     exposedHeaders: ["Content-Length", "X-Request-ID"],
-    preflightContinue: false,
     optionsSuccessStatus: 204,
   })
 );
 
-// GLOBAL PREFLIGHT HANDLER — NEVER MISS AN OPTIONS REQUEST
+// Global OPTIONS handler
 app.options("*", cors());
 
 /* -------------------------------------------------------
-   2) SECURITY HEADERS (Helmet) — Safe for WebSockets
+   2) Security
 ------------------------------------------------------- */
 app.use(
   helmet({
@@ -97,14 +90,11 @@ app.use(
         connectSrc: [
           "'self'",
           "https://alphaforge.skillsifter.in",
-          "https://api.alphaforge.skillsifter.in",
           "https://www.alphaforge.skillsifter.in",
+          "https://api.alphaforge.skillsifter.in",
           "wss://api.icicidirect.com",
           "wss://gc.kis.v2.scr.kaspersky-labs.com",
         ],
-        imgSrc: ["'self'", "data:", "https:"],
-        styleSrc: ["'self'", "'unsafe-inline'", "https:"],
-        fontSrc: ["'self'", "https:", "data:"],
       },
     },
     crossOriginEmbedderPolicy: false,
@@ -114,7 +104,7 @@ app.use(
 );
 
 /* -------------------------------------------------------
-   3) Body Parsing, Compression, Logging
+   3) Parsing, Logging, Compression
 ------------------------------------------------------- */
 app.use(compression());
 app.use(express.json({ limit: "10mb" }));
@@ -122,7 +112,7 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(requestLogger);
 
 /* -------------------------------------------------------
-   4) Routes
+   4) Health Check
 ------------------------------------------------------- */
 app.get("/health", (_req, res) =>
   res.status(200).json({
@@ -133,18 +123,28 @@ app.get("/health", (_req, res) =>
   })
 );
 
+/* -------------------------------------------------------
+   5) Routes
+------------------------------------------------------- */
+
+// AUTH + USER ROUTES
 app.use("/api/auth", authRouter);
 app.use("/api/strategies", strategyRouter);
 app.use("/api/credentials", credentialsRouter);
+
+// ICICI ROUTES — unified path prefix
+app.use("/api/icici", iciciConnectRouter);
+app.use("/api/icici", orderRouter);
+app.use("/api/icici", portfolioRouter);
+app.use("/api/icici", marketDataRouter);
+app.use("/api/icici", iciciBacktestRouter);
+app.use("/api/icici", iciciMeRouter);
+
+// LEGACY broker route
 app.use("/api/iciciBroker", iciciBrokerRouter);
-app.use("/api/icici/market", marketDataRouter);
-app.use("/api/iciciBacktest", iciciBacktestRouter);
-app.use("/api/icici/orders", iciciOrdersRouter);
-app.use("/api/icici/portfolio", iciciPortfolioRouter);
-app.use("/api/icici/me", iciciMeRouter);
 
 /* -------------------------------------------------------
-   5) Global Error Handler — MUST BE LAST
+   6) Global Error Handler
 ------------------------------------------------------- */
 app.use(errorHandler);
 
