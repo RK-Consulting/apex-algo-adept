@@ -78,6 +78,6 @@ export const authenticateToken = (
     return next();
   } catch (err: any) {
     log("❌ JWT verification failed:", err?.message);
-    return res.status(403).json({ error: "Invalid or expired token" });
+    return res.status(403).json({ error: "Unauthorized" });
   }
 };
