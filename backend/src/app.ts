@@ -11,8 +11,11 @@ import { errorHandler } from "./middleware/errorHandler.js";
 import authRouter from "./routes/auth.js";
 import { strategyRouter } from "./routes/strategies.js";
 import { credentialsRouter } from "./routes/credentials.js";
-import marketDataRouter from "./routes/icici/marketData.js";
+import { marketDataRouter } from "./routes/icici/marketData.js";
 import { iciciBrokerRouter } from "./routes/iciciBroker.js";
+import { iciciBacktestRouter } from "./routes/iciciBacktest.js";
+import { iciciMeRouter } from "./routes/icici/me.js";
+
 
 dotenv.config();
 
@@ -133,6 +136,8 @@ app.use("/api/strategies", strategyRouter);
 app.use("/api/credentials", credentialsRouter);
 app.use("/api/icici", iciciBrokerRouter);
 app.use("/api/icici/market", marketDataRouter);
+app.use("/api/icici", iciciBacktestRouter);
+app.use("/api/icici", iciciMeRouter);
 
 /* -------------------------------------------------------
    5) Global Error Handler — MUST BE LAST
