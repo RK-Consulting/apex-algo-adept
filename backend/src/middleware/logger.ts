@@ -2,7 +2,7 @@
 import { Request, Response, NextFunction } from "express";
 import debug from "debug";
 
-// Debug logger (enable via DEBUG=apex:error)
+// Enable with: DEBUG=apex:error
 const log = debug("apex:error");
 
 interface ApiError extends Error {
@@ -11,15 +11,14 @@ interface ApiError extends Error {
 }
 
 /**
- * Global Error Handler — production-safe & frontend-friendly
- * ---------------------------------------------------------
- * Standardizes error output for:
- *  - ICICI/Breeze failures
- *  - DB/Postgres errors
- *  - JWT errors
- *  - Validation errors
- *  - Syntax errors (invalid JSON)
- *  - Unknown exceptions
+ * Global Error Handler
+ * --------------------
+ * Handles:
+ *  - Breeze / ICICI errors
+ *  - Database (Postgres) constraint errors
+ *  - JWT failures
+ *  - JSON parse errors
+ *  - Uncaught exceptions
  */
 export const errorHandler = (
   err: ApiError,
@@ -27,38 +26,36 @@ export const errorHandler = (
   res: Response,
   next: NextFunction
 ) => {
-  // Prevent sending headers twice
-  if (res.headersSent) {
-    return next(err);
-  }
+  // If headers already sent, delegate to Express
+  if (res.headersSent) return next(err);
 
   const isDev = process.env.NODE_ENV === "development";
 
-  // Default status code
+  // Normalize status
   let status = err.statusCode || res.statusCode || 500;
-
-  // Normalize status (Express sometimes leaves res.statusCode=200)
   if (status < 400) status = 500;
 
   /* ---------------------------------------------------------
-     1. Handle common known error types
+     JWT Errors
   --------------------------------------------------------- */
-
-  // JWT token errors
   if (err.name === "JsonWebTokenError" || err.name === "TokenExpiredError") {
     status = 403;
     err.message = "Invalid or expired authentication token";
     err.code = "AUTH_INVALID_TOKEN";
   }
 
-  // Invalid JSON payload sent by client
+  /* ---------------------------------------------------------
+     JSON Syntax Errors
+  --------------------------------------------------------- */
   if (err instanceof SyntaxError && "body" in err) {
     status = 400;
     err.message = "Invalid JSON in request body";
     err.code = "BAD_JSON";
   }
 
-  // Postgres errors (unique constraint, FK errors, etc.)
+  /* ---------------------------------------------------------
+     Postgres Constraint Errors (23xxx)
+  --------------------------------------------------------- */
   const pgErr: any = err;
   if (pgErr.code?.startsWith("23")) {
     status = 400;
@@ -66,19 +63,24 @@ export const errorHandler = (
     err.code = "DB_CONSTRAINT_ERROR";
   }
 
-  // ICICI / Breeze API errors
-  if (err.message?.includes("breeze") || err.message?.includes("ICICI")) {
-    status = 502; // Bad gateway — upstream broker failure
+  /* ---------------------------------------------------------
+     ICICI / Breeze Errors (Upstream failures)
+  --------------------------------------------------------- */
+  if (
+    err.message?.toLowerCase().includes("breeze") ||
+    err.message?.toLowerCase().includes("icici")
+  ) {
+    status = 502; // Bad gateway
     err.code = "ICICI_BREEZE_ERROR";
   }
 
   /* ---------------------------------------------------------
-     2. Logging (Debug only unless fatal)
+     Logging
   --------------------------------------------------------- */
   log("❌ Error Handler:", {
+    status,
     message: err.message,
     code: err.code,
-    status,
     stack: isDev ? err.stack : undefined,
   });
 
@@ -87,7 +89,7 @@ export const errorHandler = (
   }
 
   /* ---------------------------------------------------------
-     3. Send normalized response to frontend
+     Send Normalized Response
   --------------------------------------------------------- */
   return res.status(status).json({
     success: false,
