@@ -38,9 +38,10 @@ const Login = () => {
       // ✅ Save backend JWT CONSISTENTLY
       // **************************************
       localStorage.setItem("authToken", data.token);
+      localStorage.setItem("token", data.token);
 
       // Remove older key if created previously
-      localStorage.removeItem("token");
+      // localStorage.removeItem("token");
 
       toast({
         title: "Success!",
