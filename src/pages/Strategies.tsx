@@ -98,8 +98,24 @@ const Strategies = () => {
   };
 
   useEffect(() => {
+  // use the project's token getter (you declared getToken() above)
+  const token = getToken();
+
+  // If no token present, skip loading strategies (avoids 403 / invalid-token errors)
+  if (!token) {
+    console.log("⏳ No token in storage — skipping loadStrategies until login/verify.");
+    setLoading(false); // avoid indefinite loading indicator
+    return;
+  }
+
+  // Delay slightly so ProtectedRoute / verify flow can finish storing/verifying token
+  const timer = setTimeout(() => {
+    console.log("▶️ Token present — calling loadStrategies()");
     loadStrategies();
-  }, []);
+  }, 250);
+
+  return () => clearTimeout(timer);
+ }, []);
 
   // -------------------------------------
   // 🔥 Pause / Activate strategy
