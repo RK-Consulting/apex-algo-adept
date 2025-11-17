@@ -30,8 +30,7 @@ export default function Markets() {
   const [stockData, setStockData] = useState<any[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
 
-  const token =
-    localStorage.getItem("token") || localStorage.getItem("authToken");
+  const token = localStorage.getItem("authToken") || localStorage.getItem("token");
 
   // ----------------------------
   // 🔥 Fetch Live Quotes (REST)
@@ -52,6 +51,7 @@ export default function Markets() {
 
   // Fetch all REST quotes every 1 sec (fallback)
   useEffect(() => {
+    if (!token) return;   // ⛔ Prevents infinite 500 spam when token missing
     const fetchAll = async () => {
       const indexRes = await Promise.all(
         indexSymbols.map((i) => fetchQuote(i.symbol))
