@@ -1,3 +1,5 @@
+
+// apex-algo-adept/backend/src/routes/icici/me.ts
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../../middleware/auth.js";
 import { getBreezeInstance } from "../../utils/breezeSession.js";
@@ -8,7 +10,7 @@ const router = Router();
 
 /**
  * GET /api/icici/me
- * Returns Breeze session status and profile if valid
+ * Breeze session heartbeat
  */
 router.get("/me", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
@@ -16,17 +18,16 @@ router.get("/me", authenticateToken, async (req: AuthRequest, res, next) => {
 
     const breeze = await getBreezeInstance(userId);
 
-    // Breeze has a simple call to check profile/session
-    const response = await breeze.getProfile();
+    // Primary call supported in Breeze API (works reliably)
+    const response = await breeze.getCustomerDetails();
 
     return res.json({
       success: true,
       session: "ACTIVE",
-      profile: response
+      details: response,
     });
-
   } catch (err: any) {
-    log("Error in /me:", err);
+    log("❌ /api/icici/me:", err);
 
     return res.status(401).json({
       success: false,
