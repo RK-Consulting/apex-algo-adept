@@ -11,9 +11,9 @@ import { errorHandler } from "./middleware/errorHandler.js";
 import authRouter from "./routes/auth.js";
 import { strategyRouter } from "./routes/strategies.js";
 import { credentialsRouter } from "./routes/credentials.js";
-import { ordersRouter } from "./routes/icici/orders.js";
-import { portfolioRouter } from "./routes/icici/portfolio.js";
-import marketDataRouter from "./routes/icici/marketData.js";
+import { iciciOrdersRouter } from "./routes/icici/orders.js";
+import { iciciPortfolioRouter } from "./routes/icici/portfolio.js";
+import { marketDataRouter } from "./routes/icici/marketData.js";
 import { iciciBrokerRouter } from "./routes/iciciBroker.js";
 import { iciciBacktestRouter } from "./routes/iciciBacktest.js";
 import { iciciMeRouter } from "./routes/icici/me.js";
@@ -136,12 +136,12 @@ app.get("/health", (_req, res) =>
 app.use("/api/auth", authRouter);
 app.use("/api/strategies", strategyRouter);
 app.use("/api/credentials", credentialsRouter);
-app.use("/api/icici", iciciBrokerRouter);
+app.use("/api/iciciBroker", iciciBrokerRouter);
 app.use("/api/icici/market", marketDataRouter);
-app.use("/api/icici", iciciBacktestRouter);
-app.use("/api/icici", ordersRouter);
-app.use("/api/icici", portfolioRouter);
-app.use("/api/icici", iciciMeRouter);
+app.use("/api/iciciBacktest", iciciBacktestRouter);
+app.use("/api/icici/orders", iciciOrdersRouter);
+app.use("/api/icici/portfolio", iciciPortfolioRouter);
+app.use("/api/icici/me", iciciMeRouter);
 
 /* -------------------------------------------------------
    5) Global Error Handler — MUST BE LAST
