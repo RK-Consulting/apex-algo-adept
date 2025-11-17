@@ -1,7 +1,6 @@
 // src/routes/icici/marketData.ts
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../../middleware/auth.js";
-import { query } from "../../config/database.js";
 import { getBreezeInstance } from "../../utils/breezeSession.js";
 import { mapSymbolForBreeze } from "../../utils/symbolMapper.js";
 import debug from "debug";
@@ -10,128 +9,95 @@ const router = Router();
 const log = debug("apex:icici:market");
 
 /**
- * SUBSCRIBE TO ICICI LIVE MARKET FEED
- * -----------------------------------
- * This version:
- *  - Uses updated Breeze SDK
- *  - Correctly handles index vs stock tokens
- *  - Stores ticks safely
- *  - Avoids deprecated .connect()
- *  - Supports only valid subscribeFeeds() format
+ * GET /api/icici/market/ltp?symbol=RELIANCE&exchange=NSE
  */
-router.get("/subscribe/:symbol", authenticateToken, async (req: AuthRequest, res) => {
+router.get("/ltp", authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const userId = req.user!.id;
-    const { symbol } = req.params;
+    const symbol = req.query.symbol as string;
+    const exchange = (req.query.exchange as string) || "NSE";
 
-    if (!symbol) {
-      return res.status(400).json({ error: "Symbol is required" });
-    }
+    if (!symbol)
+      return res.status(400).json({ error: "symbol is required" });
 
     const mapped = mapSymbolForBreeze(symbol);
-    const breeze = await getBreezeInstance(userId);
+    const breeze = await getBreezeInstance(req.user!.id);
 
-    // --- HANDLE TICK EVENTS ---
-    const handleTick = async (tick: any) => {
-      try {
-        const d = tick?.data || tick;
-
-        const stockCode =
-          (d.stock_code || d.symbol || mapped.payload || symbol).toString().toUpperCase();
-
-        await query(
-          `INSERT INTO market_ticks
-            (symbol, exchange, last_price, open, high, low, volume, timestamp)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
-          [
-            stockCode,
-            d.exchange_code || "NSE",
-            d.ltp ?? d.last_price ?? null,
-            d.open ?? null,
-            d.high ?? null,
-            d.low ?? null,
-            d.ttq ?? d.volume ?? null,
-          ]
-        );
-      } catch (dbErr: any) {
-        log("Tick insert error:", dbErr.message || dbErr);
-      }
-    };
-
-    // SUBSCRIBE TO FEEDS
-    // Breeze V2 uses subscribeFeeds(), no connect() required.
-    breeze.on?.("message", handleTick);
-
-    const feedArgs =
-      mapped.type === "index"
-        ? {
-            stockCode: mapped.payload, // EX: "NIFTY 50"
-            exchangeCode: "NSE",
-          }
-        : {
-            stockCode: mapped.payload, // EX: "RELIANCE"
-            exchangeCode: "NSE",
-            productType: "cash",
-          };
-
-    await breeze.subscribeFeeds(feedArgs);
-
-    log(`📡 Subscribed to live feed for ${mapped.payload}`);
-
-    return res.json({
-      success: true,
-      message: `Subscribed to live feed for ${mapped.payload}`,
+    const data = await breeze.getLtp({
+      stockCode: mapped.payload,
+      exchangeCode: exchange,
     });
+
+    return res.json({ success: true, ltp: data });
   } catch (err: any) {
-    log("Market Subscribe Error:", err.message || err);
-    res.status(500).json({ error: "Failed to subscribe to market feed" });
+    log("LTP error:", err);
+    return res.status(500).json({
+      error: "Failed to get LTP",
+      details: err?.message || err,
+    });
   }
 });
 
 /**
- * GET LIVE QUOTES (STOCK / INDEX)
- * --------------------------------
- * Uses updated mapping + correct API
+ * POST /api/icici/market/ohlc
+ * { symbol, exchange, interval, fromDate, toDate }
  */
-router.get("/quotes/:symbol", authenticateToken, async (req: AuthRequest, res) => {
+router.post("/ohlc", authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const userId = req.user!.id;
-    const { symbol } = req.params;
+    const { symbol, exchange = "NSE", interval = "1day", fromDate, toDate } =
+      req.body;
 
-    if (!symbol) {
-      return res.status(400).json({ error: "Symbol is required" });
-    }
+    if (!symbol)
+      return res.status(400).json({ error: "symbol is required" });
 
     const mapped = mapSymbolForBreeze(symbol);
-    const breeze = await getBreezeInstance(userId);
+    const breeze = await getBreezeInstance(req.user!.id);
 
-    let resp;
+    const ohlc = await breeze.getHistoricalDataV2({
+      interval,
+      fromDate,
+      toDate,
+      stockCode: mapped.payload,
+      exchangeCode: exchange,
+      productType: "cash",
+    });
 
-    // For indices — try index API if supported
-    if (mapped.type === "index") {
-      if (typeof (breeze as any).getIndexQuotes === "function") {
-        resp = await (breeze as any).getIndexQuotes({ index: mapped.payload });
-      } else {
-        resp = await breeze.getQuotes({
-          stockCode: mapped.payload,
-          exchangeCode: "NSE",
-          productType: "cash",
-        });
-      }
-    } else {
-      // equities
-      resp = await breeze.getQuotes({
-        stockCode: mapped.payload,
-        exchangeCode: "NSE",
-        productType: "cash",
-      });
-    }
-
-    res.json({ success: true, data: resp });
+    return res.json({ success: true, ohlc });
   } catch (err: any) {
-    console.error("Quote Fetch Error:", err.message || err);
-    res.status(500).json({ error: "Failed to fetch quote" });
+    log("OHLC error:", err);
+    return res.status(500).json({
+      error: "Failed to load OHLC",
+      details: err?.message || err,
+    });
   }
 });
 
-export default router;
+/**
+ * GET /api/icici/market/quote?symbol=RELIANCE&exchange=NSE
+ */
+router.get("/quote", authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const symbol = req.query.symbol as string;
+    const exchange = (req.query.exchange as string) || "NSE";
+
+    if (!symbol)
+      return res.status(400).json({ error: "symbol is required" });
+
+    const mapped = mapSymbolForBreeze(symbol);
+    const breeze = await getBreezeInstance(req.user!.id);
+
+    const quote = await breeze.getQuote({
+      stockCode: mapped.payload,
+      exchangeCode: exchange,
+    });
+
+    return res.json({ success: true, quote });
+  } catch (err: any) {
+    log("Quote error:", err);
+    return res.status(500).json({
+      error: "Failed to load quote",
+      details: err?.message || err,
+    });
+  }
+});
+
+export { router as marketDataRouter };
