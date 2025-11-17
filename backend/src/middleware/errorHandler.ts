@@ -1,21 +1,15 @@
 // backend/src/middleware/errorHandler.ts
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from "express";
+import debug from "debug";
 
-export const errorHandler = (
-  err: Error,
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  console.error('Error:', err);
+// Debug namespace
+const log = debug("apex:error");
 
-  const statusCode = res.statusCode !== 200 ? res.statusCode : 500;
-  
-  res.status(statusCode).json({
-    error: err.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
-};
+interface ApiError extends Error {
+  statusCode?: number;
+  code?: string;
+}
+
 /**
  * Global Error Handler
  * --------------------
@@ -32,12 +26,12 @@ export const errorHandler = (
   res: Response,
   next: NextFunction
 ) => {
-  // If headers already sent, delegate to Express
+  // If headers already sent, forward to Express
   if (res.headersSent) return next(err);
 
   const isDev = process.env.NODE_ENV === "development";
 
-  // Normalize status
+  // Normalize statusCode
   let status = err.statusCode || res.statusCode || 500;
   if (status < 400) status = 500;
 
@@ -70,13 +64,13 @@ export const errorHandler = (
   }
 
   /* ---------------------------------------------------------
-     ICICI / Breeze Errors (Upstream failures)
+     Breeze / ICICI Errors
   --------------------------------------------------------- */
   if (
-    err.message?.toLowerCase().includes("breeze") ||
-    err.message?.toLowerCase().includes("icici")
+    err.message?.toLowerCase().includes("icici") ||
+    err.message?.toLowerCase().includes("breeze")
   ) {
-    status = 502; // Bad gateway
+    status = 502; // Upstream service error
     err.code = "ICICI_BREEZE_ERROR";
   }
 
@@ -95,7 +89,7 @@ export const errorHandler = (
   }
 
   /* ---------------------------------------------------------
-     Send Normalized Response
+     Send normalized response
   --------------------------------------------------------- */
   return res.status(status).json({
     success: false,
@@ -105,7 +99,3 @@ export const errorHandler = (
   });
 };
 
-interface ApiError extends Error {
-  statusCode?: number;
-  code?: string;
-}
