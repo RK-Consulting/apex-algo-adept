@@ -100,3 +100,50 @@ router.post("/backtest", authenticateToken, async (req: AuthRequest, res, next) 
         const lossPct = ((entryPrice - low) / entryPrice) * 100;
 
         if (gainPct >= takeProfitPct) {
+          pnl += (takeProfitPct / 100) * entryPrice;
+          wins++;
+          positionOpen = false;
+        } else if (lossPct >= stopLossPct) {
+          pnl -= (stopLossPct / 100) * entryPrice;
+          positionOpen = false;
+        }
+      }
+    }
+
+    const winRate = trades > 0 ? (wins / trades) * 100 : 0;
+    const avgPnL = trades > 0 ? pnl / trades : 0;
+
+    const performance = {
+      total_trades: trades,
+      win_rate: parseFloat(winRate.toFixed(2)),
+      total_pnl: parseFloat(pnl.toFixed(2)),
+      avg_pnl_per_trade: parseFloat(avgPnL.toFixed(2)),
+      test_period: { fromDate, toDate },
+    };
+
+    // Save performance results
+    await query(
+      `UPDATE strategies
+       SET performance_data = $1, updated_at = NOW()
+       WHERE id = $2 AND user_id = $3`,
+      [JSON.stringify(performance), strategyId, userId]
+    );
+
+    return res.json({
+      success: true,
+      backtest: {
+        trades,
+        wins,
+        winRate: winRate.toFixed(2),
+        pnl: pnl.toFixed(2),
+        avgPnL: avgPnL.toFixed(2),
+        strategy,
+      },
+    });
+  } catch (err: any) {
+    log("Backtest Error:", err);
+    next(err);
+  }
+});
+
+export { router as iciciBacktestRouter };
