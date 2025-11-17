@@ -1,40 +1,51 @@
-
-// apex-algo-adept/backend/src/routes/icici/me.ts
+// backend/src/routes/icici/me.ts
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../../middleware/auth.js";
 import { getBreezeInstance } from "../../utils/breezeSession.js";
 import debug from "debug";
 
-const log = debug("apex:icici:me");
 const router = Router();
+const log = debug("apex:icici:me");
 
 /**
  * GET /api/icici/me
- * Validates Breeze session by calling a guaranteed-supported API
+ * Validate Breeze session by calling a SAFE working API:
+ *
+ * BreezeConnect v1.0.29 supports:
+ *   - getFunds()
+ *   - getDematHoldings()
+ *   - getHistoricalData
+ *   - getHistoricalDatav2
+ *
+ * We use getFunds() because:
+ *   ✔ requires ZERO parameters
+ *   ✔ returns data if session is valid
  */
 router.get("/me", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const userId = req.user!.id;
+
     const breeze = await getBreezeInstance(userId);
 
-    // Validate session using a safe supported method
-    const testResponse = await breeze.getPortfolioHoldings({});
+    // SAFE method — no args required
+    const response = await breeze.getFunds();
+
+    log("ICICI ME Check:", response);
 
     return res.json({
       success: true,
-      session: "ACTIVE",
-      response: testResponse,
+      connected: true,
+      data: response,
     });
-
   } catch (err: any) {
-    log("❌ /api/icici/me Error:", err);
-    return res.status(401).json({
+    log("ICICI ME Error:", err);
+
+    return res.status(500).json({
       success: false,
-      session: "INVALID",
-      error: err?.message ?? "ICICI session invalid",
+      connected: false,
+      error: err.message || "Failed to validate ICICI connection",
     });
   }
 });
 
 export { router as iciciMeRouter };
-
