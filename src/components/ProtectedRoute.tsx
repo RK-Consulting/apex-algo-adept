@@ -11,10 +11,12 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     import.meta.env.VITE_BACKEND_URL || "https://api.alphaforge.skillsifter.in";
 
   useEffect(() => {
+    // ✅ minimal change: allow BOTH tokens during migration
     const token =
       localStorage.getItem("authToken") || localStorage.getItem("token");
 
     console.log("[ProtectedRoute] Token found:", !!token);
+    console.log("[ProtectedRoute] Backend URL:", backendUrl);
 
     if (!token) {
       setAuthenticated(false);
@@ -22,17 +24,24 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    // 🔥 backend verification
     fetch(`${backendUrl}/api/auth/verify`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
     })
-      .then((res) => setAuthenticated(res.ok))
-      .catch(() => setAuthenticated(false))
-      .finally(() => setLoading(false));
+      .then((res) => {
+        setAuthenticated(res.ok);
+      })
+      .catch(() => {
+        setAuthenticated(false);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
 
-  // IMPORTANT: block UI until verification is finished
+  // 🔒 hold UI until verify completes
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -41,10 +50,11 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // ❌ not authenticated → redirect
   if (!authenticated) {
     return <Navigate to="/login" replace />;
   }
 
+  // ✔ authenticated → allow page to render
   return <>{children}</>;
 }
-
