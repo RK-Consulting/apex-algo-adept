@@ -10,6 +10,7 @@ const log = debug("apex:icici:market");
 
 /**
  * GET /api/icici/market/ltp?symbol=RELIANCE&exchange=NSE
+ * NOTE: Breeze has NO getLtp() — replace with getQuotes()
  */
 router.get("/ltp", authenticateToken, async (req: AuthRequest, res) => {
   try {
@@ -22,12 +23,12 @@ router.get("/ltp", authenticateToken, async (req: AuthRequest, res) => {
     const mapped = mapSymbolForBreeze(symbol);
     const breeze = await getBreezeInstance(req.user!.id);
 
-    const data = await breeze.getLtp({
+    const quote = await breeze.getQuotes({
       stockCode: mapped.payload,
       exchangeCode: exchange,
     });
 
-    return res.json({ success: true, ltp: data });
+    return res.json({ success: true, ltp: quote });
   } catch (err: any) {
     log("LTP error:", err);
     return res.status(500).json({
@@ -39,7 +40,6 @@ router.get("/ltp", authenticateToken, async (req: AuthRequest, res) => {
 
 /**
  * POST /api/icici/market/ohlc
- * { symbol, exchange, interval, fromDate, toDate }
  */
 router.post("/ohlc", authenticateToken, async (req: AuthRequest, res) => {
   try {
@@ -73,6 +73,7 @@ router.post("/ohlc", authenticateToken, async (req: AuthRequest, res) => {
 
 /**
  * GET /api/icici/market/quote?symbol=RELIANCE&exchange=NSE
+ * NOTE: getQuote() does NOT exist → replaced with getQuotes()
  */
 router.get("/quote", authenticateToken, async (req: AuthRequest, res) => {
   try {
@@ -85,7 +86,7 @@ router.get("/quote", authenticateToken, async (req: AuthRequest, res) => {
     const mapped = mapSymbolForBreeze(symbol);
     const breeze = await getBreezeInstance(req.user!.id);
 
-    const quote = await breeze.getQuote({
+    const quote = await breeze.getQuotes({
       stockCode: mapped.payload,
       exchangeCode: exchange,
     });
