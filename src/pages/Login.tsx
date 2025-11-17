@@ -19,7 +19,9 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || "https://api.alphaforge.skillsifter.in";
+      const backendUrl =
+        import.meta.env.VITE_BACKEND_URL || "https://api.alphaforge.skillsifter.in";
+
       const res = await fetch(`${backendUrl}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -32,15 +34,20 @@ const Login = () => {
         throw new Error(data.error || "Login failed");
       }
 
-      // 🎯 Save backend JWT
-      localStorage.setItem("token", data.token);
+      // **************************************
+      // ✅ Save backend JWT CONSISTENTLY
+      // **************************************
+      localStorage.setItem("authToken", data.token);
+
+      // Remove older key if created previously
+      localStorage.removeItem("token");
 
       toast({
         title: "Success!",
         description: "You've been logged in successfully",
       });
 
-      // 🔧 Force redirect with replace (prevents back-button issues)
+      // Redirect to home page
       navigate("/", { replace: true });
     } catch (error) {
       toast({
@@ -60,6 +67,7 @@ const Login = () => {
           <CardTitle>Login</CardTitle>
           <CardDescription>Enter your credentials to access AlphaForge</CardDescription>
         </CardHeader>
+
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
@@ -72,6 +80,7 @@ const Login = () => {
                 required
               />
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input
@@ -82,6 +91,7 @@ const Login = () => {
                 required
               />
             </div>
+
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? (
                 <>
@@ -93,9 +103,13 @@ const Login = () => {
               )}
             </Button>
           </form>
+
           <div className="mt-4 text-center">
             <p>
-              Don't have an account? <Link to="/signup" className="text-primary hover:underline">Sign up</Link>
+              Don't have an account?{" "}
+              <Link to="/signup" className="text-primary hover:underline">
+                Sign up
+              </Link>
             </p>
           </div>
         </CardContent>
