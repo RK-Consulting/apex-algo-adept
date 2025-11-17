@@ -90,4 +90,48 @@ router.get("/subscribe/:symbol", authenticateToken, async (req: AuthRequest, res
 
 /**
  * GET LIVE QUOTES (STOCK / INDEX)
- * --------------------------*
+ * --------------------------------
+ * Uses updated mapping + correct API
+ */
+router.get("/quotes/:symbol", authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user!.id;
+    const { symbol } = req.params;
+
+    if (!symbol) {
+      return res.status(400).json({ error: "Symbol is required" });
+    }
+
+    const mapped = mapSymbolForBreeze(symbol);
+    const breeze = await getBreezeInstance(userId);
+
+    let resp;
+
+    // For indices — try index API if supported
+    if (mapped.type === "index") {
+      if (typeof (breeze as any).getIndexQuotes === "function") {
+        resp = await (breeze as any).getIndexQuotes({ index: mapped.payload });
+      } else {
+        resp = await breeze.getQuotes({
+          stockCode: mapped.payload,
+          exchangeCode: "NSE",
+          productType: "cash",
+        });
+      }
+    } else {
+      // equities
+      resp = await breeze.getQuotes({
+        stockCode: mapped.payload,
+        exchangeCode: "NSE",
+        productType: "cash",
+      });
+    }
+
+    res.json({ success: true, data: resp });
+  } catch (err: any) {
+    console.error("Quote Fetch Error:", err.message || err);
+    res.status(500).json({ error: "Failed to fetch quote" });
+  }
+});
+
+export default router;
