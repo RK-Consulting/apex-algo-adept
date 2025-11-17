@@ -63,8 +63,9 @@ const Strategies = () => {
   const backendUrl =
     import.meta.env.VITE_BACKEND_URL || "https://api.alphaforge.skillsifter.in";
 
-  const getToken = () =>
-    localStorage.getItem("authToken") || localStorage.getItem("token");
+  //const getToken = () =>
+    //localStorage.getItem("authToken") || localStorage.getItem("token");
+  const getToken = () => localStorage.getItem("authToken");
 
   // -------------------------------------
   // 🔥 Load strategies from your backend
