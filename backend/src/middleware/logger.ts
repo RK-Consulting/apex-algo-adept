@@ -1,4 +1,4 @@
-// backend/src/middleware/errorHandler.ts
+// backend/src/middleware/logger.ts
 import { Request, Response, NextFunction } from "express";
 import debug from "debug";
 
