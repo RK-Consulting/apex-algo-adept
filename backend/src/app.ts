@@ -13,7 +13,7 @@ import { strategyRouter } from "./routes/strategies.js";
 import { credentialsRouter } from "./routes/credentials.js";
 import { ordersRouter } from "./routes/icici/orders.js";
 import { portfolioRouter } from "./routes/icici/portfolio.js";
-import { marketDataRouter } from "./routes/icici/marketData.js";
+import marketDataRouter from "./routes/icici/marketData.js";
 import { iciciBrokerRouter } from "./routes/iciciBroker.js";
 import { iciciBacktestRouter } from "./routes/iciciBacktest.js";
 import { iciciMeRouter } from "./routes/icici/me.js";
