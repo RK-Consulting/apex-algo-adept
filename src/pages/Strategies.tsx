@@ -1,4 +1,4 @@
-// apex-algo-adept/src/pages/Strateegies.tsx
+// apex-algo-adept/src/pages/Strategies.tsx
 import { useState, useEffect } from "react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
@@ -63,9 +63,9 @@ const Strategies = () => {
   const backendUrl =
     import.meta.env.VITE_BACKEND_URL || "https://api.alphaforge.skillsifter.in";
 
-  //const getToken = () =>
-    //localStorage.getItem("authToken") || localStorage.getItem("token");
-  const getToken = () => localStorage.getItem("authToken");
+  const getToken = () =>
+    localStorage.getItem("authToken") || localStorage.getItem("token");
+  //const getToken = () => localStorage.getItem("authToken");
 
   // -------------------------------------
   // 🔥 Load strategies from your backend
