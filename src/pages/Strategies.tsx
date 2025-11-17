@@ -100,7 +100,7 @@ const Strategies = () => {
     }
   };
 
-  useEffect(() => {
+ /* useEffect(() => {
   // use the project's token getter (you declared getToken() above)
   const token = getToken();
 
@@ -118,7 +118,24 @@ const Strategies = () => {
   }, 250);
 
   return () => clearTimeout(timer);
- }, []);
+ }, []); */
+ useEffect(() => {
+  const token = getToken();
+
+  if (!token) {
+    console.log("⏳ Token not ready — delaying loadStrategies()");
+    setLoading(false);
+    return;
+  }
+
+  const timer = setTimeout(() => {
+    console.log("▶️ Token verified — loading strategies");
+    loadStrategies();
+  }, 300);
+
+  return () => clearTimeout(timer);
+}, []);
+
 
   // -------------------------------------
   // 🔥 Pause / Activate strategy
