@@ -61,7 +61,6 @@ router.post("/backtest", authenticateToken, async (req: AuthRequest, res, next) 
       ohlcResponse?.Success ||
       ohlcResponse?.success ||
       ohlcResponse?.data ||
-      ohlcResponse?.Data ||
       [];
 
     if (!Array.isArray(candles) || candles.length === 0) {
