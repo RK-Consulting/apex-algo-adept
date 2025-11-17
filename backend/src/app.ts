@@ -4,7 +4,6 @@ import cors from "cors";
 import dotenv from "dotenv";
 import helmet from "helmet";
 import compression from "compression";
-
 import { requestLogger } from "./middleware/logger.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
@@ -20,27 +19,38 @@ dotenv.config();
 const app = express();
 
 /* -------------------------------------------------------
-   1) CORS CONFIGURATION (Strict + Production-safe)
+   1) CORS CONFIGURATION — ROCK SOLID & FUTURE-PROOF
+   - Uses .env for dynamic origins
+   - Auto-allows preflight for all routes
+   - Logs rejected origins
+   - Supports credentials (cookies, auth headers)
 ------------------------------------------------------- */
-const allowedOrigins = [
-  "http://localhost:5173",
-  "http://localhost:4173",
-  "https://alphaforge.skillsifter.in",
-  "https://www.alphaforge.skillsifter.in",
-];
+const rawOrigins = process.env.ALLOWED_ORIGINS || "";
+const allowedOrigins = rawOrigins
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean)
+  .concat([
+    "http://localhost:5173",
+    "http://localhost:4173",
+    "https://alphaforge.skillsifter.in",
+    "https://www.alphaforge.skillsifter.in",
+  ]);
+
+console.log("CORS Allowed Origins:", allowedOrigins);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow Postman / internal calls without origin
+      // Allow tools like Postman, curl, or server-to-server (no origin)
       if (!origin) return callback(null, true);
 
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
 
-      console.warn(`🚫 CORS Rejected: ${origin}`);
-      return callback(new Error("CORS not allowed from this origin"), false);
+      console.warn(`CORS REJECTED: ${origin}`);
+      return callback(new Error("Not allowed by CORS"), false);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -50,25 +60,26 @@ app.use(
       "X-Requested-With",
       "Accept",
       "Origin",
+      "Cache-Control",
     ],
-    exposedHeaders: ["Content-Length"],
+    exposedHeaders: ["Content-Length", "X-Request-ID"],
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
   })
 );
 
-// Handle preflight requests
+// GLOBAL PREFLIGHT HANDLER — NEVER MISS AN OPTIONS REQUEST
 app.options("*", cors());
 
-
 /* -------------------------------------------------------
-   2) SECURITY HEADERS (Helmet)
-   Breeze Connect WebSocket & frontend bundlers require COEP OFF
+   2) SECURITY HEADERS (Helmet) — Safe for WebSockets
 ------------------------------------------------------- */
 app.use(
   helmet({
     contentSecurityPolicy: {
+      useDefaults: true,
       directives: {
         defaultSrc: ["'self'"],
-
         scriptSrc: [
           "'self'",
           "'unsafe-inline'",
@@ -78,51 +89,53 @@ app.use(
           "https://gc.kis.v2.scr.kaspersky-labs.com",
           "wss://gc.kis.v2.scr.kaspersky-labs.com",
         ],
-
         connectSrc: [
           "'self'",
           "https://alphaforge.skillsifter.in",
           "https://api.alphaforge.skillsifter.in",
-          "wss://api.icicidirect.com",        // Breeze WebSocket
+          "https://www.alphaforge.skillsifter.in",
+          "wss://api.icicidirect.com",
           "wss://gc.kis.v2.scr.kaspersky-labs.com",
         ],
-
         imgSrc: ["'self'", "data:", "https:"],
         styleSrc: ["'self'", "'unsafe-inline'", "https:"],
+        fontSrc: ["'self'", "https:", "data:"],
       },
     },
     crossOriginEmbedderPolicy: false,
     crossOriginOpenerPolicy: false,
-    crossOriginResourcePolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
   })
 );
 
-
 /* -------------------------------------------------------
-   3) Parsing, Compression, Logging
+   3) Body Parsing, Compression, Logging
 ------------------------------------------------------- */
 app.use(compression());
 app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(requestLogger);
-
 
 /* -------------------------------------------------------
    4) Routes
 ------------------------------------------------------- */
 app.get("/health", (_req, res) =>
-  res.status(200).json({ status: "ok", ts: new Date().toISOString() })
+  res.status(200).json({
+    status: "OK",
+    service: "alphaforge-api",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+  })
 );
 
 app.use("/api/auth", authRouter);
 app.use("/api/strategies", strategyRouter);
 app.use("/api/credentials", credentialsRouter);
-app.use("/api/icici", iciciBrokerRouter);           // /funds /portfolio /order
-app.use("/api/icici/market", marketDataRouter);     // /subscribe /quotes
-
+app.use("/api/icici", iciciBrokerRouter);
+app.use("/api/icici/market", marketDataRouter);
 
 /* -------------------------------------------------------
-   5) Global Error Handler (must be last)
+   5) Global Error Handler — MUST BE LAST
 ------------------------------------------------------- */
 app.use(errorHandler);
 
