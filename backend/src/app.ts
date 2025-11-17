@@ -139,8 +139,8 @@ app.use("/api/credentials", credentialsRouter);
 app.use("/api/icici", iciciBrokerRouter);
 app.use("/api/icici/market", marketDataRouter);
 app.use("/api/icici", iciciBacktestRouter);
-app.use("/api/icici", iciciOrdersRouter);
-app.use("/api/icici", iciciPortfolioRouter);
+app.use("/api/icici", ordersRouter);
+app.use("/api/icici", portfolioRouter);
 app.use("/api/icici", iciciMeRouter);
 
 /* -------------------------------------------------------
