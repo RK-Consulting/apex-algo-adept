@@ -63,19 +63,14 @@ const Strategies = () => {
   const backendUrl =
     import.meta.env.VITE_BACKEND_URL || "https://api.alphaforge.skillsifter.in";
 
-  const getToken = () =>
-    localStorage.getItem("authToken") || localStorage.getItem("token");
-  //const getToken = () => localStorage.getItem("authToken");
+  const getToken = () => localStorage.getItem("authToken");
 
-  // -------------------------------------
-  // 🔥 Load strategies from your backend
-  // -------------------------------------
+  // -------------------------------
+  // 🔥 Load strategies from backend
+  // -------------------------------
   const loadStrategies = async () => {
-   const token = getToken();
-   if (!token) {
-      console.warn("⛔ No token yet — skipping loadStrategies()");
-      return;
-   }
+    const token = getToken();
+    if (!token) return;
 
     try {
       const res = await fetch(`${backendUrl}/api/strategies`, {
@@ -84,15 +79,18 @@ const Strategies = () => {
         },
       });
 
-      if (!res.ok) throw new Error("Failed to load strategies");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to load strategies");
+      }
 
       const data = await res.json();
       setStrategies(data?.strategies || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error loading strategies:", error);
       toast({
         title: "Error",
-        description: "Failed to load strategies",
+        description: error.message || "Failed to load strategies",
         variant: "destructive",
       });
     } finally {
@@ -100,46 +98,30 @@ const Strategies = () => {
     }
   };
 
- /* useEffect(() => {
-  // use the project's token getter (you declared getToken() above)
-  const token = getToken();
+  // -------------------------------
+  // 🔥 FIXED: Wait for token to exist
+  // -------------------------------
+  useEffect(() => {
+    const token = getToken();
 
-  // If no token present, skip loading strategies (avoids 403 / invalid-token errors)
-  if (!token) {
-    console.log("⏳ No token in storage — skipping loadStrategies until login/verify.");
-    setLoading(false); // avoid indefinite loading indicator
-    return;
-  }
+    if (!token) {
+      console.log("⏳ No authToken yet — waiting for ProtectedRoute...");
+      setLoading(false);
+      return;
+    }
 
-  // Delay slightly so ProtectedRoute / verify flow can finish storing/verifying token
-  const timer = setTimeout(() => {
-    console.log("▶️ Token present — calling loadStrategies()");
-    loadStrategies();
-  }, 250);
+    // Delay to ensure ProtectedRoute verify() finishes storing token
+    const timer = setTimeout(() => {
+      console.log("▶️ Token ready — calling loadStrategies()");
+      loadStrategies();
+    }, 400);
 
-  return () => clearTimeout(timer);
- }, []); */
- useEffect(() => {
-  const token = getToken();
+    return () => clearTimeout(timer);
+  }, []);
 
-  if (!token) {
-    console.log("⏳ Token not ready — delaying loadStrategies()");
-    setLoading(false);
-    return;
-  }
-
-  const timer = setTimeout(() => {
-    console.log("▶️ Token verified — loading strategies");
-    loadStrategies();
-  }, 300);
-
-  return () => clearTimeout(timer);
-}, []);
-
-
-  // -------------------------------------
-  // 🔥 Pause / Activate strategy
-  // -------------------------------------
+  // -------------------------------
+  // 🔥 Toggle strategy status
+  // -------------------------------
   const handleToggleStrategy = async (id: string, currentStatus: string) => {
     const token = getToken();
     if (!token) return;
@@ -156,7 +138,10 @@ const Strategies = () => {
         body: JSON.stringify({ id, status: newStatus }),
       });
 
-      if (!res.ok) throw new Error("Failed to update strategy");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to update strategy");
+      }
 
       toast({
         title: "Success",
@@ -164,24 +149,20 @@ const Strategies = () => {
       });
 
       loadStrategies();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error toggling strategy:", error);
       toast({
         title: "Error",
-        description: "Failed to update strategy",
+        description: error.message || "Failed to update strategy",
         variant: "destructive",
       });
     }
   };
 
-  // -------------------------------------
-  // 🔥 Create strategy from template
-  // -------------------------------------
-  const handleDeployTemplate = async (
-    templateName: string,
-    templateDescription: string,
-    templateRisk: string
-  ) => {
+  // -------------------------------
+  // 🔥 Deploy template strategy
+  // -------------------------------
+  const handleDeployTemplate = async (templateName: string, templateDescription: string, templateRisk: string) => {
     const token = getToken();
     if (!token) {
       toast({
@@ -232,9 +213,9 @@ const Strategies = () => {
     }
   };
 
-  // -------------------------------------
+  // -------------------------------
   // 🔥 Deploy AI suggestion
-  // -------------------------------------
+  // -------------------------------
   const handleDeployAISuggestion = async (suggestion: any) => {
     const token = getToken();
     if (!token) {
@@ -286,9 +267,9 @@ const Strategies = () => {
     }
   };
 
-  // -------------------------------------
-  // UI STARTS HERE
-  // -------------------------------------
+  // -------------------------------
+  // UI START
+  // -------------------------------
 
   return (
     <SidebarProvider>
@@ -311,6 +292,7 @@ const Strategies = () => {
               </Button>
             </div>
 
+            {/* Create Dialog */}
             <CreateStrategyDialog
               open={dialogOpen}
               onOpenChange={setDialogOpen}
@@ -378,7 +360,7 @@ const Strategies = () => {
               </CardContent>
             </Card>
 
-            {/* Main Tabs */}
+            {/* MAIN TABS */}
             <Tabs defaultValue="active">
               <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="active">Active Strategies</TabsTrigger>
@@ -419,9 +401,7 @@ const Strategies = () => {
                             size="sm"
                             variant="outline"
                             className="flex-1"
-                            onClick={() =>
-                              handleToggleStrategy(strategy.id, strategy.status)
-                            }
+                            onClick={() => handleToggleStrategy(strategy.id, strategy.status)}
                           >
                             {strategy.status === "active" ? (
                               <>
