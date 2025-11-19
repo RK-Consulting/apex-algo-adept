@@ -10,7 +10,7 @@ const log = debug("apex:icici:market");
 
 /**
  * GET /api/icici/market/ltp?symbol=RELIANCE&exchange=NSE
- * NOTE: Breeze has NO getLtp() — replace with getQuotes()
+ * NOTE: Breeze has NO getLtp() — using getQuotes()
  */
 router.get("/ltp", authenticateToken, async (req: AuthRequest, res) => {
   try {
@@ -21,7 +21,8 @@ router.get("/ltp", authenticateToken, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: "symbol is required" });
 
     const mapped = mapSymbolForBreeze(symbol);
-    const breeze = await getBreezeInstance(req.user!.id);
+
+    const breeze = await getBreezeInstance(req.user!.userId); // ✅ FIXED
 
     const quote = await breeze.getQuotes({
       stockCode: mapped.payload,
@@ -50,7 +51,8 @@ router.post("/ohlc", authenticateToken, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: "symbol is required" });
 
     const mapped = mapSymbolForBreeze(symbol);
-    const breeze = await getBreezeInstance(req.user!.id);
+
+    const breeze = await getBreezeInstance(req.user!.userId); // ✅ FIXED
 
     const ohlc = await breeze.getHistoricalDataV2({
       interval,
@@ -73,7 +75,6 @@ router.post("/ohlc", authenticateToken, async (req: AuthRequest, res) => {
 
 /**
  * GET /api/icici/market/quote?symbol=RELIANCE&exchange=NSE
- * NOTE: getQuote() does NOT exist → replaced with getQuotes()
  */
 router.get("/quote", authenticateToken, async (req: AuthRequest, res) => {
   try {
@@ -84,7 +85,8 @@ router.get("/quote", authenticateToken, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: "symbol is required" });
 
     const mapped = mapSymbolForBreeze(symbol);
-    const breeze = await getBreezeInstance(req.user!.id);
+
+    const breeze = await getBreezeInstance(req.user!.userId); // ✅ FIXED
 
     const quote = await breeze.getQuotes({
       stockCode: mapped.payload,
