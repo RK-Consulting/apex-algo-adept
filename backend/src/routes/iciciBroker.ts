@@ -57,7 +57,7 @@ function getEncryptionKey(): Buffer {
 // ----------------------------------------
 router.post('/store', authenticateToken, async (req: AuthRequest, res, next) => {
   try {
-    const userId = req.user!.userid;  // ✔ Correct
+    const userId = req.user!.userId;  // ✔ Correct
 
     const { broker_name, api_key, api_secret } = req.body;
 
