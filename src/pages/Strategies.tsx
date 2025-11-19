@@ -73,7 +73,7 @@ const Strategies = () => {
     if (!token) return;
 
     try {
-      const res = await fetch(`${backendUrl}/api/strategies`, {
+      const res = await fetch(`${backendUrl}/api/strategies/`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -129,7 +129,7 @@ const Strategies = () => {
     try {
       const newStatus = currentStatus === "active" ? "paused" : "active";
 
-      const res = await fetch(`${backendUrl}/api/strategies/toggle`, {
+      const res = await fetch(`${backendUrl}/api/strategies/toggle/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -176,7 +176,7 @@ const Strategies = () => {
     setGeneratingTemplate(templateName);
 
     try {
-      const res = await fetch(`${backendUrl}/api/strategies/generate`, {
+      const res = await fetch(`${backendUrl}/api/strategies/generate/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -230,7 +230,7 @@ const Strategies = () => {
     setGeneratingTemplate(suggestion.name);
 
     try {
-      const res = await fetch(`${backendUrl}/api/strategies/generate`, {
+      const res = await fetch(`${backendUrl}/api/strategies/generate/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
