@@ -37,8 +37,12 @@ const Login = () => {
       // **************************************
       // ✅ Save backend JWT CONSISTENTLY
       // **************************************
-      localStorage.setItem("authToken", data.token);
-      localStorage.setItem("token", data.token);
+      //localStorage.setItem("authToken", data.token);
+      //localStorage.setItem("token", data.token);
+      // ✅ FIX #2: Use authService for consistent token storage
+      if (data.token) {
+        authService.setToken(data.token);
+      }
 
       // Remove older key if created previously
       // localStorage.removeItem("token");
