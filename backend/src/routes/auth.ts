@@ -2,6 +2,7 @@
 import express from "express";
 import { loginUser, registerUser } from "../controllers/authController.js";
 import jwt from "jsonwebtoken";
+import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -9,7 +10,16 @@ const router = express.Router();
 router.post("/login", loginUser);
 router.post("/register", registerUser);
 
-// ADD: Verify JWT Token
+/**
+ * Verify JWT Token
+ *
+ * This endpoint returns a normalized payload that matches the middleware's
+ * normalization (userId + email). Use authenticateToken when you want a route
+ * that both verifies the token AND provides req.user to route handlers.
+ *
+ * Clients call this endpoint after login to confirm token validity and to read
+ * the canonical userId the backend uses everywhere.
+ */
 router.get("/verify", (req, res) => {
   const authHeader = req.headers.authorization;
 
@@ -21,20 +31,37 @@ router.get("/verify", (req, res) => {
   const secret = process.env.JWT_SECRET || "fallback-secret-change-in-prod";
 
   try {
-    // Verify token (same secret used in generateToken)
-    const decoded = jwt.verify(token, secret) as { userId: string; email: string; iat: number; exp: number };
+    // Verify token using the same secret used to sign it
+    const decoded = jwt.verify(token, secret) as {
+      userId?: string;
+      id?: string;
+      sub?: string;
+      email?: string;
+      iat?: number;
+      exp?: number;
+    };
 
-    // Token is valid → return minimal user info
-    res.json({
+    // Accept multiple possible token shapes, normalize to userId
+    const userId = decoded.userId || decoded.id || decoded.sub || null;
+    const email = decoded.email || "";
+
+    if (!userId) {
+      // token valid but payload missing user id — treat as invalid payload
+      return res.status(401).json({ error: "Invalid token payload" });
+    }
+
+    // Return a consistent shape expected by frontend and other routes:
+    // { valid: true, user: { userId, email } }
+    return res.json({
       valid: true,
       user: {
-        id: decoded.userId,
-        email: decoded.email,
+        userId,
+        email,
       },
     });
   } catch (err) {
     console.log("JWT verify failed:", err);
-    res.status(401).json({ error: "Invalid or expired token" });
+    return res.status(401).json({ error: "Invalid or expired token" });
   }
 });
 
