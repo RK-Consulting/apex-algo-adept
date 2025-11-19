@@ -12,6 +12,9 @@ const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 const MAX_PER_HOUR = Number(process.env.STRATEGY_RATE_LIMIT_PER_HOUR || 10);
 const RATE_WINDOW_MS = 60 * 60 * 1000;
 
+// -----------------------------------------------
+// Safe JSON extraction from LLM output
+// -----------------------------------------------
 function safeParseStrategyJson(rawText: string) {
   if (!rawText || typeof rawText !== "string") return { raw: rawText || "" };
 
@@ -25,10 +28,12 @@ function safeParseStrategyJson(rawText: string) {
       } catch {}
     }
   }
-
   return { raw: rawText };
 }
 
+// -----------------------------------------------
+// AI Gateway Wrapper
+// -----------------------------------------------
 async function callAiModel(payload: any, timeoutMs = 30_000) {
   const provider = (process.env.PREFERRED_AI_PROVIDER || "LOVABLE").toUpperCase();
   const controller = new AbortController();
@@ -56,39 +61,40 @@ async function callAiModel(payload: any, timeoutMs = 30_000) {
         json?.message?.content?.[0]?.text ||
         JSON.stringify(json)
       );
-    } else {
-      const API_KEY = process.env.LOVABLE_API_KEY;
-      if (!API_KEY) throw new Error("LOVABLE_API_KEY not configured");
-
-      const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        signal: controller.signal,
-        body: JSON.stringify(payload),
-      });
-
-      if (!resp.ok) {
-        const txt = await resp.text().catch(() => "");
-        throw new Error(`AI provider returned ${resp.status}: ${txt}`);
-      }
-
-      const json = await resp.json();
-      return json?.choices?.[0]?.message?.content || json?.choices?.[0]?.text || JSON.stringify(json);
     }
+
+    // LOVABLE provider
+    const API_KEY = process.env.LOVABLE_API_KEY;
+    if (!API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+
+    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      signal: controller.signal,
+      body: JSON.stringify(payload),
+    });
+
+    if (!resp.ok) {
+      const txt = await resp.text().catch(() => "");
+      throw new Error(`AI provider returned ${resp.status}: ${txt}`);
+    }
+
+    const json = await resp.json();
+    return json?.choices?.[0]?.message?.content || json?.choices?.[0]?.text || JSON.stringify(json);
   } finally {
     clearTimeout(id);
   }
 }
 
-/**
- * POST /api/strategies/generate
- */
+// =====================================================================
+// POST /api/strategies/generate
+// =====================================================================
 router.post("/generate", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
-    const userId = req.user!.userId; // ✅ FIXED
+    const userId = req.user!.userId; // 🔥 FINAL & CORRECT
 
     const { name, trading_style, capital_allocation, risk_level, description } = req.body ?? {};
 
@@ -103,6 +109,7 @@ router.post("/generate", authenticateToken, async (req: AuthRequest, res, next) 
 
     const risk = (risk_level || "medium").toString();
 
+    // Rate limit handling
     const now = Date.now();
     const entry = rateLimitMap.get(userId);
 
@@ -123,14 +130,15 @@ router.post("/generate", authenticateToken, async (req: AuthRequest, res, next) 
       {
         role: "system",
         content:
-          "You are an expert Indian equities and derivatives strategy designer. Respond with a single JSON object only when possible.",
+          "You are an expert Indian equities and derivatives strategy designer. Respond with a single JSON object only.",
       },
       {
         role: "user",
-        content: `Design a ${risk} risk ${trading_style} strategy...
+        content: `Design a ${risk} risk ${trading_style} strategy.
 Name: ${name}
 Capital: ₹${capital.toLocaleString("en-IN")}
-Description: ${description || "Not provided"}`,
+Description: ${description || "Not provided"}
+Return JSON only.`,
       },
     ];
 
@@ -154,12 +162,12 @@ Description: ${description || "Not provided"}`,
     const rawText = typeof raw === "string" ? raw : JSON.stringify(raw);
     const parsed = safeParseStrategyJson(rawText);
 
-    const strategyConfig: any = {
+    const strategyConfig = {
       name,
       description: description || parsed.description || parsed.raw || "",
       timeframe: parsed.timeframe || "1day",
-      entry_rules: parsed.entry_rules || parsed.entry_condition || [],
-      exit_rules: parsed.exit_rules || parsed.exit_condition || [],
+      entry_rules: parsed.entry_rules || [],
+      exit_rules: parsed.exit_rules || [],
       position_sizing: parsed.position_sizing || { type: "percent", value: 1 },
       risk_management: parsed.risk_management || {
         stop_loss: parsed.stop_loss || 1.5,
@@ -167,49 +175,50 @@ Description: ${description || "Not provided"}`,
       },
       recommended_instruments: parsed.recommended_instruments || [],
       expected_metrics: parsed.expected_metrics || {},
-      notes: parsed.notes || undefined,
+      notes: parsed.notes,
       _raw_ai_text: rawText.slice(0, 4000),
     };
 
-    const insertSql = `
+    const sql = `
       INSERT INTO strategies (
         user_id, name, description,
         entry_condition, exit_condition,
         risk_management, strategy_config,
         is_active, created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,true,NOW(),NOW())
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,true,NOW(),NOW())
       RETURNING *
     `;
 
-    const insertVals = [
+    const vals = [
       userId,
       strategyConfig.name,
       strategyConfig.description,
-      JSON.stringify(strategyConfig.entry_rules || {}),
-      JSON.stringify(strategyConfig.exit_rules || {}),
-      JSON.stringify(strategyConfig.risk_management || {}),
+      JSON.stringify(strategyConfig.entry_rules),
+      JSON.stringify(strategyConfig.exit_rules),
+      JSON.stringify(strategyConfig.risk_management),
       JSON.stringify(strategyConfig),
     ];
 
-    const result = await query(insertSql, insertVals);
+    const result = await query(sql, vals);
 
     return res.json({
       success: true,
       message: "Strategy generated and saved successfully.",
-      strategy: result.rows?.[0] ?? null,
+      strategy: result.rows?.[0] || null,
     });
   } catch (err) {
     log("Strategy generation error:", err);
-    return next(err);
+    next(err);
   }
 });
 
-/**
- * GET /api/strategies
- */
+// =====================================================================
+// GET /api/strategies
+// =====================================================================
 router.get("/", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
-    const userId = req.user!.userId; // ✅ FIXED
+    const userId = req.user!.userId;
 
     const { rows } = await query(
       "SELECT * FROM strategies WHERE user_id = $1 ORDER BY created_at DESC",
@@ -219,16 +228,16 @@ router.get("/", authenticateToken, async (req: AuthRequest, res, next) => {
     return res.json({ success: true, strategies: rows });
   } catch (err) {
     log("Fetch strategies error:", err);
-    return next(err);
+    next(err);
   }
 });
 
-/**
- * GET /api/strategies/:id
- */
+// =====================================================================
+// GET /api/strategies/:id
+// =====================================================================
 router.get("/:id", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
-    const userId = req.user!.userId; // ✅ FIXED
+    const userId = req.user!.userId;
     const { id } = req.params;
 
     const { rows } = await query(
@@ -242,16 +251,16 @@ router.get("/:id", authenticateToken, async (req: AuthRequest, res, next) => {
     return res.json({ success: true, strategy: rows[0] });
   } catch (err) {
     log("Get strategy error:", err);
-    return next(err);
+    next(err);
   }
 });
 
-/**
- * PUT /api/strategies/:id
- */
+// =====================================================================
+// PUT /api/strategies/:id
+// =====================================================================
 router.put("/:id", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
-    const userId = req.user!.userId; // ✅ FIXED
+    const userId = req.user!.userId;
     const { id } = req.params;
     const updates = req.body ?? {};
 
@@ -271,6 +280,7 @@ router.put("/:id", authenticateToken, async (req: AuthRequest, res, next) => {
 
     for (const [key, value] of Object.entries(updates)) {
       if (!allowed.includes(key)) continue;
+
       fields.push(`${key} = $${i}`);
       values.push(typeof value === "object" ? JSON.stringify(value) : value);
       i++;
@@ -290,22 +300,22 @@ router.put("/:id", authenticateToken, async (req: AuthRequest, res, next) => {
 
     const { rows } = await query(sql, values);
 
-    if (rows.length === 0)
+    if (!rows.length)
       return res.status(404).json({ error: "Strategy not found" });
 
     return res.json({ success: true, strategy: rows[0] });
   } catch (err) {
     log("Update strategy error:", err);
-    return next(err);
+    next(err);
   }
 });
 
-/**
- * DELETE /api/strategies/:id
- */
+// =====================================================================
+// DELETE /api/strategies/:id
+// =====================================================================
 router.delete("/:id", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
-    const userId = req.user!.userId; // ✅ FIXED
+    const userId = req.user!.userId;
     const { id } = req.params;
 
     const { rows } = await query(
@@ -313,13 +323,16 @@ router.delete("/:id", authenticateToken, async (req: AuthRequest, res, next) => 
       [id, userId]
     );
 
-    if (rows.length === 0)
+    if (!rows.length)
       return res.status(404).json({ error: "Strategy not found" });
 
-    return res.json({ success: true, message: "Strategy deleted successfully." });
+    return res.json({
+      success: true,
+      message: "Strategy deleted successfully.",
+    });
   } catch (err) {
     log("Delete strategy error:", err);
-    return next(err);
+    next(err);
   }
 });
 
