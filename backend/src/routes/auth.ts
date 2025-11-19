@@ -1,5 +1,4 @@
 // backend/src/routes/auth.ts
-// backend/src/routes/auth.ts
 import express from "express";
 import { loginUser, registerUser } from "../controllers/authController.js";
 import jwt from "jsonwebtoken";
