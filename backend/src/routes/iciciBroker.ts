@@ -1,180 +1,162 @@
-// src/routes/iciciBroker.ts
-import { Router } from "express";
-import { authenticateToken, AuthRequest } from "../middleware/auth.js";
-import { query } from "../config/database.js";
-import { getBreezeInstance, invalidateBreezeInstance } from "../utils/breezeSession.js";
-import { mapSymbolForBreeze } from "../utils/symbolMapper.js";
-import debug from "debug";
+// backend/src/routes/credentials.ts
+import { Router } from 'express';
+import { authenticateToken, AuthRequest } from '../middleware/auth.js';
+import { query } from '../config/database.js';
+import crypto from 'crypto';
 
-const log = debug("apex:icici:broker");
 const router = Router();
 
-/* --------------------------------------------------------------
-   POST /api/icici/connect
-   Save user's ICICI credentials in database
--------------------------------------------------------------- */
-router.post("/connect", authenticateToken, async (req: AuthRequest, res) => {
-  try {
-    const { api_key, api_secret, session_token, refresh_token } = req.body;
+// Encryption utilities
+async function encryptData(data: string, key: Buffer): Promise<{ encrypted: string; iv: string }> {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
 
-    if (!api_key || !api_secret || !session_token) {
-      return res.status(400).json({ error: "api_key, api_secret, session_token required" });
-    }
+  let encrypted = cipher.update(data, 'utf8', 'base64');
+  encrypted += cipher.final('base64');
+  const authTag = cipher.getAuthTag();
 
-    await query(
-      `INSERT INTO user_credentials 
-       (user_id, icici_api_key, icici_api_secret, icici_session_token, refresh_token, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,NOW(),NOW())
-       ON CONFLICT (user_id)
-       DO UPDATE SET 
-         icici_api_key = EXCLUDED.icici_api_key,
-         icici_api_secret = EXCLUDED.icici_api_secret,
-         icici_session_token = EXCLUDED.icici_session_token,
-         refresh_token = EXCLUDED.refresh_token,
-         updated_at = NOW()`,
-      [req.user!.id, api_key, api_secret, session_token, refresh_token || null]
-    );
+  return {
+    encrypted: encrypted + authTag.toString('base64'),
+    iv: iv.toString('base64')
+  };
+}
 
-    // Clear cached Breeze instance for user
-    invalidateBreezeInstance(req.user!.id);
+async function decryptData(encryptedData: string, iv: string, key: Buffer): Promise<string> {
+  const ivBuffer = Buffer.from(iv, 'base64');
+  const encryptedBuffer = Buffer.from(encryptedData, 'base64');
 
-    return res.json({ success: true, message: "ICICI credentials saved." });
-  } catch (err: any) {
-    log("ICICI Connect Error:", err);
-    return res.status(500).json({ error: "ICICI connect failed", details: err.message });
+  const authTag = encryptedBuffer.slice(-16);
+  const encrypted = encryptedBuffer.slice(0, -16);
+
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, ivBuffer);
+  decipher.setAuthTag(authTag);
+
+  let decrypted = decipher.update(encrypted.toString('base64'), 'base64', 'utf8');
+  decrypted += decipher.final('utf8');
+
+  return decrypted;
+}
+
+function getEncryptionKey(): Buffer {
+  const masterSecret = process.env.CREDENTIALS_ENCRYPTION_KEY;
+  if (!masterSecret) {
+    throw new Error('CREDENTIALS_ENCRYPTION_KEY not configured');
   }
-});
 
-/* --------------------------------------------------------------
-   GET /api/icici/funds
--------------------------------------------------------------- */
-router.get("/funds", authenticateToken, async (req: AuthRequest, res) => {
+  return crypto.pbkdf2Sync(
+    masterSecret,
+    'alphaforge-credentials-v1',
+    100000,
+    32,
+    'sha256'
+  );
+}
+
+// ----------------------------------------
+// POST /api/credentials/store
+// ----------------------------------------
+router.post('/store', authenticateToken, async (req: AuthRequest, res, next) => {
   try {
-    const breeze = await getBreezeInstance(req.user!.id);
-    const funds = await breeze.getFunds();
-    return res.json({ success: true, funds });
-  } catch (err: any) {
-    log("Funds Fetch Error:", err);
-    return res.status(500).json({ error: "Unable to fetch funds", details: err.message });
-  }
-});
+    const userId = req.user!.userId;   // ✅ FIXED (was req.user!.id)
+    const { broker_name, api_key, api_secret } = req.body;
 
-/* --------------------------------------------------------------
-   GET /api/icici/portfolio
--------------------------------------------------------------- */
-router.get("/portfolio", authenticateToken, async (req: AuthRequest, res) => {
-  try {
-    const breeze = await getBreezeInstance(req.user!.id);
-
-    // Correct Portfolio API
-    const holdings = await breeze.getPortfolioHoldings("NSE");
-
-    return res.json({ success: true, holdings });
-  } catch (err: any) {
-    log("Portfolio Error:", err);
-    return res.status(500).json({ error: "Unable to fetch portfolio", details: err.message });
-  }
-});
-
-/* --------------------------------------------------------------
-   POST /api/icici/order
-   Place an order
--------------------------------------------------------------- */
-router.post("/order", authenticateToken, async (req: AuthRequest, res) => {
-  try {
-    const breeze = await getBreezeInstance(req.user!.id);
-
-    const {
-      stockCode,
-      exchangeCode = "NSE",
-      productType = "cash",
-      action = "buy",
-      orderType = "market",
-      quantity = "1",
-      price = "",
-      validity = "day",
-    } = req.body;
-
-    if (!stockCode) {
-      return res.status(400).json({ error: "stockCode is required" });
-    }
-
-    const mapped = mapSymbolForBreeze(stockCode);
-
-    const payload: any = {
-      stockCode: mapped.payload,
-      exchangeCode,
-      productType,
-      action,
-      orderType,
-      quantity: String(quantity),
-      validity,
-    };
-
-    if (price) payload.price = String(price);
-
-    log("Order Payload:", payload);
-
-    const response = await breeze.placeOrder(payload);
-
-    return res.json({ success: true, order: response });
-  } catch (err: any) {
-    log("Order Error:", err);
-    return res.status(500).json({ error: "Order failed", details: err.message });
-  }
-});
-
-/* --------------------------------------------------------------
-   DELETE /api/icici/order/:orderId
--------------------------------------------------------------- */
-router.delete("/order/:orderId", authenticateToken, async (req: AuthRequest, res) => {
-  try {
-    const breeze = await getBreezeInstance(req.user!.id);
-    const response = await breeze.cancelOrder({ orderId: req.params.orderId });
-    return res.json({ success: true, response });
-  } catch (err: any) {
-    log("Cancel Order Error:", err);
-    return res.status(500).json({ error: "Cancel order failed", details: err.message });
-  }
-});
-
-/* --------------------------------------------------------------
-   GET /api/icici/quote/:symbol
--------------------------------------------------------------- */
-router.get("/quote/:symbol", authenticateToken, async (req: AuthRequest, res) => {
-  try {
-    const symbol = req.params.symbol;
-    const mapped = mapSymbolForBreeze(symbol);
-    const breeze = await getBreezeInstance(req.user!.id);
-
-    let quote;
-
-    if (mapped.type === "index") {
-      // NIFTY, BANKNIFTY, SENSEX:
-      if (typeof (breeze as any).getIndexQuotes === "function") {
-        quote = await (breeze as any).getIndexQuotes({ index: mapped.payload });
-      } else {
-        // fallback (older SDK)
-        quote = await breeze.getQuotes({
-          stockCode: mapped.payload,
-          exchangeCode: "NSE",
-          productType: "cash",
-        });
-      }
-    } else {
-      // Stock quote
-      quote = await breeze.getQuotes({
-        stockCode: mapped.payload,
-        exchangeCode: "NSE",
-        productType: "cash",
+    if (!broker_name || !api_key) {
+      return res.status(400).json({
+        error: 'Missing required fields: broker_name and api_key are required'
       });
     }
 
-    return res.json({ success: true, quote });
-  } catch (err: any) {
-    log("Quote Error:", err);
-    return res.status(500).json({ error: "Quote fetch failed", details: err.message });
+    const encryptionKey = getEncryptionKey();
+
+    const encryptedApiKey = await encryptData(api_key, encryptionKey);
+    const encryptedApiSecret = api_secret
+      ? await encryptData(api_secret, encryptionKey)
+      : null;
+
+    const existing = await query(
+      'SELECT id FROM user_credentials WHERE user_id = $1 AND broker_name = $2',
+      [userId, broker_name]
+    );
+
+    let result;
+    if (existing.rows.length > 0) {
+      result = await query(
+        `UPDATE user_credentials 
+         SET api_key = $1, api_secret = $2, updated_at = NOW()
+         WHERE user_id = $3 AND broker_name = $4
+         RETURNING id`,
+        [
+          JSON.stringify(encryptedApiKey),
+          encryptedApiSecret ? JSON.stringify(encryptedApiSecret) : null,
+          userId,
+          broker_name
+        ]
+      );
+    } else {
+      result = await query(
+        `INSERT INTO user_credentials (user_id, broker_name, api_key, api_secret)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id`,
+        [
+          userId,
+          broker_name,
+          JSON.stringify(encryptedApiKey),
+          encryptedApiSecret ? JSON.stringify(encryptedApiSecret) : null
+        ]
+      );
+    }
+
+    res.json({
+      success: true,
+      message: 'Credentials securely stored',
+      credential_id: result.rows[0].id
+    });
+  } catch (error) {
+    next(error);
   }
 });
 
-export { router as iciciBrokerRouter };
+// ----------------------------------------
+// POST /api/credentials/retrieve
+// ----------------------------------------
+router.post('/retrieve', authenticateToken, async (req: AuthRequest, res, next) => {
+  try {
+    const userId = req.user!.userId;   // ✅ FIXED
+    const { broker_name } = req.body;
+
+    if (!broker_name) {
+      return res.status(400).json({ error: 'Missing required field: broker_name' });
+    }
+
+    const result = await query(
+      'SELECT api_key, api_secret, broker_name FROM user_credentials WHERE user_id = $1 AND broker_name = $2',
+      [userId, broker_name]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Credentials not found' });
+    }
+
+    const credentials = result.rows[0];
+    const encryptionKey = getEncryptionKey();
+
+    const apiKeyData = JSON.parse(credentials.api_key);
+    const decryptedApiKey = await decryptData(apiKeyData.encrypted, apiKeyData.iv, encryptionKey);
+
+    let decryptedApiSecret = null;
+    if (credentials.api_secret) {
+      const apiSecretData = JSON.parse(credentials.api_secret);
+      decryptedApiSecret = await decryptData(apiSecretData.encrypted, apiSecretData.iv, encryptionKey);
+    }
+
+    res.json({
+      broker_name: credentials.broker_name,
+      api_key: decryptedApiKey,
+      api_secret: decryptedApiSecret
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+export { router as credentialsRouter };
