@@ -24,7 +24,8 @@ export function Watchlist() {
         
         const quotes = await Promise.allSettled(
           defaultWatchlist.map(async (symbol) => {
-            const response = await fetch(`${backendUrl}/api/icici/quote/${symbol}`, {
+            //const response = await fetch(`${backendUrl}/api/icici/quote/${symbol}`, {
+            const res = await fetch(`${backendUrl}/api/icici/market/quote?symbol=${symbolInfo.symbol}`, {
               headers: { "Authorization": `Bearer ${token}` },
             });
             
