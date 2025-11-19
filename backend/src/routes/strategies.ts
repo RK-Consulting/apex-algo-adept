@@ -8,40 +8,27 @@ const router = Router();
 const log = debug("apex:routes:strategies");
 
 // In-memory per-user rate limiter
-// { count, resetTime }
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 const MAX_PER_HOUR = Number(process.env.STRATEGY_RATE_LIMIT_PER_HOUR || 10);
 const RATE_WINDOW_MS = 60 * 60 * 1000;
 
-/**
- * Helper: safe JSON extraction from LLM raw text
- * Finds the first JSON object in text and parses it; otherwise returns an object wrapper.
- */
 function safeParseStrategyJson(rawText: string) {
   if (!rawText || typeof rawText !== "string") return { raw: rawText || "" };
 
-  // try direct parse
   try {
     return JSON.parse(rawText);
   } catch {
-    // try to extract first {...}
     const m = rawText.match(/\{[\s\S]*\}/);
     if (m) {
       try {
         return JSON.parse(m[0]);
-      } catch {
-        // fallthrough
-      }
+      } catch {}
     }
   }
 
-  // fallback: return raw text
   return { raw: rawText };
 }
 
-/**
- * Helper: call AI provider (LOVABLE or GEMINI). Respects timeout.
- */
 async function callAiModel(payload: any, timeoutMs = 30_000) {
   const provider = (process.env.PREFERRED_AI_PROVIDER || "LOVABLE").toUpperCase();
   const controller = new AbortController();
@@ -52,7 +39,6 @@ async function callAiModel(payload: any, timeoutMs = 30_000) {
       const API_KEY = process.env.GEMINI_API_KEY;
       if (!API_KEY) throw new Error("GEMINI_API_KEY not configured");
 
-      // Example: Gemini request shape may vary; this uses a common chat completion shape.
       const resp = await fetch("https://api.generative.google/v1beta2/models/gemini-2.5-chat:generate", {
         method: "POST",
         headers: {
@@ -64,16 +50,13 @@ async function callAiModel(payload: any, timeoutMs = 30_000) {
       });
 
       const json = await resp.json();
-      // Adapt to Gemini response shape:
-      // Try to get the message text from several possible fields
-      const content =
+      return (
         json?.candidates?.[0]?.content?.[0]?.text ||
         json?.outputs?.[0]?.content?.[0]?.text ||
         json?.message?.content?.[0]?.text ||
-        JSON.stringify(json);
-      return content;
+        JSON.stringify(json)
+      );
     } else {
-      // default: LOVABLE gateway (compatible with earlier code)
       const API_KEY = process.env.LOVABLE_API_KEY;
       if (!API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
@@ -93,9 +76,7 @@ async function callAiModel(payload: any, timeoutMs = 30_000) {
       }
 
       const json = await resp.json();
-      // common LOVABLE/Chat-style response:
-      const content = json?.choices?.[0]?.message?.content || json?.choices?.[0]?.text || JSON.stringify(json);
-      return content;
+      return json?.choices?.[0]?.message?.content || json?.choices?.[0]?.text || JSON.stringify(json);
     }
   } finally {
     clearTimeout(id);
@@ -107,10 +88,10 @@ async function callAiModel(payload: any, timeoutMs = 30_000) {
  */
 router.post("/generate", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
-    const userId = req.user!.id;
+    const userId = req.user!.userId; // ✅ FIXED
+
     const { name, trading_style, capital_allocation, risk_level, description } = req.body ?? {};
 
-    // Basic validation
     if (!name || !trading_style) {
       return res.status(400).json({ error: "name and trading_style are required" });
     }
@@ -122,110 +103,81 @@ router.post("/generate", authenticateToken, async (req: AuthRequest, res, next) 
 
     const risk = (risk_level || "medium").toString();
 
-    // RATE LIMIT check
     const now = Date.now();
     const entry = rateLimitMap.get(userId);
+
     if (entry && now < entry.resetTime && entry.count >= MAX_PER_HOUR) {
       const ttlSec = Math.ceil((entry.resetTime - now) / 1000);
-      res.setHeader("X-RateLimit-Limit", String(MAX_PER_HOUR));
-      res.setHeader("X-RateLimit-Remaining", "0");
-      res.setHeader("X-RateLimit-Reset", String(Math.floor(entry.resetTime / 1000)));
-      return res.status(429).json({ error: `Rate limit exceeded — max ${MAX_PER_HOUR} strategy generations per hour. Try again in ${ttlSec}s.` });
+      return res.status(429).json({
+        error: `Rate limit exceeded — max ${MAX_PER_HOUR} per hour. Try again in ${ttlSec}s.`,
+      });
     }
+
     if (!entry || now > entry.resetTime) {
       rateLimitMap.set(userId, { count: 1, resetTime: now + RATE_WINDOW_MS });
     } else {
       entry.count++;
     }
 
-    // Build LLM prompt / payload (keeps concise and structured)
     const modelPrompt = [
       {
         role: "system",
-        content: "You are an expert Indian equities and derivatives strategy designer. Respond with a single JSON object only when possible.",
+        content:
+          "You are an expert Indian equities and derivatives strategy designer. Respond with a single JSON object only when possible.",
       },
       {
         role: "user",
-        content: `Design a ${risk} risk ${trading_style} strategy for Indian markets.
+        content: `Design a ${risk} risk ${trading_style} strategy...
 Name: ${name}
 Capital: ₹${capital.toLocaleString("en-IN")}
-Description: ${description || "Not provided"}
-
-Return a JSON object with keys:
-- name (string)
-- description (string)
-- timeframe (e.g. "1day", "1h", "5m")
-- entry_rules (array of human-readable rules)
-- exit_rules (array of human-readable rules)
-- position_sizing (object, e.g. { type: "percent", value: 2 })
-- risk_management (object, include stop_loss %, take_profit %)
-- recommended_instruments (array e.g. ["NIFTY", "BANKNIFTY", "RELIANCE"])
-- expected_metrics (object, e.g. { win_rate: "X%", expectancy: "Y" })
-
-Minimize commentary; if you must add text, include a 'notes' property.`
-      }
+Description: ${description || "Not provided"}`,
+      },
     ];
 
-    // Prepare provider-specific payload
     const provider = (process.env.PREFERRED_AI_PROVIDER || "LOVABLE").toUpperCase();
-    let aiPayload: any;
-    if (provider === "GEMINI") {
-      aiPayload = {
-        // minimal Gemini generate-compatible payload (adapt if your Gemini integration uses another endpoint)
-        model: process.env.GEMINI_MODEL || "gemini-2.5",
-        // Gemini expects "messages" or "prompt" depending on wrapper; using messages style here
-        messages: modelPrompt,
-        temperature: Number(process.env.AI_TEMPERATURE || 0.2),
-        max_output_tokens: Number(process.env.AI_MAX_TOKENS || 1024),
-      };
-    } else {
-      aiPayload = {
-        model: process.env.LOVABLE_MODEL || "google/gemini-2.5-flash",
-        messages: modelPrompt,
-        temperature: Number(process.env.AI_TEMPERATURE || 0.2),
-        max_tokens: Number(process.env.AI_MAX_TOKENS || 1024),
-      };
-    }
+    const aiPayload =
+      provider === "GEMINI"
+        ? {
+            model: process.env.GEMINI_MODEL || "gemini-2.5",
+            messages: modelPrompt,
+            temperature: Number(process.env.AI_TEMPERATURE || 0.2),
+            max_output_tokens: Number(process.env.AI_MAX_TOKENS || 1024),
+          }
+        : {
+            model: process.env.LOVABLE_MODEL || "google/gemini-2.5-flash",
+            messages: modelPrompt,
+            temperature: Number(process.env.AI_TEMPERATURE || 0.2),
+            max_tokens: Number(process.env.AI_MAX_TOKENS || 1024),
+          };
 
-    // Call AI provider
-    const raw = await callAiModel(aiPayload, Number(process.env.AI_TIMEOUT_MS || 30_000));
-
-    // raw may be text or object; coerce to string
+    const raw = await callAiModel(aiPayload);
     const rawText = typeof raw === "string" ? raw : JSON.stringify(raw);
-
-    // Parse JSON out of rawText safely
     const parsed = safeParseStrategyJson(rawText);
 
-    // Build strategy_config canonical object (merge user fields)
     const strategyConfig: any = {
       name,
       description: description || parsed.description || parsed.raw || "",
       timeframe: parsed.timeframe || "1day",
       entry_rules: parsed.entry_rules || parsed.entry_condition || [],
       exit_rules: parsed.exit_rules || parsed.exit_condition || [],
-      position_sizing: parsed.position_sizing || parsed.position_size || { type: "percent", value: 1 },
-      risk_management: parsed.risk_management || { stop_loss: parsed.stop_loss || 1.5, take_profit: parsed.take_profit || 3.0 },
-      recommended_instruments: parsed.recommended_instruments || parsed.instruments || [],
+      position_sizing: parsed.position_sizing || { type: "percent", value: 1 },
+      risk_management: parsed.risk_management || {
+        stop_loss: parsed.stop_loss || 1.5,
+        take_profit: parsed.take_profit || 3.0,
+      },
+      recommended_instruments: parsed.recommended_instruments || [],
       expected_metrics: parsed.expected_metrics || {},
       notes: parsed.notes || undefined,
-      _raw_ai_text: rawText.slice(0, 4000), // truncated raw text for audit
+      _raw_ai_text: rawText.slice(0, 4000),
     };
 
-    // Insert into DB:
-    // Keep backward-compatible columns (entry_condition, exit_condition, risk_management) AND store strategy_config
     const insertSql = `
       INSERT INTO strategies (
-        user_id,
-        name,
-        description,
-        entry_condition,
-        exit_condition,
-        risk_management,
-        strategy_config,
-        is_active,
-        created_at,
-        updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7, true, NOW(), NOW())
+        user_id, name, description,
+        entry_condition, exit_condition,
+        risk_management, strategy_config,
+        is_active, created_at, updated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,true,NOW(),NOW())
       RETURNING *
     `;
 
@@ -246,12 +198,8 @@ Minimize commentary; if you must add text, include a 'notes' property.`
       message: "Strategy generated and saved successfully.",
       strategy: result.rows?.[0] ?? null,
     });
-  } catch (err: any) {
+  } catch (err) {
     log("Strategy generation error:", err);
-    // In case of a rate-limit or AI provider error, bubble appropriate status
-    if (err?.name === "AbortError") {
-      return res.status(504).json({ error: "AI provider timeout" });
-    }
     return next(err);
   }
 });
@@ -261,8 +209,13 @@ Minimize commentary; if you must add text, include a 'notes' property.`
  */
 router.get("/", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
-    const userId = req.user!.id;
-    const { rows } = await query("SELECT * FROM strategies WHERE user_id = $1 ORDER BY created_at DESC", [userId]);
+    const userId = req.user!.userId; // ✅ FIXED
+
+    const { rows } = await query(
+      "SELECT * FROM strategies WHERE user_id = $1 ORDER BY created_at DESC",
+      [userId]
+    );
+
     return res.json({ success: true, strategies: rows });
   } catch (err) {
     log("Fetch strategies error:", err);
@@ -275,10 +228,17 @@ router.get("/", authenticateToken, async (req: AuthRequest, res, next) => {
  */
 router.get("/:id", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
-    const userId = req.user!.id;
+    const userId = req.user!.userId; // ✅ FIXED
     const { id } = req.params;
-    const { rows } = await query("SELECT * FROM strategies WHERE id = $1 AND user_id = $2", [id, userId]);
-    if (rows.length === 0) return res.status(404).json({ error: "Strategy not found" });
+
+    const { rows } = await query(
+      "SELECT * FROM strategies WHERE id = $1 AND user_id = $2",
+      [id, userId]
+    );
+
+    if (rows.length === 0)
+      return res.status(404).json({ error: "Strategy not found" });
+
     return res.json({ success: true, strategy: rows[0] });
   } catch (err) {
     log("Get strategy error:", err);
@@ -291,11 +251,20 @@ router.get("/:id", authenticateToken, async (req: AuthRequest, res, next) => {
  */
 router.put("/:id", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
-    const userId = req.user!.id;
+    const userId = req.user!.userId; // ✅ FIXED
     const { id } = req.params;
     const updates = req.body ?? {};
 
-    const allowed = ["name", "description", "is_active", "entry_condition", "exit_condition", "risk_management", "strategy_config"];
+    const allowed = [
+      "name",
+      "description",
+      "is_active",
+      "entry_condition",
+      "exit_condition",
+      "risk_management",
+      "strategy_config",
+    ];
+
     const fields: string[] = [];
     const values: any[] = [];
     let i = 1;
@@ -307,7 +276,8 @@ router.put("/:id", authenticateToken, async (req: AuthRequest, res, next) => {
       i++;
     }
 
-    if (fields.length === 0) return res.status(400).json({ error: "No valid fields to update" });
+    if (fields.length === 0)
+      return res.status(400).json({ error: "No valid fields to update" });
 
     values.push(id, userId);
 
@@ -319,7 +289,10 @@ router.put("/:id", authenticateToken, async (req: AuthRequest, res, next) => {
     `;
 
     const { rows } = await query(sql, values);
-    if (rows.length === 0) return res.status(404).json({ error: "Strategy not found" });
+
+    if (rows.length === 0)
+      return res.status(404).json({ error: "Strategy not found" });
+
     return res.json({ success: true, strategy: rows[0] });
   } catch (err) {
     log("Update strategy error:", err);
@@ -332,10 +305,17 @@ router.put("/:id", authenticateToken, async (req: AuthRequest, res, next) => {
  */
 router.delete("/:id", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
-    const userId = req.user!.id;
+    const userId = req.user!.userId; // ✅ FIXED
     const { id } = req.params;
-    const { rows } = await query("DELETE FROM strategies WHERE id = $1 AND user_id = $2 RETURNING id", [id, userId]);
-    if (rows.length === 0) return res.status(404).json({ error: "Strategy not found" });
+
+    const { rows } = await query(
+      "DELETE FROM strategies WHERE id = $1 AND user_id = $2 RETURNING id",
+      [id, userId]
+    );
+
+    if (rows.length === 0)
+      return res.status(404).json({ error: "Strategy not found" });
+
     return res.json({ success: true, message: "Strategy deleted successfully." });
   } catch (err) {
     log("Delete strategy error:", err);
