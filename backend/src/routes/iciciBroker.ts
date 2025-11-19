@@ -17,7 +17,7 @@ async function encryptData(data: string, key: Buffer): Promise<{ encrypted: stri
 
   return {
     encrypted: encrypted + authTag.toString('base64'),
-    iv: iv.toString('base64')
+    iv: iv.toString('base64'),
   };
 }
 
@@ -48,7 +48,7 @@ function getEncryptionKey(): Buffer {
     'alphaforge-credentials-v1',
     100000,
     32,
-    'sha256'
+    'sha256',
   );
 }
 
@@ -57,12 +57,13 @@ function getEncryptionKey(): Buffer {
 // ----------------------------------------
 router.post('/store', authenticateToken, async (req: AuthRequest, res, next) => {
   try {
-    const userId = req.user!.userId;   // ✅ FIXED (was req.user!.id)
+    const userId = req.user!.id; // ✅ Correct field
+
     const { broker_name, api_key, api_secret } = req.body;
 
     if (!broker_name || !api_key) {
       return res.status(400).json({
-        error: 'Missing required fields: broker_name and api_key are required'
+        error: 'Missing required fields: broker_name and api_key are required',
       });
     }
 
@@ -75,7 +76,7 @@ router.post('/store', authenticateToken, async (req: AuthRequest, res, next) => 
 
     const existing = await query(
       'SELECT id FROM user_credentials WHERE user_id = $1 AND broker_name = $2',
-      [userId, broker_name]
+      [userId, broker_name],
     );
 
     let result;
@@ -89,8 +90,8 @@ router.post('/store', authenticateToken, async (req: AuthRequest, res, next) => 
           JSON.stringify(encryptedApiKey),
           encryptedApiSecret ? JSON.stringify(encryptedApiSecret) : null,
           userId,
-          broker_name
-        ]
+          broker_name,
+        ],
       );
     } else {
       result = await query(
@@ -101,15 +102,15 @@ router.post('/store', authenticateToken, async (req: AuthRequest, res, next) => 
           userId,
           broker_name,
           JSON.stringify(encryptedApiKey),
-          encryptedApiSecret ? JSON.stringify(encryptedApiSecret) : null
-        ]
+          encryptedApiSecret ? JSON.stringify(encryptedApiSecret) : null,
+        ],
       );
     }
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Credentials securely stored',
-      credential_id: result.rows[0].id
+      credential_id: result.rows[0].id,
     });
   } catch (error) {
     next(error);
@@ -121,7 +122,8 @@ router.post('/store', authenticateToken, async (req: AuthRequest, res, next) => 
 // ----------------------------------------
 router.post('/retrieve', authenticateToken, async (req: AuthRequest, res, next) => {
   try {
-    const userId = req.user!.userId;   // ✅ FIXED
+    const userId = req.user!.id; // ✅ Correct field
+
     const { broker_name } = req.body;
 
     if (!broker_name) {
@@ -130,7 +132,7 @@ router.post('/retrieve', authenticateToken, async (req: AuthRequest, res, next) 
 
     const result = await query(
       'SELECT api_key, api_secret, broker_name FROM user_credentials WHERE user_id = $1 AND broker_name = $2',
-      [userId, broker_name]
+      [userId, broker_name],
     );
 
     if (result.rows.length === 0) {
@@ -149,14 +151,17 @@ router.post('/retrieve', authenticateToken, async (req: AuthRequest, res, next) 
       decryptedApiSecret = await decryptData(apiSecretData.encrypted, apiSecretData.iv, encryptionKey);
     }
 
-    res.json({
+    return res.json({
       broker_name: credentials.broker_name,
       api_key: decryptedApiKey,
-      api_secret: decryptedApiSecret
+      api_secret: decryptedApiSecret,
     });
   } catch (error) {
     next(error);
   }
 });
 
-export { router as credentialsRouter };
+// ----------------------------------------
+// EXPORT ROUTER (missing earlier)
+// ----------------------------------------
+export { router as iciciBrokerRouter };
