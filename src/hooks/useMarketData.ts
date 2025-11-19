@@ -18,8 +18,9 @@ export const useMarketData = (symbols: { symbol: string; exchange: string }[]) =
         
         const quotes = await Promise.allSettled(
           symbols.map(async (symbolInfo) => {
-            const response = await fetch(`${backendUrl}/api/icici/quote/${symbolInfo.symbol}`, {
-              headers: { "Authorization": `Bearer ${token}` },
+            //const response = await fetch(`${backendUrl}/api/icici/quote/${symbolInfo.symbol}`, 
+            const response = await fetch(`${backendUrl}/api/icici/market/quote?symbol=${symbolInfo.symbol}`, {
+                             headers: { "Authorization": `Bearer ${token}` },
             });
             
             if (!response.ok) throw new Error(`Failed to fetch ${symbolInfo.symbol}`);
