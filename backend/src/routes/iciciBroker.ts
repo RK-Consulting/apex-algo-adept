@@ -122,7 +122,7 @@ router.post('/store', authenticateToken, async (req: AuthRequest, res, next) => 
 // ----------------------------------------
 router.post('/retrieve', authenticateToken, async (req: AuthRequest, res, next) => {
   try {
-    const userId = req.user!.userid;  // ✔ Correct
+    const userId = req.user!.userId;  // ✔ Correct
 
     const { broker_name } = req.body;
 
