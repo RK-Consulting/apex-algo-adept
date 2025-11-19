@@ -1,3 +1,4 @@
+// backend/src/routes/credentials.ts
 import { Router } from 'express';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
 import { query } from '../config/database.js';
@@ -9,31 +10,30 @@ const router = Router();
 async function encryptData(data: string, key: Buffer): Promise<{ encrypted: string; iv: string }> {
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-  
+
   let encrypted = cipher.update(data, 'utf8', 'base64');
   encrypted += cipher.final('base64');
   const authTag = cipher.getAuthTag();
-  
+
   return {
     encrypted: encrypted + authTag.toString('base64'),
-    iv: iv.toString('base64')
+    iv: iv.toString('base64'),
   };
 }
 
 async function decryptData(encryptedData: string, iv: string, key: Buffer): Promise<string> {
   const ivBuffer = Buffer.from(iv, 'base64');
   const encryptedBuffer = Buffer.from(encryptedData, 'base64');
-  
-  // Last 16 bytes are the auth tag
-  const authTag = encryptedBuffer.slice(-16);
+
+  const authTag = encryptedBuffer.slice(-16); // Last 16 bytes
   const encrypted = encryptedBuffer.slice(0, -16);
-  
+
   const decipher = crypto.createDecipheriv('aes-256-gcm', key, ivBuffer);
   decipher.setAuthTag(authTag);
-  
+
   let decrypted = decipher.update(encrypted.toString('base64'), 'base64', 'utf8');
   decrypted += decipher.final('utf8');
-  
+
   return decrypted;
 }
 
@@ -42,8 +42,7 @@ function getEncryptionKey(): Buffer {
   if (!masterSecret) {
     throw new Error('CREDENTIALS_ENCRYPTION_KEY not configured');
   }
-  
-  // Use PBKDF2 to derive key (matching Supabase edge function)
+
   return crypto.pbkdf2Sync(
     masterSecret,
     'alphaforge-credentials-v1',
@@ -53,37 +52,36 @@ function getEncryptionKey(): Buffer {
   );
 }
 
-// Store credentials
+// ----------------------------------------------------
+// POST /api/credentials/store
+// ----------------------------------------------------
 router.post('/store', authenticateToken, async (req: AuthRequest, res, next) => {
   try {
-    const userId = req.user!.id;
+    const userId = req.user!.userId;   // ✅ FIXED
     const { broker_name, api_key, api_secret } = req.body;
 
     if (!broker_name || !api_key) {
       return res.status(400).json({
-        error: 'Missing required fields: broker_name and api_key are required'
+        error: 'Missing required fields: broker_name and api_key are required',
       });
     }
 
     const encryptionKey = getEncryptionKey();
 
-    // Encrypt credentials
     const encryptedApiKey = await encryptData(api_key, encryptionKey);
     const encryptedApiSecret = api_secret
       ? await encryptData(api_secret, encryptionKey)
       : null;
 
-    // Check if credentials exist
     const existing = await query(
-      'SELECT id FROM user_credentials WHERE user_id = $1 AND broker_name = $2',
+      `SELECT id FROM user_credentials WHERE user_id = $1 AND broker_name = $2`,
       [userId, broker_name]
     );
 
     let result;
     if (existing.rows.length > 0) {
-      // Update
       result = await query(
-        `UPDATE user_credentials 
+        `UPDATE user_credentials
          SET api_key = $1, api_secret = $2, updated_at = NOW()
          WHERE user_id = $3 AND broker_name = $4
          RETURNING id`,
@@ -91,11 +89,10 @@ router.post('/store', authenticateToken, async (req: AuthRequest, res, next) => 
           JSON.stringify(encryptedApiKey),
           encryptedApiSecret ? JSON.stringify(encryptedApiSecret) : null,
           userId,
-          broker_name
+          broker_name,
         ]
       );
     } else {
-      // Insert
       result = await query(
         `INSERT INTO user_credentials (user_id, broker_name, api_key, api_secret)
          VALUES ($1, $2, $3, $4)
@@ -104,7 +101,7 @@ router.post('/store', authenticateToken, async (req: AuthRequest, res, next) => 
           userId,
           broker_name,
           JSON.stringify(encryptedApiKey),
-          encryptedApiSecret ? JSON.stringify(encryptedApiSecret) : null
+          encryptedApiSecret ? JSON.stringify(encryptedApiSecret) : null,
         ]
       );
     }
@@ -112,17 +109,19 @@ router.post('/store', authenticateToken, async (req: AuthRequest, res, next) => 
     res.json({
       success: true,
       message: 'Credentials securely stored',
-      credential_id: result.rows[0].id
+      credential_id: result.rows[0].id,
     });
   } catch (error) {
     next(error);
   }
 });
 
-// Retrieve credentials
+// ----------------------------------------------------
+// POST /api/credentials/retrieve
+// ----------------------------------------------------
 router.post('/retrieve', authenticateToken, async (req: AuthRequest, res, next) => {
   try {
-    const userId = req.user!.id;
+    const userId = req.user!.userId;   // ✅ FIXED
     const { broker_name } = req.body;
 
     if (!broker_name) {
@@ -130,7 +129,9 @@ router.post('/retrieve', authenticateToken, async (req: AuthRequest, res, next) 
     }
 
     const result = await query(
-      'SELECT api_key, api_secret, broker_name FROM user_credentials WHERE user_id = $1 AND broker_name = $2',
+      `SELECT api_key, api_secret, broker_name
+       FROM user_credentials
+       WHERE user_id = $1 AND broker_name = $2`,
       [userId, broker_name]
     );
 
@@ -141,7 +142,6 @@ router.post('/retrieve', authenticateToken, async (req: AuthRequest, res, next) 
     const credentials = result.rows[0];
     const encryptionKey = getEncryptionKey();
 
-    // Decrypt
     const apiKeyData = JSON.parse(credentials.api_key);
     const decryptedApiKey = await decryptData(apiKeyData.encrypted, apiKeyData.iv, encryptionKey);
 
@@ -154,7 +154,7 @@ router.post('/retrieve', authenticateToken, async (req: AuthRequest, res, next) 
     res.json({
       broker_name: credentials.broker_name,
       api_key: decryptedApiKey,
-      api_secret: decryptedApiSecret
+      api_secret: decryptedApiSecret,
     });
   } catch (error) {
     next(error);
