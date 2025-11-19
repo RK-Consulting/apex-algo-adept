@@ -9,25 +9,15 @@ const log = debug("apex:icici:me");
 
 /**
  * GET /api/icici/me
- * Validate Breeze session by calling a SAFE working API:
- *
- * BreezeConnect v1.0.29 supports:
- *   - getFunds()
- *   - getDematHoldings()
- *   - getHistoricalData
- *   - getHistoricalDatav2
- *
- * We use getFunds() because:
- *   ✔ requires ZERO parameters
- *   ✔ returns data if session is valid
+ * Validate Breeze session
  */
 router.get("/me", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
-    const userId = req.user!.id;
+    const userId = req.user!.userId;  // ✅ FIXED
 
     const breeze = await getBreezeInstance(userId);
 
-    // SAFE method — no args required
+    // Safe check to validate session
     const response = await breeze.getFunds();
 
     log("ICICI ME Check:", response);
