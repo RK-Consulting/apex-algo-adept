@@ -37,8 +37,9 @@ export default function Markets() {
   // ----------------------------
   const fetchQuote = async (symbol: string) => {
     try {
-      const res = await fetch(`${backendUrl}/api/icici/quote/${symbol}`, {
-        headers: { Authorization: `Bearer ${token}` },
+     // const res = await fetch(`${backendUrl}/api/icici/quote/${symbol}`, {
+        const res = await fetch(`${backendUrl}/api/icici/market/quote?symbol=${symbolInfo.symbol}`, {
+                   headers: { Authorization: `Bearer ${token}` },
       });
 
       if (!res.ok) return null;
