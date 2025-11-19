@@ -1,4 +1,4 @@
-// src/routes/icici/orders.ts
+// backend/src/routes/icici/orders.ts
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../../middleware/auth.js";
 import { getBreezeInstance } from "../../utils/breezeSession.js";
@@ -14,7 +14,7 @@ const log = debug("apex:icici:orders");
  */
 router.post("/order", authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const userId = req.user!.id;
+    const userId = req.user!.userId;   // ✅ FIXED
 
     const {
       stockCode,
@@ -66,7 +66,8 @@ router.post("/order", authenticateToken, async (req: AuthRequest, res) => {
  */
 router.get("/orders", authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const userId = req.user!.id;
+    const userId = req.user!.userId;   // ✅ FIXED
+
     const breeze = await getBreezeInstance(userId);
 
     const orders = await breeze.getOrderList();
