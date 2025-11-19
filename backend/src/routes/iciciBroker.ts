@@ -1,4 +1,4 @@
-// backend/src/routes/credentials.ts
+// backend/src/routes/iciciBroker.ts
 import { Router } from 'express';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
 import { query } from '../config/database.js';
