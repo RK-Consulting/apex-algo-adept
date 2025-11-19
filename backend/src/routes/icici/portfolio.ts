@@ -12,9 +12,9 @@ const log = debug("apex:icici:portfolio");
  */
 router.get("/holdings", authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const breeze = await getBreezeInstance(req.user!.id);
+    const userId = req.user!.userId; // ✅ FIXED
+    const breeze = await getBreezeInstance(userId);
 
-    // Breeze API
     const holdings = await breeze.getPortfolioHoldings();
 
     return res.json({
@@ -35,7 +35,8 @@ router.get("/holdings", authenticateToken, async (req: AuthRequest, res) => {
  */
 router.get("/positions", authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const breeze = await getBreezeInstance(req.user!.id);
+    const userId = req.user!.userId; // ✅ FIXED
+    const breeze = await getBreezeInstance(userId);
 
     const positions = await breeze.getPortfolioPositions();
 
@@ -57,7 +58,8 @@ router.get("/positions", authenticateToken, async (req: AuthRequest, res) => {
  */
 router.get("/funds", authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const breeze = await getBreezeInstance(req.user!.id);
+    const userId = req.user!.userId; // ✅ FIXED
+    const breeze = await getBreezeInstance(userId);
 
     const funds = await breeze.getFunds();
 
@@ -76,11 +78,11 @@ router.get("/funds", authenticateToken, async (req: AuthRequest, res) => {
 
 /**
  * GET /api/icici/portfolio/summary
- * Dashboard endpoint — holdings + positions + funds
  */
 router.get("/summary", authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const breeze = await getBreezeInstance(req.user!.id);
+    const userId = req.user!.userId; // ✅ FIXED
+    const breeze = await getBreezeInstance(userId);
 
     const [holdings, positions, funds] = await Promise.all([
       breeze.getPortfolioHoldings(),
