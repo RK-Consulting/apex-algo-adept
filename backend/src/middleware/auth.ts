@@ -7,19 +7,11 @@ const log = debug("apex:auth");
 
 export interface AuthRequest extends Request {
   user?: {
-    id: string;
+    userId: string;   // ✅ CHANGED (was id)
     email: string;
   };
 }
 
-/**
- * Strict, production-ready JWT authentication middleware
- * -------------------------------------------------------
- * - Accepts only backend-issued JWT (JWT_SECRET)
- * - Rejects Supabase / third-party tokens for security
- * - Provides clean 401/403 differentiation
- * - Enforces UUID-friendly user ID extraction
- */
 export const authenticateToken = (
   req: AuthRequest,
   res: Response,
@@ -42,7 +34,7 @@ export const authenticateToken = (
   }
 
   const rawSecret = process.env.JWT_SECRET || "";
-  const jwtSecret = rawSecret.replace(/^"+|"+$/g, "").trim(); // clean extra quotes
+  const jwtSecret = rawSecret.replace(/^"+|"+$/g, "").trim();
 
   if (!jwtSecret) {
     console.error("❌ JWT_SECRET missing in environment");
@@ -51,10 +43,9 @@ export const authenticateToken = (
 
   try {
     const decoded = jwt.verify(token, jwtSecret) as JwtPayload;
-
     const anyDecoded = decoded as any;
 
-    // backend-issued JWT uses "{ userId, email }"
+    // Accept multiple possible keys
     const userId =
       anyDecoded.userId ||
       anyDecoded.id ||
@@ -66,12 +57,13 @@ export const authenticateToken = (
       "";
 
     if (!userId) {
-      log("❌ JWT payload missing user id:", decoded);
+      log("❌ JWT payload missing userId:", decoded);
       return res.status(403).json({ error: "Invalid token payload" });
     }
 
+    // ✅ NORMALIZE TO userId (NOT id!)
     req.user = {
-      id: String(userId),
+      userId: String(userId),
       email: String(email || ""),
     };
 
