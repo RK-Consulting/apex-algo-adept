@@ -15,7 +15,8 @@ const log = debug("apex:icici:backtest");
  */
 router.post("/backtest", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
-    const userId = req.user!.id;
+    const userId = req.user!.userId;   // ✅ FIXED (was req.user!.id)
+
     const {
       strategyId,
       symbol,
@@ -56,7 +57,6 @@ router.post("/backtest", authenticateToken, async (req: AuthRequest, res, next) 
       productType: "cash",
     });
 
-    // Support all possible response structures
     const candles =
       ohlcResponse?.Success ||
       ohlcResponse?.success ||
@@ -80,14 +80,12 @@ router.post("/backtest", authenticateToken, async (req: AuthRequest, res, next) 
     const takeProfitPct = strategy?.risk_management?.take_profit ?? 3.0;
 
     for (const candle of candles) {
-      // Normalize fields (Breeze sometimes uses uppercase)
       const close = parseFloat(candle.close ?? candle.Close ?? "0");
       const high = parseFloat(candle.high ?? candle.High ?? "0");
       const low = parseFloat(candle.low ?? candle.Low ?? "0");
 
       if (isNaN(close) || isNaN(high) || isNaN(low)) continue;
 
-      // Simple entry condition (placeholder)
       if (!positionOpen) {
         if (Math.random() > 0.6) {
           positionOpen = true;
@@ -120,7 +118,6 @@ router.post("/backtest", authenticateToken, async (req: AuthRequest, res, next) 
       test_period: { fromDate, toDate },
     };
 
-    // Save performance results
     await query(
       `UPDATE strategies
        SET performance_data = $1, updated_at = NOW()
