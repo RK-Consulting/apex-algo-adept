@@ -57,7 +57,7 @@ function getEncryptionKey(): Buffer {
 // ----------------------------------------
 router.post('/store', authenticateToken, async (req: AuthRequest, res, next) => {
   try {
-    const userId = req.user!.id;  // ✔ Correct
+    const userId = req.user!.userid;  // ✔ Correct
 
     const { broker_name, api_key, api_secret } = req.body;
 
@@ -122,7 +122,7 @@ router.post('/store', authenticateToken, async (req: AuthRequest, res, next) => 
 // ----------------------------------------
 router.post('/retrieve', authenticateToken, async (req: AuthRequest, res, next) => {
   try {
-    const userId = req.user!.id;  // ✔ Correct
+    const userId = req.user!.userid;  // ✔ Correct
 
     const { broker_name } = req.body;
 
