@@ -21,6 +21,16 @@ import {
 import { CreateStrategyDialog } from "@/components/CreateStrategyDialog";
 import { useToast } from "@/hooks/use-toast";
 
+// -------------------- NORMALIZER --------------------
+function normalizeStrategies(data: any): any[] {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.strategies)) return data.strategies;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.results)) return data.results;
+  if (Array.isArray(data?.strategies?.data)) return data.strategies.data;
+  return [];
+}
+
 const aiSuggestions = [
   {
     name: "Volatility Arbitrage",
@@ -66,65 +76,26 @@ const Strategies = () => {
   const getToken = () => localStorage.getItem("authToken");
 
   // -------------------------------
-  // 🔥 Load strategies from backend
+  // FETCH STRATEGIES
   // -------------------------------
   const loadStrategies = async () => {
     const token = getToken();
     if (!token) return;
     setLoading(true);
+
     try {
       const res = await fetch(`${backendUrl}/api/strategies/`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-           const raw = await res.text().catch(() => "");
-      let data: any = {};
-      try {
-        data = raw ? JSON.parse(raw) : {};
-      } catch (parseErr) {
-        console.error("Failed to parse /api/strategies response:", parseErr, "raw:", raw);
-        throw new Error("Invalid server response");
-      }
 
-      // DEBUG: log raw data so you can inspect shape in console / HAR
-      console.debug("API /api/strategies response:", data);
+      const json = await res.json().catch(() => ({}));
+      const arr = normalizeStrategies(json);
 
-      // NORMALIZE: make sure we always set an array for strategies
-      // Support common shapes: [] OR { strategies: [] } OR { data: [] } OR { strategies: { data: [] } }
-      let strategiesArr: any[] = [];
-
-      if (Array.isArray(data)) {
-        // server returned plain array
-        strategiesArr = data;
-      } else if (Array.isArray(data.strategies)) {
-        strategiesArr = data.strategies;
-      } else if (Array.isArray(data.results)) {
-        strategiesArr = data.results;
-      } else if (Array.isArray(data.data)) {
-        strategiesArr = data.data;
-      } else if (data?.strategies && Array.isArray(data.strategies?.data)) {
-        strategiesArr = data.strategies.data;
-      } else {
-        // fallback: empty array
-        strategiesArr = [];
-      }
-
-      setStrategies(strategiesArr);
-      // Try to parse JSON (guarded)
-     /* if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Failed to load strategies");
-      }
-
-      const data = await res.json();
-      setStrategies(data?.strategies || []); */
-         
+      setStrategies(arr);
     } catch (error: any) {
-      console.error("Error loading strategies:", error);
       toast({
         title: "Error",
-        description: error.message || "Failed to load strategies",
+        description: "Failed to load strategies",
         variant: "destructive",
       });
     } finally {
@@ -132,29 +103,15 @@ const Strategies = () => {
     }
   };
 
-  // -------------------------------
-  // 🔥 FIXED: Wait for token to exist
-  // -------------------------------
   useEffect(() => {
     const token = getToken();
+    if (!token) return;
 
-    if (!token) {
-      console.log("⏳ No authToken yet — waiting for ProtectedRoute...");
-      setLoading(false);
-      return;
-    }
-
-    // Delay to ensure ProtectedRoute verify() finishes storing token
-    const timer = setTimeout(() => {
-      console.log("▶️ Token ready — calling loadStrategies()");
-      loadStrategies();
-    }, 400);
-
-    return () => clearTimeout(timer);
+    setTimeout(() => loadStrategies(), 300);
   }, []);
 
   // -------------------------------
-  // 🔥 Toggle strategy status
+  // Toggle active/paused
   // -------------------------------
   const handleToggleStrategy = async (id: string, currentStatus: string) => {
     const token = getToken();
@@ -172,42 +129,69 @@ const Strategies = () => {
         body: JSON.stringify({ id, status: newStatus }),
       });
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Failed to update strategy");
-      }
+      const json = await res.json().catch(() => ({}));
+
+      if (!res.ok || !json.success)
+        throw new Error("Update failed");
 
       toast({
-        title: "Success",
-        description: `Strategy ${newStatus === "active" ? "activated" : "paused"}`,
+        title: "Updated",
+        description: `Strategy ${newStatus}`,
       });
 
       loadStrategies();
-    } catch (error: any) {
-      console.error("Error toggling strategy:", error);
+    } catch (e: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to update strategy",
+        description: "Failed to update strategy",
         variant: "destructive",
       });
     }
   };
 
   // -------------------------------
-  // 🔥 Deploy template strategy
+  // Deploy Template
   // -------------------------------
-  const handleDeployTemplate = async (templateName: string, templateDescription: string, templateRisk: string) => {
+  const handleDeployTemplate = async (name: string, description: string, risk: string) => {
     const token = getToken();
-    if (!token) {
+    if (!token) return;
+
+    setGeneratingTemplate(name);
+
+    try {
+      const res = await fetch(`${backendUrl}/api/strategies/generate/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ name, description, risk, capital: 500000 }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.success) throw new Error("Failed");
+
+      toast({ title: "Success", description: `${name} created` });
+      loadStrategies();
+    } catch (err) {
       toast({
-        title: "Authentication Required",
-        description: "Please sign in to create strategies",
+        title: "Error",
+        description: "Failed to create strategy",
         variant: "destructive",
       });
-      return;
+    } finally {
+      setGeneratingTemplate(null);
     }
+  };
 
-    setGeneratingTemplate(templateName);
+  // -------------------------------
+  // Deploy AI Suggestion
+  // -------------------------------
+  const handleDeployAISuggestion = async (s: any) => {
+    const token = getToken();
+    if (!token) return;
+
+    setGeneratingTemplate(s.name);
 
     try {
       const res = await fetch(`${backendUrl}/api/strategies/generate/`, {
@@ -217,29 +201,22 @@ const Strategies = () => {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          name: templateName,
-          description: templateDescription,
-          risk: templateRisk,
+          name: s.name,
+          description: s.description,
+          risk: s.riskLevel,
           capital: 500000,
         }),
       });
 
-      const data = await res.json();
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.success) throw new Error();
 
-      if (!res.ok || !data.success)
-        throw new Error(data.error || "Strategy generation failed");
-
-      toast({
-        title: "Success!",
-        description: `${templateName} strategy created`,
-      });
-
+      toast({ title: "Success", description: `${s.name} deployed` });
       loadStrategies();
-    } catch (error: any) {
-      console.error("Error deploying template:", error);
+    } catch {
       toast({
         title: "Error",
-        description: error.message || "Failed to create strategy",
+        description: "Failed to deploy strategy",
         variant: "destructive",
       });
     } finally {
@@ -248,69 +225,15 @@ const Strategies = () => {
   };
 
   // -------------------------------
-  // 🔥 Deploy AI suggestion
+  // UI
   // -------------------------------
-  const handleDeployAISuggestion = async (suggestion: any) => {
-    const token = getToken();
-    if (!token) {
-      toast({
-        title: "Authentication Required",
-        description: "Please sign in to deploy AI suggestions",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setGeneratingTemplate(suggestion.name);
-
-    try {
-      const res = await fetch(`${backendUrl}/api/strategies/generate/`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          name: suggestion.name,
-          description: suggestion.description,
-          risk: suggestion.riskLevel,
-          capital: 500000,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok || !data.success)
-        throw new Error(data.error || "Strategy deployment failed");
-
-      toast({
-        title: "Success!",
-        description: `${suggestion.name} deployed successfully`,
-      });
-
-      loadStrategies();
-    } catch (error: any) {
-      console.error("Error deploying suggestion:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to deploy strategy",
-        variant: "destructive",
-      });
-    } finally {
-      setGeneratingTemplate(null);
-    }
-  };
-
-  // -------------------------------
-  // UI START
-  // -------------------------------
-
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
         <AppSidebar />
         <main className="flex-1 overflow-auto">
           <div className="container mx-auto p-6 space-y-6">
+
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
@@ -320,13 +243,13 @@ const Strategies = () => {
                   Create and manage algorithmic trading strategies
                 </p>
               </div>
+
               <Button className="gap-2" onClick={() => setDialogOpen(true)}>
                 <Plus className="w-4 h-4" />
                 Create New Strategy
               </Button>
             </div>
 
-            {/* Create Dialog */}
             <CreateStrategyDialog
               open={dialogOpen}
               onOpenChange={setDialogOpen}
@@ -344,31 +267,25 @@ const Strategies = () => {
 
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {aiSuggestions.map((suggestion) => (
-                    <div key={suggestion.name} className="p-4 rounded-lg bg-card border">
-                      <h4 className="font-semibold mb-2">{suggestion.name}</h4>
-                      <p className="text-xs text-muted-foreground mb-3">
-                        {suggestion.description}
-                      </p>
+                  {aiSuggestions.map((s) => (
+                    <div key={s.name} className="p-4 rounded-lg bg-card border">
+                      <h4 className="font-semibold mb-2">{s.name}</h4>
+                      <p className="text-xs text-muted-foreground mb-3">{s.description}</p>
 
-                      <div className="space-y-2 text-xs">
+                      <div className="space-y-1 text-xs">
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Confidence</span>
-                          <span className="text-success font-semibold">
-                            {suggestion.confidence}
-                          </span>
+                          <span>Confidence</span>
+                          <span className="text-success font-semibold">{s.confidence}</span>
                         </div>
 
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Expected Return</span>
-                          <span className="font-semibold">
-                            {suggestion.expectedReturn}
-                          </span>
+                          <span>Expected Return</span>
+                          <span>{s.expectedReturn}</span>
                         </div>
 
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Risk</span>
-                          <Badge variant="outline">{suggestion.riskLevel}</Badge>
+                          <span>Risk</span>
+                          <Badge variant="outline">{s.riskLevel}</Badge>
                         </div>
                       </div>
 
@@ -376,10 +293,10 @@ const Strategies = () => {
                         size="sm"
                         variant="outline"
                         className="w-full mt-3"
-                        onClick={() => handleDeployAISuggestion(suggestion)}
-                        disabled={generatingTemplate === suggestion.name}
+                        onClick={() => handleDeployAISuggestion(s)}
+                        disabled={generatingTemplate === s.name}
                       >
-                        {generatingTemplate === suggestion.name ? (
+                        {generatingTemplate === s.name ? (
                           <>
                             <Loader2 className="w-3 h-3 mr-1 animate-spin" />
                             Deploying...
@@ -402,7 +319,7 @@ const Strategies = () => {
                 <TabsTrigger value="templates">Templates</TabsTrigger>
               </TabsList>
 
-              {/* Active Strategies */}
+              {/* Active */}
               <TabsContent value="active" className="space-y-4">
                 {loading ? (
                   <p className="text-center text-muted-foreground">Loading strategies...</p>
@@ -422,11 +339,9 @@ const Strategies = () => {
                             </Badge>
                           </div>
 
-                          <div className="text-right">
-                            <div className="flex items-center gap-1 text-success font-mono text-xl">
-                              <TrendingUp className="w-5 h-5" />
-                              +{strategy.performance?.total_return || 0}%
-                            </div>
+                          <div className="flex items-center gap-1 text-success font-mono text-xl">
+                            <TrendingUp className="w-5 h-5" />
+                            +{strategy.performance?.total_return || 0}%
                           </div>
                         </div>
 
@@ -447,6 +362,7 @@ const Strategies = () => {
                               </>
                             )}
                           </Button>
+
                           <Button size="sm" variant="outline" className="flex-1">
                             View Details
                           </Button>
@@ -458,23 +374,21 @@ const Strategies = () => {
               </TabsContent>
 
               {/* Strategy Builder */}
-              <TabsContent value="builder" className="space-y-4">
-                <Card className="bg-card border">
+              <TabsContent value="builder">
+                <Card className="bg-card border mt-4">
                   <CardHeader>
-                    <CardTitle>Build Your Custom Strategy</CardTitle>
+                    <CardTitle>Build Your Own Strategy</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="text-center py-12">
                       <Brain className="w-16 h-16 mx-auto mb-4 text-accent" />
-                      <h3 className="text-xl font-semibold mb-2">
-                        AI-Powered Strategy Builder
-                      </h3>
+                      <h3 className="text-xl font-semibold mb-2">AI Strategy Builder</h3>
                       <p className="text-muted-foreground mb-6">
-                        Use our advanced AI to create custom trading strategies
+                        Use advanced AI to build custom trading strategies.
                       </p>
                       <Button onClick={() => setDialogOpen(true)} className="gap-2">
                         <Plus className="w-4 h-4" />
-                        Create Strategy with AI
+                        Create Strategy
                       </Button>
                     </div>
                   </CardContent>
@@ -482,10 +396,10 @@ const Strategies = () => {
               </TabsContent>
 
               {/* Templates */}
-              <TabsContent value="templates" className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <TabsContent value="templates">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
                   {strategyTemplates.map((template) => (
-                    <Card key={template.name} className="bg-card border cursor-pointer hover:border-primary">
+                    <Card key={template.name} className="bg-card border">
                       <CardContent className="pt-6">
                         <div className="flex items-center gap-3 mb-3">
                           <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -508,34 +422,3 @@ const Strategies = () => {
                           variant="outline"
                           className="w-full"
                           onClick={() =>
-                            handleDeployTemplate(
-                              template.name,
-                              template.description,
-                              template.risk
-                            )
-                          }
-                          disabled={generatingTemplate === template.name}
-                        >
-                          {generatingTemplate === template.name ? (
-                            <>
-                              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                              Creating...
-                            </>
-                          ) : (
-                            "Use Template"
-                          )}
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </TabsContent>
-            </Tabs>
-          </div>
-        </main>
-      </div>
-    </SidebarProvider>
-  );
-};
-
-export default Strategies;
