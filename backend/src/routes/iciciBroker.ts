@@ -161,4 +161,38 @@ router.post('/retrieve', authenticateToken, async (req: AuthRequest, res, next) 
   }
 });
 
+// ----------------------------------------
+// POST /api/icici/connect
+// Initializes Breeze login session
+// ----------------------------------------
+router.post('/connect', authenticateToken, async (req: AuthRequest, res, next) => {
+  try {
+    console.log("ICICI connect called by user:", req.user?.userId);
+
+    // Example: Use your breezeSession util
+    const session = await import('../utils/breezeSession.js');
+    const login = await session.createBreezeLoginSession();
+
+    if (!login?.loginUrl) {
+      return res.status(500).json({
+        success: false,
+        error: "Login URL not received from Breeze backend"
+      });
+    }
+
+    return res.json({
+      success: true,
+      loginUrl: login.loginUrl
+    });
+
+  } catch (err) {
+    console.error("ICICI Connect Error:", err);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to initialize ICICI connection"
+    });
+  }
+});
+
+
 export { router as iciciBrokerRouter };
