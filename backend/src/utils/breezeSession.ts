@@ -5,92 +5,103 @@ import debug from "debug";
 
 const log = debug("apex:icici:breeze");
 
-// Cache to avoid re-initializing Breeze repeatedly
+// Cache (per user) to avoid recreating Breeze too often
 const breezeCache = new Map<string, { breeze: BreezeConnect; expiresAt: number }>();
 
 /**
- * getBreezeInstance(userId)
- * - Loads user ICICI credentials
- * - Reuses cached Breeze instance where possible
- * - Reuses valid session token
- * - Regenerates session only when forced or expired
- * - Saves refreshed token back to DB
+ * Safely extracts session token from various Breeze SDK structures
  */
-export async function getBreezeInstance(userId: string): Promise<BreezeConnect> {
-  // 1. RETURN CACHED
-  const cached = breezeCache.get(userId);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.breeze;
-  }
-
-  // 2. LOAD USER CREDENTIALS
-  const { rows } = await query(
-    `SELECT icici_api_key, icici_api_secret, icici_session_token, refresh_token
-     FROM user_credentials WHERE user_id = $1`,
-    [userId]
+function extractSessionToken(sessionResponse: any, breeze: BreezeConnect): string {
+  return (
+    sessionResponse?.data?.session_token ||
+    sessionResponse?.session_token ||
+    (sessionResponse?.data && sessionResponse.data[0]?.session_token) ||
+    (breeze as any)?.sessionToken ||
+    (breeze as any)?.getSessionToken?.() ||
+    ""
   );
+}
 
-  if (rows.length === 0) {
-    throw new Error("ICICI credentials not found. Please connect your ICICI account first.");
-  }
-
-  const {
-    icici_api_key: apiKey,
-    icici_api_secret: apiSecret,
-    icici_session_token: storedSessionToken,
-    refresh_token: storedRefreshToken
-  } = rows[0];
-
-  if (!apiKey || !apiSecret) {
-    throw new Error("Missing ICICI API key/secret.");
-  }
-
-  // 3. INITIALIZE BREEZECONNECT
+/**
+ * Initializes a new BreezeConnect instance with API key and session token
+ */
+async function initializeBreeze(
+  apiKey: string,
+  apiSecret: string,
+  storedToken: string | null
+): Promise<{ breeze: BreezeConnect; sessionToken: string }> {
   const breeze = new BreezeConnect();
   breeze.setApiKey(apiKey);
 
-  let sessionToken = storedSessionToken || "";
+  let sessionToken = storedToken || "";
 
-  // 4. APPLY STORED SESSION TOKEN IF EXISTS
   if (sessionToken) {
     try {
       breeze.setSessionToken(sessionToken);
 
-      // Optionally test validity (light API call)
+      // Test if stored session is valid
       try {
-        // Some Breeze versions have getProfile()
-        await breeze.getFunds(); // lightweight enough to test
-      } catch (err) {
-        log("Stored token invalid for user %s — regenerating.", userId);
+        await breeze.getFunds();
+        log("Stored ICICI session token still valid.");
+        return { breeze, sessionToken };
+      } catch {
+        log("Stored session invalid → regenerating.");
         sessionToken = "";
       }
-    } catch (err) {
+    } catch {
       sessionToken = "";
     }
   }
 
-  // 5. REGENERATE SESSION TOKEN IF NONE OR INVALID
-  if (!sessionToken) {
-    log("Generating new session token for user %s", userId);
+  // No valid session stored → generate new one
+  log("Generating NEW ICICI session token…");
 
-    const sessionResponse = await breeze.generateSession(apiSecret);
+  const sessionResponse = await breeze.generateSession(apiSecret);
+  const newToken = extractSessionToken(sessionResponse, breeze);
 
-    // Different Breeze versions return token differently:
-    const newToken =
-      (sessionResponse?.data?.session_token) ||
-      (sessionResponse?.session_token) ||
-      (breeze as any).sessionToken ||
-      (breeze as any).getSessionToken?.() ||
-      "";
+  if (!newToken) {
+    throw new Error("Failed to generate a valid ICICI session token.");
+  }
 
-    if (!newToken) {
-      throw new Error("Failed to generate ICICI session token.");
-    }
+  breeze.setSessionToken(newToken);
+  log("Generated new session token.");
 
-    sessionToken = newToken;
-    breeze.setSessionToken(sessionToken);
+  return { breeze, sessionToken: newToken };
+}
 
-    // Save updated token
+/**
+ * Main exported function: returns ready-to-use authenticated BreezeConnect instance.
+ */
+export async function getBreezeInstance(userId: string): Promise<BreezeConnect> {
+  const cached = breezeCache.get(userId);
+
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.breeze;
+  }
+
+  // Load credentials from DB
+  const { rows } = await query(
+    `SELECT icici_api_key, icici_api_secret, icici_session_token
+     FROM user_credentials WHERE user_id = $1`,
+    [userId]
+  );
+
+  if (!rows.length) {
+    throw new Error("ICICI credentials not found — user must connect ICICI account first.");
+  }
+
+  const { icici_api_key: apiKey, icici_api_secret: apiSecret, icici_session_token: storedToken } =
+    rows[0];
+
+  if (!apiKey || !apiSecret) {
+    throw new Error("Missing ICICI API key or secret.");
+  }
+
+  // Initialize Breeze (reusing or regenerating session)
+  const { breeze, sessionToken } = await initializeBreeze(apiKey, apiSecret, storedToken);
+
+  // If session changed, update DB
+  if (sessionToken && sessionToken !== storedToken) {
     await query(
       `UPDATE user_credentials
        SET icici_session_token = $1,
@@ -98,23 +109,22 @@ export async function getBreezeInstance(userId: string): Promise<BreezeConnect> 
        WHERE user_id = $2`,
       [sessionToken, userId]
     );
-
-    log("Updated ICICI session token in DB for user %s", userId);
+    log("Updated ICICI session token for user %s", userId);
   }
 
-  // 6. CACHE INSTANCE FOR 15 MINUTES
+  // Cache instance for 15 min
   breezeCache.set(userId, {
     breeze,
-    expiresAt: Date.now() + 15 * 60 * 1000,
+    expiresAt: Date.now() + 15 * 60 * 1000
   });
 
   return breeze;
 }
 
 /**
- * Clears cache after user updates ICICI credentials
+ * Clears instance cache when user updates credentials
  */
 export function invalidateBreezeInstance(userId: string) {
   breezeCache.delete(userId);
-  log("Invalidated Breeze cache for user %s", userId);
+  log("Breeze cache invalidated for user %s", userId);
 }
