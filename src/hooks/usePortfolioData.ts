@@ -1,4 +1,39 @@
+// src/hooks/usePortfolioData.ts
 import { useState, useEffect } from "react";
+
+export const usePortfolioData = () => {
+  // Default safe values so UI never crashes
+  const [portfolioData, setPortfolioData] = useState<any[]>([]);
+  const [totalValue, setTotalValue] = useState(0);
+  const [totalPnL, setTotalPnL] = useState(0);
+  const [totalInvested, setTotalInvested] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // 🚨 TEMPORARY FIX: Disable ICICI API fetching completely
+  useEffect(() => {
+    setPortfolioData([]);
+    setTotalValue(0);
+    setTotalPnL(0);
+    setTotalInvested(0);
+    setLoading(false);
+    setError(null);
+
+    // No interval, no crash
+  }, []);
+
+  return {
+    holdings: portfolioData,
+    totalValue,
+    totalPnL,
+    totalInvested,
+    loading,
+    error
+  };
+};
+
+
+/* import { useState, useEffect } from "react";
 
 export const usePortfolioData = () => {
   const [portfolioData, setPortfolioData] = useState<any[]>([]);
@@ -91,4 +126,4 @@ export const usePortfolioData = () => {
   }, []);
 
   return { holdings: portfolioData, totalValue, totalPnL, totalInvested, loading, error };
-};
+}; */
