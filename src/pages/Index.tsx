@@ -1,3 +1,4 @@
+// /src/pages/Index.tsx
 import { AppSidebar } from "@/components/AppSidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { MarketOverview } from "@/components/MarketOverview";
