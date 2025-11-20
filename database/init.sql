@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS strategies (
     exit_condition JSONB,
     risk_management JSONB,
     performance_data JSONB,          -- NEW (required by backtest)
-    is_active BOOLEAN DEFAULT TRUE,
+    -- is_active BOOLEAN DEFAULT TRUE,
+    status VARCHAR(20) DEFAULT 'active',
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
