@@ -18,6 +18,9 @@ import { iciciBrokerRouter } from "./routes/iciciBroker.js";
 
 // Optional: Backtest router
 import { iciciBacktestRouter } from "./routes/iciciBacktest.js";
+import { iciciAuthCallbackRouter } from "./routes/icici/authCallback.js";
+import { iciciStatusRouter } from "./routes/icici/status.js";
+
 
 dotenv.config();
 
@@ -99,6 +102,8 @@ app.use("/api/credentials", credentialsRouter);
 app.use("/api/icici", iciciBrokerRouter);
 
 app.use("/api/iciciBacktest", iciciBacktestRouter);
+app.use("/api/icici", iciciAuthCallbackRouter);
+app.use("/api/icici", iciciStatusRouter);
 
 /* -------------------------------------------------------
    Global Error Handler
