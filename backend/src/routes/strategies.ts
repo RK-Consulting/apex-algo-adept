@@ -336,4 +336,24 @@ router.delete("/:id", authenticateToken, async (req: AuthRequest, res, next) => 
   }
 });
 
+router.post("/toggle", authenticateToken, async (req: AuthRequest, res) => {
+  const { id, status } = req.body;
+
+  if (!id || !status) {
+    return res.status(400).json({ error: "id and status are required" });
+  }
+
+  const { rows } = await query(
+    "UPDATE strategies SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *",
+    [status, id]
+  );
+
+  if (!rows.length) {
+    return res.status(404).json({ error: "Strategy not found" });
+  }
+
+  return res.json({ success: true, strategy: rows[0] });
+});
+
+
 export { router as strategyRouter };
