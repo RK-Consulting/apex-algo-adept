@@ -71,21 +71,55 @@ const Strategies = () => {
   const loadStrategies = async () => {
     const token = getToken();
     if (!token) return;
-
+    setLoading(true);
     try {
       const res = await fetch(`${backendUrl}/api/strategies/`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
+           const raw = await res.text().catch(() => "");
+      let data: any = {};
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch (parseErr) {
+        console.error("Failed to parse /api/strategies response:", parseErr, "raw:", raw);
+        throw new Error("Invalid server response");
+      }
 
-      if (!res.ok) {
+      // DEBUG: log raw data so you can inspect shape in console / HAR
+      console.debug("API /api/strategies response:", data);
+
+      // NORMALIZE: make sure we always set an array for strategies
+      // Support common shapes: [] OR { strategies: [] } OR { data: [] } OR { strategies: { data: [] } }
+      let strategiesArr: any[] = [];
+
+      if (Array.isArray(data)) {
+        // server returned plain array
+        strategiesArr = data;
+      } else if (Array.isArray(data.strategies)) {
+        strategiesArr = data.strategies;
+      } else if (Array.isArray(data.results)) {
+        strategiesArr = data.results;
+      } else if (Array.isArray(data.data)) {
+        strategiesArr = data.data;
+      } else if (data?.strategies && Array.isArray(data.strategies?.data)) {
+        strategiesArr = data.strategies.data;
+      } else {
+        // fallback: empty array
+        strategiesArr = [];
+      }
+
+      setStrategies(strategiesArr);
+      // Try to parse JSON (guarded)
+     /* if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || "Failed to load strategies");
       }
 
       const data = await res.json();
-      setStrategies(data?.strategies || []);
+      setStrategies(data?.strategies || []); */
+         
     } catch (error: any) {
       console.error("Error loading strategies:", error);
       toast({
