@@ -16,7 +16,7 @@ import { credentialsRouter } from "./routes/credentials.js";
 // SINGLE ICICI ROUTER (authoritative)
 import { iciciBrokerRouter } from "./routes/iciciBroker.js";
 
-// Optional: Backtest router (this is safe)
+// Optional: Backtest router
 import { iciciBacktestRouter } from "./routes/iciciBacktest.js";
 
 dotenv.config();
@@ -24,27 +24,31 @@ dotenv.config();
 const app = express();
 
 /* -------------------------------------------------------
-   CORS CONFIG (strict + supports your domain)
+   CORS CONFIG (Cloudflare Pages + your domain)
 ------------------------------------------------------- */
-const rawOrigins = process.env.ALLOWED_ORIGINS || "";
-const allowedOrigins = rawOrigins
-  .split(",")
-  .map((o) => o.trim())
-  .filter(Boolean)
-  .concat([
-    "http://localhost:5173",
-    "http://localhost:4173",
-    "https://alphaforge.skillsifter.in",
-    "https://www.alphaforge.skillsifter.in",
-  ]);
-
-console.log("CORS Allowed Origins:", allowedOrigins);
 
 app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
+
+      // Always allowed origins
+      const staticAllowed = [
+        "http://localhost:5173",
+        "http://localhost:4173",
+        "https://alphaforge.skillsifter.in",
+        "https://www.alphaforge.skillsifter.in",
+      ];
+
+      // Allow ANY Cloudflare Pages deployment/preview URL
+      if (origin.endsWith(".apex-algo-adept.pages.dev")) {
+        return callback(null, true);
+      }
+
+      // Allow your main domains
+      if (staticAllowed.includes(origin)) {
+        return callback(null, true);
+      }
 
       console.warn("CORS REJECTED →", origin);
       return callback(new Error("Not allowed by CORS"), false);
