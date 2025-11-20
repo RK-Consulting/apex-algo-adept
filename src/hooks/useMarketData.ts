@@ -19,26 +19,35 @@ export const useMarketData = (symbols: { symbol: string; exchange: string }[]) =
         const quotes = await Promise.allSettled(
           symbols.map(async (symbolInfo) => {
             //const response = await fetch(`${backendUrl}/api/icici/quote/${symbolInfo.symbol}`, 
-            const response = await fetch(`${backendUrl}/api/icici/market/quote?symbol=${symbolInfo.symbol}`, {
-                             headers: { "Authorization": `Bearer ${token}` },
-            });
+            // 🚨 TEMP DISABLE BROKEN ICICI API CALL
+            // const response = await fetch(`${backendUrl}/api/icici/market/quote?symbol=${symbolInfo.symbol}`, {
+            //                 headers: { "Authorization": `Bearer ${token}` },
+            // });
             
-            if (!response.ok) throw new Error(`Failed to fetch ${symbolInfo.symbol}`);
+            // if (!response.ok) throw new Error(`Failed to fetch ${symbolInfo.symbol}`);
             
-            const result = await response.json();
-            const quoteData = result.quote?.Success?.[0] || {};
-            
+            // const result = await response.json();
+            // const quoteData = result.quote?.Success?.[0] || {};
+            const quoteData = {};
             return {
               symbol: symbolInfo.symbol,
               exchange: symbolInfo.exchange,
-              price: parseFloat(quoteData.ltp || quoteData.LastPrice || 0),
+              price: 0,
+              change: 0,
+              change_percent: 0,
+              volume: 0,
+              open: 0,
+              high: 0,
+              low: 0,
+              previous_close: 0
+             /* price: parseFloat(quoteData.ltp || quoteData.LastPrice || 0),
               change: parseFloat(quoteData.change || 0),
               change_percent: parseFloat(quoteData.change_percent || 0),
               volume: parseInt(quoteData.volume || 0),
               open: parseFloat(quoteData.open || 0),
               high: parseFloat(quoteData.high || 0),
               low: parseFloat(quoteData.low || 0),
-              previous_close: parseFloat(quoteData.prev_close || 0),
+              previous_close: parseFloat(quoteData.prev_close || 0), */
             };
           })
         );
