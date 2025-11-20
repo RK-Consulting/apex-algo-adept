@@ -1,49 +1,72 @@
 // backend/src/server.ts
 import dotenv from "dotenv";
 
-// Load .env BEFORE imports that rely on it
+// Load .env BEFORE anything else
 dotenv.config();
 
+import http from "http";
 import app from "./app.js";
-import { iciciBacktestRouter } from "./routes/iciciBacktest.js";
+
 import pool from "./config/database.js";
 import debug from "debug";
+
+import { iciciBacktestRouter } from "./routes/iciciBacktest.js";
+import { iciciStreamRouter, initIciciStreamServer } from "./routes/icici/stream.js";
+import { stopAllRealtimeStreams } from "./services/iciciRealtime.js";
 
 const log = debug("apex:server");
 
 // ------------------------------------------------------------
-// 1) Register missing router modules
+// 1) Register routers
 // ------------------------------------------------------------
 app.use("/api/icici/backtest", iciciBacktestRouter);
+app.use("/api/icici", iciciStreamRouter); // WebSocket route handshake (HTTP only)
 
 // ------------------------------------------------------------
-// 2) Determine server port
+// 2) Start HTTP server (required for WebSocket Upgrade)
 // ------------------------------------------------------------
 const PORT = Number(process.env.PORT || 8080);
 
-// ------------------------------------------------------------
-// 3) Start HTTP server
-// ------------------------------------------------------------
-const server = app.listen(PORT, "0.0.0.0", () => {
+const server = http.createServer(app);
+
+server.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 AlphaForge Backend Server running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || "development"}`);
   console.log(`🔗 Health check: http://0.0.0.0:${PORT}/health`);
 });
 
 // ------------------------------------------------------------
-// 4) Graceful Shutdown (Node + Docker + PM2 + Kubernetes)
+// 3) Initialize ICICI WebSocket upgrade handler
+// ------------------------------------------------------------
+try {
+  initIciciStreamServer(server);
+  console.log("🔌 ICICI WebSocket Stream initialized.");
+} catch (err) {
+  console.error("❌ Failed to initialize ICICI websocket:", err);
+}
+
+// ------------------------------------------------------------
+// 4) Graceful Shutdown (PM2, Docker, Kubernetes safe)
 // ------------------------------------------------------------
 async function shutdown(signal: string) {
   console.log(`\n🛑 Received ${signal}: Shutting down gracefully...`);
 
   try {
-    // Stop accepting new HTTP requests
+    // Stop receiving new HTTP connections
     await new Promise<void>((resolve) => {
       server.close(() => {
         console.log("✅ HTTP server closed.");
         resolve();
       });
     });
+
+    // Close ICICI realtime streams
+    try {
+      stopAllRealtimeStreams();
+      console.log("📡 All realtime ICICI streams stopped.");
+    } catch (e) {
+      console.error("⚠️ Error stopping ICICI streams:", e);
+    }
 
     // Close DB pool
     try {
@@ -52,12 +75,6 @@ async function shutdown(signal: string) {
     } catch (dbErr) {
       console.error("⚠️ DB pool close error:", dbErr);
     }
-
-    // If you later add Redis:
-    // await redis.quit();
-
-    // If you later add ICICI realtime stream:
-    // stopAllRealtimeStreams();
 
     console.log("👋 Shutdown complete.");
     process.exit(0);
@@ -71,7 +88,7 @@ process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 
 // ------------------------------------------------------------
-// 5) Optional: Start ICICI session auto-refresh CRON
+// 5) Optional: Auto-refresh ICICI Breeze session tokens
 // ------------------------------------------------------------
 // import("./scripts/refreshIciciSession.js")
 //   .then(() => console.log("⏱️ ICICI Session Refresh CRON initialized"))
