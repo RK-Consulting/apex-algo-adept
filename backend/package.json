@@ -2,14 +2,15 @@
   "name": "alphaforge-backend",
   "version": "1.0.0",
   "description": "Standalone backend server for AlphaForge trading platform",
+  "type": "module",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "tsx watch --env-file=.env src/server.ts",
+    "dev": "tsx watch --env-file=.env ./src/server.ts",
     "build": "tsc",
-    "start": "node --env-file=.env dist/server.js",
-    "migrate": "node --env-file=.env dist/scripts/migrate.js",
-    "seed": "node --env-file=.env dist/scripts/seed.js",
-    "refresh:icici": "node --env-file=.env dist/scripts/refreshIciciSession.js"
+    "start": "node --env-file=.env ./dist/server.js",
+    "migrate": "node --env-file=.env ./dist/scripts/migrate.js",
+    "seed": "node --env-file=.env ./dist/scripts/seed.js",
+    "refresh:icici": "node --env-file=.env ./dist/scripts/refreshIciciSession.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
