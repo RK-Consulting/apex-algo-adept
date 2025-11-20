@@ -9,31 +9,67 @@ const log = debug("apex:icici:me");
 
 /**
  * GET /api/icici/me
- * Validate Breeze session
+ * Validates Breeze session & checks API connectivity.
  */
-router.get("/me", authenticateToken, async (req: AuthRequest, res, next) => {
+router.get("/me", authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const userId = req.user!.userId;  // ✅ FIXED
+    const userId = req.user!.userId;
 
+    // Fetch Breeze instance (handles token reuse or regeneration)
     const breeze = await getBreezeInstance(userId);
 
-    // Safe check to validate session
-    const response = await breeze.getFunds();
+    // Use a lightweight endpoint; ensures session is valid
+    const funds = await breeze.getFunds();
 
-    log("ICICI ME Check:", response);
+    log("ICICI ME Check OK:", funds);
 
     return res.json({
       success: true,
       connected: true,
-      data: response,
+      data: funds,
     });
   } catch (err: any) {
-    log("ICICI ME Error:", err);
+    log("ICICI ME ERROR:", err);
+
+    const message = err?.message || "Failed to validate ICICI connection";
+
+    // Categorized error responses
+    if (
+      message.includes("Invalid session") ||
+      message.includes("session expired") ||
+      message.includes("Unauthenticated")
+    ) {
+      return res.status(401).json({
+        success: false,
+        connected: false,
+        error: "ICICI session expired — reconnect required.",
+      });
+    }
+
+    if (
+      message.includes("API key") ||
+      message.includes("secret") ||
+      message.includes("token generation failed")
+    ) {
+      return res.status(400).json({
+        success: false,
+        connected: false,
+        error: "Invalid ICICI API credentials. Please update in settings.",
+      });
+    }
+
+    if (message.toLowerCase().includes("network") || message.includes("ECONN")) {
+      return res.status(503).json({
+        success: false,
+        connected: false,
+        error: "ICICI Breeze service temporarily unavailable.",
+      });
+    }
 
     return res.status(500).json({
       success: false,
       connected: false,
-      error: err.message || "Failed to validate ICICI connection",
+      error: message,
     });
   }
 });
