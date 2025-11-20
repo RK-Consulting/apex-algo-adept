@@ -2,40 +2,6 @@
 import { useState, useEffect } from "react";
 
 export const usePortfolioData = () => {
-  // Default safe values so UI never crashes
-  const [portfolioData, setPortfolioData] = useState<any[]>([]);
-  const [totalValue, setTotalValue] = useState(0);
-  const [totalPnL, setTotalPnL] = useState(0);
-  const [totalInvested, setTotalInvested] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // 🚨 TEMPORARY FIX: Disable ICICI API fetching completely
-  useEffect(() => {
-    setPortfolioData([]);
-    setTotalValue(0);
-    setTotalPnL(0);
-    setTotalInvested(0);
-    setLoading(false);
-    setError(null);
-
-    // No interval, no crash
-  }, []);
-
-  return {
-    holdings: portfolioData,
-    totalValue,
-    totalPnL,
-    totalInvested,
-    loading,
-    error
-  };
-};
-
-
-/* import { useState, useEffect } from "react";
-
-export const usePortfolioData = () => {
   const [portfolioData, setPortfolioData] = useState<any[]>([]);
   const [totalValue, setTotalValue] = useState(0);
   const [totalPnL, setTotalPnL] = useState(0);
@@ -57,17 +23,18 @@ export const usePortfolioData = () => {
         }
 
         const backendUrl = import.meta.env.VITE_BACKEND_URL;
-        const response = await fetch(`${backendUrl}/api/icici/portfolio`, {
-          headers: {
-            "Authorization": `Bearer ${token}`,
-          },
-        });
+         // 🚨 TEMPORARY DISABLE ICICI CALL (backend failing)
+        // const response = await fetch(`${backendUrl}/api/icici/portfolio`, {
+          // headers: {
+          //  "Authorization": `Bearer ${token}`,
+          //},
+       // });
 
-        if (!response.ok) {
-          throw new Error("Failed to fetch portfolio");
-        }
+        // if (!response.ok) 
+          // throw new Error("Failed to fetch portfolio");
+       // }
 
-        const result = await response.json();
+        // const result = await response.json();
         
         if (result.success && result.portfolio?.Success) {
           const holdings = result.portfolio.Success || [];
@@ -118,12 +85,13 @@ export const usePortfolioData = () => {
       }
     };
 
-    fetchPortfolio();
-    
+    // 🚨 DISABLE fetch ON LOAD
+    // fetchPortfolio();
+    // 🚨 DISABLE INTERVAL REFRESH
     // Refresh every 30 seconds
-    const interval = setInterval(fetchPortfolio, 30000);
-    return () => clearInterval(interval);
+    //const interval = setInterval(fetchPortfolio, 30000);
+    //return () => clearInterval(interval);
   }, []);
 
   return { holdings: portfolioData, totalValue, totalPnL, totalInvested, loading, error };
-}; */
+}; 
