@@ -1,12 +1,14 @@
 // src/routes/icici/marketData.ts
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../../middleware/auth.js";
-import { getBreezeInstance } from "../../utils/breezeSession.js";
+//import { getBreezeInstance } from "../../utils/breezeSession.js";
+import breezeSession from "../../utils/breezeSession.js";
 import { mapSymbolForBreeze } from "../../utils/symbolMapper.js";
 import debug from "debug";
 
 const router = Router();
 const log = debug("apex:icici:market");
+const { getBreezeInstance } = breezeSession;
 
 /**
  * GET /api/icici/market/ltp
