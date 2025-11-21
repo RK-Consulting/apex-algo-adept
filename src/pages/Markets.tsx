@@ -1,3 +1,4 @@
+// /src/pages/Markets.tsx
 import { useEffect, useState, useRef } from "react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
@@ -13,14 +14,14 @@ const stockSymbols = [
   { symbol: "TCS", exchange: "NSE", name: "Tata Consultancy Services", marketCap: "13.8L Cr" },
   { symbol: "INFY", exchange: "NSE", name: "Infosys Limited", marketCap: "6.5L Cr" },
   { symbol: "HDFCBANK", exchange: "NSE", name: "HDFC Bank", marketCap: "12.3L Cr" },
-  { symbol: "ICICIBANK", exchange: "NSE", name: "ICICI Bank", marketCap: "6.9L Cr" },
+  { symbol: "ICICIBANK", exchange: "NSE", name: "ICICI Bank", marketCap: "6.9L Cr" }
 ];
 
 const indexSymbols = [
   { symbol: "NIFTY", exchange: "NSE", name: "NIFTY 50" },
   { symbol: "SENSEX", exchange: "BSE", name: "SENSEX" },
   { symbol: "BANKNIFTY", exchange: "NSE", name: "NIFTY BANK" },
-  { symbol: "INDIAVIX", exchange: "NSE", name: "INDIA VIX" },
+  { symbol: "INDIAVIX", exchange: "NSE", name: "INDIA VIX" }
 ];
 
 const backendUrl = import.meta.env.VITE_BACKEND_URL || "https://api.alphaforge.skillsifter.in";
@@ -32,16 +33,15 @@ export default function Markets() {
 
   const token = localStorage.getItem("authToken") || localStorage.getItem("token");
 
-  // ----------------------------
-  // 🔥 Fetch Live Quotes (REST)
-  // ----------------------------
+  // ----------------------------------------------------------------------------
+  // REST QUOTE HELPER (FIXED)
+  // ----------------------------------------------------------------------------
   const fetchQuote = async (symbol: string) => {
     try {
-     // const res = await fetch(`${backendUrl}/api/icici/quote/${symbol}`, {
-        const res = await fetch(`${backendUrl}/api/icici/market/quote?symbol=${symbolInfo.symbol}`, {
-                   headers: { Authorization: `Bearer ${token}` },
-      });
-
+      const res = await fetch(
+        `${backendUrl}/api/icici/market/quote?symbol=${symbol}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       if (!res.ok) return null;
       const json = await res.json();
       return json.quote?.Success?.[0] || null;
@@ -50,13 +50,15 @@ export default function Markets() {
     }
   };
 
-  // Fetch all REST quotes every 1 sec (fallback)
+  // ----------------------------------------------------------------------------
+  // REST POLLING (1s fallback)
+  // ----------------------------------------------------------------------------
   useEffect(() => {
-    if (!token) return;   // ⛔ Prevents infinite 500 spam when token missing
+    if (!token) return;
+
     const fetchAll = async () => {
-      const indexRes = await Promise.all(
-        indexSymbols.map((i) => fetchQuote(i.symbol))
-      );
+      const indexRes = await Promise.all(indexSymbols.map((i) => fetchQuote(i.symbol)));
+
       setIndexData(
         indexRes.map((q, idx) =>
           q
@@ -66,15 +68,14 @@ export default function Markets() {
                 high: q.high,
                 low: q.low,
                 change: q.change,
-                change_percent: q.percentChange,
+                change_percent: q.percentChange
               }
             : {}
         )
       );
 
-      const stockRes = await Promise.all(
-        stockSymbols.map((s) => fetchQuote(s.symbol))
-      );
+      const stockRes = await Promise.all(stockSymbols.map((s) => fetchQuote(s.symbol)));
+
       setStockData(
         stockRes.map((q, idx) =>
           q
@@ -85,7 +86,7 @@ export default function Markets() {
                 low: q.low,
                 change: q.change,
                 change_percent: q.percentChange,
-                volume: q.volume,
+                volume: q.volume
               }
             : {}
         )
@@ -97,72 +98,88 @@ export default function Markets() {
     return () => clearInterval(interval);
   }, []);
 
-  // ----------------------------
-  // 🔥 REAL-TIME STREAMING (WS)
-  // ----------------------------
+  // ----------------------------------------------------------------------------
+  // WEBSOCKET REALTIME STREAMING
+  // ----------------------------------------------------------------------------
   useEffect(() => {
     if (!token) return;
 
-    const ws = new WebSocket(
-      `${backendUrl.replace("https://", "wss://")}/api/icici/stream`
-    );
+    const wsUrl = `${backendUrl.replace("https://", "wss://")}/api/icici/stream/live`;
+
+    const ws = new WebSocket(wsUrl, ["auth", token]);
     wsRef.current = ws;
 
-    ws.onopen = () => console.log("WebSocket connected ✔");
+    ws.onopen = () => {
+      console.log("WS Connected ✔");
+
+      // Subscribe to all stock symbols
+      stockSymbols.forEach(async (s) => {
+        await fetch(`${backendUrl}/api/icici/stream/subscribe`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ symbol: s.symbol })
+        });
+      });
+    };
 
     ws.onmessage = (evt) => {
       try {
-        const data = JSON.parse(evt.data);
-        if (!data?.stockCode) return;
+        const tick = JSON.parse(evt.data);
+        if (!tick?.stockCode) return;
 
-        // Update stockData live
         setStockData((prev) =>
           prev.map((item) =>
-            item.symbol === data.stockCode
+            item.symbol === tick.stockCode
               ? {
                   ...item,
-                  price: data.ltp,
-                  high: data.high,
-                  low: data.low,
-                  change: data.change,
-                  change_percent: data.percentChange,
+                  price: tick.ltp,
+                  high: tick.high,
+                  low: tick.low,
+                  change: tick.change,
+                  change_percent: tick.percentChange
                 }
               : item
           )
         );
-      } catch {}
+      } catch (err) {
+        console.error("WS tick parse error:", err);
+      }
     };
 
     ws.onclose = () => {
-      console.log("WebSocket disconnected — reconnecting in 3s");
+      console.log("WS Closed — retry in 3s");
       setTimeout(() => window.location.reload(), 3000);
     };
 
     return () => ws.close();
   }, []);
 
-  // ----------------------------
-  // Formatters
-  // ----------------------------
+  // ----------------------------------------------------------------------------
+  // FORMATTERS
+  // ----------------------------------------------------------------------------
   const formatPrice = (p: number) =>
     p?.toLocaleString("en-IN", { minimumFractionDigits: 2 });
 
   const formatVolume = (v: number) =>
-    v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M`
-    : v >= 1000 ? `${(v / 1000).toFixed(1)}K`
-    : v || "N/A";
+    v >= 1_000_000
+      ? `${(v / 1_000_000).toFixed(1)}M`
+      : v >= 1000
+      ? `${(v / 1000).toFixed(1)}K`
+      : v || "N/A";
 
-  // ----------------------------
-  // Render Below (No UI changes)
-  // ----------------------------
+  // ----------------------------------------------------------------------------
+  // UI (No change except updated live data)
+  // ----------------------------------------------------------------------------
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
         <AppSidebar />
         <main className="flex-1 overflow-auto">
           <div className="container mx-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
-
-            {/* ------------------ HEADER ------------------ */}
+            {/* HEADER */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
                 <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
@@ -173,15 +190,13 @@ export default function Markets() {
                 </p>
               </div>
 
-              <div className="flex gap-3 w-full sm:w-auto">
-                <div className="relative flex-1 sm:w-80">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input placeholder="Search..." className="pl-10 bg-card border-border" />
-                </div>
+              <div className="relative flex-1 sm:w-80">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input placeholder="Search..." className="pl-10 bg-card border-border" />
               </div>
             </div>
 
-            {/* ------------------ INDICES ------------------ */}
+            {/* INDICES */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {indexSymbols.map((index, idx) => {
                 const d = indexData[idx];
@@ -193,12 +208,18 @@ export default function Markets() {
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
                           <h3 className="font-semibold text-sm">{index.name}</h3>
-                          <div className={`w-2 h-2 rounded-full ${trend === "up" ? "bg-success" : "bg-destructive"} animate-pulse`} />
+                          <div className={`w-2 h-2 rounded-full ${
+                            trend === "up" ? "bg-green-500" : "bg-red-500"
+                          } animate-pulse`} />
                         </div>
+
                         <div className="text-2xl font-mono font-bold">
                           {formatPrice(d?.price) || "..."}
                         </div>
-                        <div className={`flex items-center gap-1 text-sm font-medium ${trend === "up" ? "text-success" : "text-destructive"}`}>
+
+                        <div className={`flex items-center gap-1 text-sm font-medium ${
+                          trend === "up" ? "text-green-600" : "text-red-600"
+                        }`}>
                           {trend === "up" ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
                           <span>{d?.change?.toFixed(2) || "0.00"}</span>
                           <span className="text-xs">
@@ -212,9 +233,9 @@ export default function Markets() {
               })}
             </div>
 
-            {/* ------------------ STOCK TABLE ------------------ */}
-            <Tabs defaultValue="stocks" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+            {/* STOCK TABLE */}
+            <Tabs defaultValue="stocks">
+              <TabsList className="grid grid-cols-3">
                 <TabsTrigger value="stocks">Stocks</TabsTrigger>
                 <TabsTrigger value="sectors">Sectors</TabsTrigger>
                 <TabsTrigger value="derivatives">Derivatives</TabsTrigger>
@@ -250,27 +271,44 @@ export default function Markets() {
 
                           return (
                             <tr key={s.symbol} className="border-b border-border hover:bg-muted/20">
-                              <td className="p-3 font-mono font-semibold">{s.symbol}</td>
-                              <td className="p-3 text-muted-foreground">{s.name}</td>
+                              <td className="p-3 font-mono font-semibold">
+                                {s.symbol}
+                              </td>
+
+                              <td className="p-3 text-muted-foreground">
+                                {s.name}
+                              </td>
+
                               <td className="p-3 text-right font-mono font-semibold">
                                 ₹{formatPrice(d.price)}
                               </td>
+
                               <td className="p-3 text-right">
-                                <div className={`flex justify-end items-center gap-1 text-sm font-medium ${trend === "up" ? "text-success" : "text-destructive"}`}>
+                                <div className={`flex justify-end items-center gap-1 text-sm font-medium ${
+                                  trend === "up" ? "text-green-600" : "text-red-600"
+                                }`}>
                                   {trend === "up" ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                                   <span>{d.change?.toFixed(2)}</span>
-                                  <span className="text-xs">({d.change_percent?.toFixed(2)}%)</span>
+                                  <span className="text-xs">
+                                    ({d.change_percent?.toFixed(2)}%)
+                                  </span>
                                 </div>
                               </td>
+
                               <td className="p-3 text-right font-mono text-sm">
                                 {formatVolume(d.volume)}
                               </td>
-                              <td className="p-3 text-right text-muted-foreground">{s.marketCap}</td>
+
+                              <td className="p-3 text-right text-muted-foreground">
+                                {s.marketCap}
+                              </td>
+
                               <td className="p-3 text-right">
                                 <div className="flex justify-end gap-2">
                                   <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
                                     <Star className="w-3 h-3" />
                                   </Button>
+
                                   <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
                                     <Plus className="w-3 h-3" />
                                   </Button>
