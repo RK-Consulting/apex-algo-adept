@@ -9,8 +9,7 @@ const router = Router();
 const log = debug("apex:icici:market");
 
 /**
- * GET /api/icici/market/ltp?symbol=RELIANCE&exchange=NSE
- * NOTE: Breeze has NO getLtp() — using getQuotes()
+ * GET /api/icici/market/ltp
  */
 router.get("/ltp", authenticateToken, async (req: AuthRequest, res) => {
   try {
@@ -22,7 +21,7 @@ router.get("/ltp", authenticateToken, async (req: AuthRequest, res) => {
 
     const mapped = mapSymbolForBreeze(symbol);
 
-    const breeze = await getBreezeInstance(req.user!.userId); // ✅ FIXED
+    const breeze = await getBreezeInstance(req.user!.userId);
 
     const quote = await breeze.getQuotes({
       stockCode: mapped.payload,
@@ -51,8 +50,7 @@ router.post("/ohlc", authenticateToken, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: "symbol is required" });
 
     const mapped = mapSymbolForBreeze(symbol);
-
-    const breeze = await getBreezeInstance(req.user!.userId); // ✅ FIXED
+    const breeze = await getBreezeInstance(req.user!.userId);
 
     const ohlc = await breeze.getHistoricalDataV2({
       interval,
@@ -74,7 +72,7 @@ router.post("/ohlc", authenticateToken, async (req: AuthRequest, res) => {
 });
 
 /**
- * GET /api/icici/market/quote?symbol=RELIANCE&exchange=NSE
+ * GET /api/icici/market/quote
  */
 router.get("/quote", authenticateToken, async (req: AuthRequest, res) => {
   try {
@@ -85,8 +83,7 @@ router.get("/quote", authenticateToken, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: "symbol is required" });
 
     const mapped = mapSymbolForBreeze(symbol);
-
-    const breeze = await getBreezeInstance(req.user!.userId); // ✅ FIXED
+    const breeze = await getBreezeInstance(req.user!.userId);
 
     const quote = await breeze.getQuotes({
       stockCode: mapped.payload,
@@ -102,5 +99,53 @@ router.get("/quote", authenticateToken, async (req: AuthRequest, res) => {
     });
   }
 });
+
+/* --------------------------------------------------------------------------
+   NEW ENDPOINT (REQUIRED BY WATCHLIST PRO)
+   POST /api/icici/market/quotes-bulk
+   Body: { symbols: ["RELIANCE", "TCS", ...] }
+-------------------------------------------------------------------------- */
+
+router.post("/quotes-bulk", authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { symbols, exchange = "NSE" } = req.body;
+
+    if (!Array.isArray(symbols) || symbols.length === 0) {
+      return res.status(400).json({ error: "symbols[] required" });
+    }
+
+    const breeze = await getBreezeInstance(req.user!.userId);
+
+    const results = {};
+
+    for (const symbol of symbols) {
+      try {
+        const mapped = mapSymbolForBreeze(symbol);
+
+        const q = await breeze.getQuotes({
+          stockCode: mapped.payload,
+          exchangeCode: exchange,
+        });
+
+        results[symbol] = q?.Success?.[0] || null;
+      } catch (e) {
+        results[symbol] = null;
+      }
+    }
+
+    return res.json({
+      success: true,
+      ticks: results,  // required by frontend Watchlist Pro
+    });
+
+  } catch (err: any) {
+    log("Bulk quotes error:", err);
+    return res.status(500).json({
+      error: "Bulk quote fetch failed",
+      details: err?.message || err,
+    });
+  }
+});
+
 
 export { router as marketDataRouter };
