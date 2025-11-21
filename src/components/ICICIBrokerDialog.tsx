@@ -1,16 +1,17 @@
+// src/components/ICICIBrokerDialog.tsx
 import { useState } from "react";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ExternalLink } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface ICICIBrokerDialogProps {
@@ -18,53 +19,43 @@ interface ICICIBrokerDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function ICICIBrokerDialog({
-  open,
-  onOpenChange,
-}: ICICIBrokerDialogProps) {
+export function ICICIBrokerDialog({ open, onOpenChange }: ICICIBrokerDialogProps) {
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
-  const [sessionToken, setSessionToken] = useState("");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  // ✅ fallback ensures backend URL is always available in production
+  // fallback backend URL
   const backendUrl =
     import.meta.env.VITE_BACKEND_URL || "https://api.alphaforge.skillsifter.in";
 
-  const getSessionUrl = () => {
-    if (!apiKey.trim()) return "#";
-    return `https://api.icicidirect.com/apiuser/login?api_key=${encodeURIComponent(
-      apiKey
-    )}`;
-  };
-
-  const handleConnect = async () => {
-    if (!apiKey.trim() || !apiSecret.trim() || !sessionToken.trim()) {
+  const handleSave = async () => {
+    if (!apiKey.trim() || !apiSecret.trim()) {
       toast({
-        title: "Error",
-        description: "All fields are required",
+        title: "Missing credentials",
+        description: "API Key and API Secret are required.",
         variant: "destructive",
       });
       return;
     }
 
-    // ✅ FIX: check both token storage names to match backend login output
     const token =
       localStorage.getItem("authToken") || localStorage.getItem("token");
 
     if (!token) {
       toast({
-        title: "Session expired",
-        description: "Please login again.",
+        title: "Unauthorized",
+        description: "Your session has expired. Please login again.",
         variant: "destructive",
       });
       return;
     }
 
     setLoading(true);
+
     try {
-      const response = await fetch(`${backendUrl}/api/icici/connect`, {
+      // 1) Store encrypted credentials
+      const saveRes = await fetch(`${backendUrl}/api/icici/auth/callback`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -73,37 +64,41 @@ export function ICICIBrokerDialog({
         body: JSON.stringify({
           api_key: apiKey,
           api_secret: apiSecret,
-          session_token: sessionToken,
         }),
       });
 
-      // ✅ Handle backend errors (including HTML 403 responses)
-      let result;
-      try {
-        result = await response.json();
-      } catch {
-        throw new Error(`Unexpected response (${response.status})`);
+      const saveData = await saveRes.json();
+
+      if (!saveRes.ok) {
+        throw new Error(saveData.error || "Failed to save credentials");
       }
 
-      if (!response.ok)
-        throw new Error(result.error || "Failed to connect ICICI Direct.");
-
-      toast({
-        title: "Success",
-        description: "ICICI Direct connected successfully ✅",
+      // 2) Immediately activate ICICI trading session
+      const connectRes = await fetch(`${backendUrl}/api/icici/connect`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
 
+      const connectData = await connectRes.json();
+      if (!connectRes.ok) {
+        throw new Error(connectData.error || "Failed to activate ICICI session");
+      }
+
+      toast({
+        title: "ICICI Connected",
+        description: "Your ICICI Direct Breeze session is active.",
+      });
+
+      // cleanup
       setApiKey("");
       setApiSecret("");
-      setSessionToken("");
       onOpenChange(false);
-    } catch (error: any) {
-      console.error("❌ ICICI Connect Error:", error);
+    } catch (err: any) {
       toast({
         title: "Error",
-        description:
-          error.message ||
-          "Connection failed. Please verify credentials or try again later.",
+        description: err.message || "Failed to connect ICICI Direct.",
         variant: "destructive",
       });
     } finally {
@@ -115,21 +110,17 @@ export function ICICIBrokerDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Connect to ICICI Direct (Breeze)</DialogTitle>
+          <DialogTitle>Connect ICICI Direct (Breeze)</DialogTitle>
           <DialogDescription>
-            Enter your ICICI Direct API credentials to enable trading.
+            Securely store your ICICI Direct API Key and Secret to enable live trading,
+            streaming market data, and placing orders.
           </DialogDescription>
         </DialogHeader>
 
-        <Alert className="mb-2">
-          <AlertDescription className="text-sm">
-            <b>Steps:</b>
-            <br />
-            1️⃣ Enter API Key
-            <br />
-            2️⃣ Click “Get Session Token” and log in
-            <br />
-            3️⃣ Copy token → paste here
+        <Alert className="mb-3">
+          <AlertDescription>
+            The system now auto-generates and manages the Breeze session token
+            internally. You only need API Key and API Secret.
           </AlertDescription>
         </Alert>
 
@@ -152,37 +143,15 @@ export function ICICIBrokerDialog({
               disabled={loading}
             />
           </div>
-
-          <div>
-            <div className="flex justify-between items-center">
-              <Label>Session Token *</Label>
-              <Button
-                variant="link"
-                onClick={() => window.open(getSessionUrl(), "_blank")}
-                disabled={!apiKey || loading}
-              >
-                Get Session Token <ExternalLink className="ml-1 h-3 w-3" />
-              </Button>
-            </div>
-            <Input
-              value={sessionToken}
-              onChange={(e) => setSessionToken(e.target.value)}
-              disabled={loading}
-            />
-          </div>
         </div>
 
         <div className="flex justify-end gap-2">
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={loading}
-          >
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             Cancel
           </Button>
-          <Button onClick={handleConnect} disabled={loading}>
+          <Button onClick={handleSave} disabled={loading}>
             {loading && <Loader2 className="animate-spin mr-2 h-4 w-4" />}
-            Connect
+            Save & Connect
           </Button>
         </div>
       </DialogContent>
