@@ -3,7 +3,18 @@ import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 import breezeSession from "../utils/breezeSession.js";
 import { query } from "../config/database.js";
+import { iciciBrokerRouter } from "./iciciBroker.js";
+import { marketDataRouter } from "./icici/marketData.js";
+import { iciciOrdersRouter } from "./icici/orders.js";
+import { iciciPortfolioRouter } from "./icici/portfolio.js";
+import { iciciMeRouter } from "./icici/me.js";
+import { iciciBacktestRouter } from "./iciciBacktest.js";
+import { iciciAuthCallbackRouter } from "./icici/authCallback.js";
+import { iciciStatusRouter } from "./icici/status.js";
+import { iciciStreamControlRouter } from "./icici/streamControlRouter.js";
+import debug from "debug";
 
+const log = debug("apex:routes:icici");
 const router = Router();
 
 /**
@@ -180,5 +191,20 @@ router.post("/status", authenticateToken, async (req: AuthRequest, res, next) =>
     next(err);
   }
 });
+
+/**
+ * Consolidated ICICI router
+ * - Mount the legacy broker credentials route (iciciBrokerRouter)
+ * - Mount functional api routes under same base
+ */
+router.use("/", iciciBrokerRouter); // /api/icici/...
+router.use("/market", marketDataRouter); // /api/icici/market/...
+router.use("/", iciciOrdersRouter); // /api/icici/order(s)
+router.use("/portfolio", iciciPortfolioRouter); // /api/icici/portfolio/...
+router.use("/", iciciMeRouter); // /api/icici/me
+router.use("/stream", iciciStreamControlRouter); // /api/icici/stream/subscribe etc.
+router.use("/backtest", iciciBacktestRouter);
+router.use("/", iciciAuthCallbackRouter);
+router.use("/", iciciStatusRouter);
 
 export { router as iciciRouter };
