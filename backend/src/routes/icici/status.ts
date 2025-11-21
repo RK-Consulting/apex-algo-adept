@@ -1,12 +1,14 @@
 // backend/src/routes/icici/status.ts
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../../middleware/auth.js";
-import { getBreezeInstance } from "../../utils/breezeSession.js";
+//import { getBreezeInstance } from "../../utils/breezeSession.js";
+import breezeSession from "../../utils/breezeSession.js";
 import { query } from "../../config/database.js";
 import debug from "debug";
 
 const log = debug("apex:icici:status");
 const router = Router();
+const { getBreezeInstance } = breezeSession;
 
 /**
  * GET /api/icici/status
