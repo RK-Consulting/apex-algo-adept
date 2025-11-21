@@ -1,187 +1,202 @@
+// backend/src/routes/iciciBroker.ts
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 import { query } from "../config/database.js";
-import crypto from "crypto";
-
+import {
+  encryptData,
+  decryptData,
+  getEncryptionKey,
+} from "../utils/credentialEncryptor.js";
 import {
   createBreezeLoginSession,
-} from "../utils/breezeSession.js"; // ✅ Correct Import
+} from "../utils/breezeSession.js";
 
 const router = Router();
+const BROKER = "icici-breeze";
 
 /* ============================================================
-   ENCRYPTION UTILITIES (unchanged)
+   STORE CREDENTIALS (API Key, Secret, Username, Password)
 ============================================================ */
-
-async function encryptData(data: string, key: Buffer) {
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
-
-  let encrypted = cipher.update(data, "utf8", "base64");
-  encrypted += cipher.final("base64");
-  const authTag = cipher.getAuthTag();
-
-  return {
-    encrypted: encrypted + authTag.toString("base64"),
-    iv: iv.toString("base64"),
-  };
-}
-
-async function decryptData(encryptedData: string, iv: string, key: Buffer) {
-  const ivBuffer = Buffer.from(iv, "base64");
-  const encryptedBuffer = Buffer.from(encryptedData, "base64");
-
-  const authTag = encryptedBuffer.slice(-16);
-  const encrypted = encryptedBuffer.slice(0, -16);
-
-  const decipher = crypto.createDecipheriv("aes-256-gcm", key, ivBuffer);
-  decipher.setAuthTag(authTag);
-
-  let decrypted = decipher.update(encrypted.toString("base64"), "base64", "utf8");
-  decrypted += decipher.final("utf8");
-
-  return decrypted;
-}
-
-function getEncryptionKey(): Buffer {
-  const masterSecret = process.env.CREDENTIALS_ENCRYPTION_KEY;
-  if (!masterSecret) {
-    throw new Error("CREDENTIALS_ENCRYPTION_KEY not configured");
-  }
-
-  return crypto.pbkdf2Sync(
-    masterSecret,
-    "alphaforge-credentials-v1",
-    100000,
-    32,
-    "sha256"
-  );
-}
-
-/* ============================================================
-   STORE CREDENTIALS
-============================================================ */
-
 router.post("/store", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const userId = req.user!.userId;
+    const {
+      api_key,
+      api_secret,
+      username,
+      password,
+    } = req.body;
 
-    const { broker_name, api_key, api_secret } = req.body;
-
-    if (!broker_name || !api_key) {
+    if (!api_key || !api_secret || !username || !password) {
       return res.status(400).json({
-        error: "Missing required fields: broker_name and api_key are required",
+        error: "api_key, api_secret, username, password are required",
       });
     }
 
-    const encryptionKey = getEncryptionKey();
+    const key = getEncryptionKey();
 
-    const encryptedApiKey = await encryptData(api_key, encryptionKey);
-    const encryptedApiSecret = api_secret
-      ? await encryptData(api_secret, encryptionKey)
-      : null;
+    const encApiKey = encryptData(api_key, key);
+    const encApiSecret = encryptData(api_secret, key);
+    const encUsername = encryptData(username, key);
+    const encPassword = encryptData(password, key);
 
-    const existing = await query(
-      "SELECT user_id FROM user_credentials WHERE user_id = $1 AND broker_name = $2",
-      [userId, broker_name]
+    const exists = await query(
+      `SELECT user_id FROM user_credentials WHERE user_id=$1 AND broker_name=$2`,
+      [userId, BROKER]
     );
 
-    if (existing.rows.length > 0) {
+    if (exists.rows.length) {
       await query(
-        `UPDATE user_credentials 
-         SET icici_api_key = $1, icici_api_secret = $2, updated_at = NOW()
-         WHERE user_id = $3 AND broker_name = $4`,
+        `UPDATE user_credentials
+         SET icici_api_key=$1, icici_api_secret=$2,
+             icici_username=$3, icici_password=$4,
+             updated_at=NOW()
+         WHERE user_id=$5 AND broker_name=$6`,
         [
-          JSON.stringify(encryptedApiKey),
-          encryptedApiSecret ? JSON.stringify(encryptedApiSecret) : null,
+          JSON.stringify(encApiKey),
+          JSON.stringify(encApiSecret),
+          JSON.stringify(encUsername),
+          JSON.stringify(encPassword),
           userId,
-          broker_name,
+          BROKER,
         ]
       );
     } else {
       await query(
-        `INSERT INTO user_credentials 
-         (user_id, broker_name, icici_api_key, icici_api_secret)
-         VALUES ($1, $2, $3, $4)`,
+        `INSERT INTO user_credentials
+         (user_id, broker_name,
+          icici_api_key, icici_api_secret,
+          icici_username, icici_password)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           userId,
-          broker_name,
-          JSON.stringify(encryptedApiKey),
-          encryptedApiSecret ? JSON.stringify(encryptedApiSecret) : null,
+          BROKER,
+          JSON.stringify(encApiKey),
+          JSON.stringify(encApiSecret),
+          JSON.stringify(encUsername),
+          JSON.stringify(encPassword),
         ]
       );
     }
 
-    res.json({
+    return res.json({
       success: true,
-      message: "Credentials securely stored",
+      message: "ICICI credentials saved securely",
     });
-  } catch (error) {
-    next(error);
+  } catch (err) {
+    next(err);
   }
 });
 
 /* ============================================================
    RETRIEVE CREDENTIALS
 ============================================================ */
-
 router.post("/retrieve", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const userId = req.user!.userId;
-    const { broker_name } = req.body;
 
     const result = await query(
-      `SELECT icici_api_key, icici_api_secret 
-       FROM user_credentials 
-       WHERE user_id = $1 AND broker_name = $2`,
-      [userId, broker_name]
+      `SELECT icici_api_key, icici_api_secret,
+              icici_username, icici_password
+       FROM user_credentials
+       WHERE user_id=$1 AND broker_name=$2`,
+      [userId, BROKER]
     );
 
     if (!result.rows.length) {
-      return res.status(404).json({ error: "Credentials not found" });
+      return res.status(404).json({ error: "No ICICI credentials found" });
     }
 
-    const encryptionKey = getEncryptionKey();
+    const row = result.rows[0];
+    const key = getEncryptionKey();
 
-    const keyData = JSON.parse(result.rows[0].icici_api_key);
-    const apiKey = await decryptData(keyData.encrypted, keyData.iv, encryptionKey);
+    const apiKey = decryptData(
+      JSON.parse(row.icici_api_key).encrypted,
+      JSON.parse(row.icici_api_key).iv,
+      key
+    );
 
-    let apiSecret = null;
-    if (result.rows[0].icici_api_secret) {
-      const secretData = JSON.parse(result.rows[0].icici_api_secret);
-      apiSecret = await decryptData(secretData.encrypted, secretData.iv, encryptionKey);
-    }
+    const apiSecret = decryptData(
+      JSON.parse(row.icici_api_secret).encrypted,
+      JSON.parse(row.icici_api_secret).iv,
+      key
+    );
 
-    res.json({
+    const username = decryptData(
+      JSON.parse(row.icici_username).encrypted,
+      JSON.parse(row.icici_username).iv,
+      key
+    );
+
+    const password = decryptData(
+      JSON.parse(row.icici_password).encrypted,
+      JSON.parse(row.icici_password).iv,
+      key
+    );
+
+    return res.json({
       api_key: apiKey,
       api_secret: apiSecret,
+      username,
+      password,
     });
-  } catch (error) {
-    next(error);
+  } catch (err) {
+    next(err);
   }
 });
 
 /* ============================================================
-   CONNECT TO ICICI (REAL BREEZE LOGIN CALL)
+   CONNECT → PERFORM BREEZE LOGIN (JWT)
 ============================================================ */
-
-router.post("/connect", authenticateToken, async (req: AuthRequest, res) => {
+router.post("/connect", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const userId = req.user!.userId;
-    const { api_key, api_secret, session_token } = req.body;
+    const { session_token } = req.body;
 
-    if (!api_key || !api_secret || !session_token) {
+    if (!session_token) {
       return res.status(400).json({
         success: false,
-        error: "api_key, api_secret, and session_token required",
+        error: "session_token is required (from OTP login flow)",
       });
     }
 
-    // REAL Breeze login — generates ICICI JWT
+    //-------------------------------------------------------
+    // 1) Load API Key + Secret from encrypted DB
+    //-------------------------------------------------------
+    const result = await query(
+      `SELECT icici_api_key, icici_api_secret
+       FROM user_credentials
+       WHERE user_id=$1 AND broker_name=$2`,
+      [userId, BROKER]
+    );
+
+    if (!result.rows.length) {
+      return res
+        .status(404)
+        .json({ error: "API key/secret not stored. Please save credentials first." });
+    }
+
+    const key = getEncryptionKey();
+
+    const apiKey = decryptData(
+      JSON.parse(result.rows[0].icici_api_key).encrypted,
+      JSON.parse(result.rows[0].icici_api_key).iv,
+      key
+    );
+
+    const apiSecret = decryptData(
+      JSON.parse(result.rows[0].icici_api_secret).encrypted,
+      JSON.parse(result.rows[0].icici_api_secret).iv,
+      key
+    );
+
+    //-------------------------------------------------------
+    // 2) Do Breeze Login → returns JWT
+    //-------------------------------------------------------
     const jwtToken = await createBreezeLoginSession(
       userId,
-      api_key,
-      api_secret,
+      apiKey,
+      apiSecret,
       session_token
     );
 
@@ -192,6 +207,7 @@ router.post("/connect", authenticateToken, async (req: AuthRequest, res) => {
     });
   } catch (err: any) {
     console.error("ICICI Connect Error:", err);
+
     return res.status(500).json({
       success: false,
       error: err.message || "Failed to connect to ICICI",
