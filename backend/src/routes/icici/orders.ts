@@ -1,13 +1,14 @@
 // backend/src/routes/icici/orders.ts
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../../middleware/auth.js";
-import { getBreezeInstance } from "../../utils/breezeSession.js";
+//import { getBreezeInstance } from "../../utils/breezeSession.js";
+import breezeSession from "../../utils/breezeSession.js";
 import { mapSymbolForBreeze } from "../../utils/symbolMapper.js";
 import debug from "debug";
 
 const router = Router();
 const log = debug("apex:icici:orders");
-
+const { getBreezeInstance } = breezeSession;
 /**
  * POST /api/icici/order
  * Place a new order
