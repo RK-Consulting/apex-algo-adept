@@ -43,3 +43,22 @@ export async function request(
 
   return body;
 }
+
+// ICICI APIs
+export const ICICI = {
+  status: () => api.get("/icici/status"),
+  callback: (payload) => api.post("/icici/auth/callback", payload),
+  connect: () => api.post("/icici/connect"),
+  me: () => api.get("/icici/me"),
+  orders: () => api.get("/icici/orders"),
+  holdings: () => api.get("/icici/portfolio/holdings"),
+  positions: () => api.get("/icici/portfolio/positions"),
+  funds: () => api.get("/icici/portfolio/funds"),
+  summary: () => api.get("/icici/portfolio/summary"),
+  quote: (symbol, exchange = "NSE") =>
+    api.get(`/icici/market/quote?symbol=${symbol}&exchange=${exchange}`),
+  ohlc: (payload) => api.post("/icici/market/ohlc", payload),
+  ltp: (symbol, exchange = "NSE") =>
+    api.get(`/icici/market/ltp?symbol=${symbol}&exchange=${exchange}`),
+};
+
