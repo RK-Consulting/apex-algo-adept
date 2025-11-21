@@ -1,11 +1,13 @@
 // backend/src/utils/breezeSession.ts
 import crypto from "crypto";
+import fetch from "node-fetch";
 import { query } from "../config/database.js";
 import { promisify } from "util";
 import { URLSearchParams } from "url";
 import type { IncomingMessage } from "http";
 
 const pbkdf2 = promisify(crypto.pbkdf2);
+const BREEZE_LOGIN_URL = "https://api.icicidirect.com/breezeapi/api/v1/login";
 
 type BreezeSession = {
   access_token: string;
@@ -57,26 +59,48 @@ function decryptJson(payloadObj: { iv: string; encrypted: string }) {
  * buildBreezeLoginUrl
  * Returns the URL the frontend should open so user can login to ICICI Breeze (OAuth flow)
  */
-export async function createBreezeLoginSession(userId: string) {
-  // NOTE: provider-specific params vary. Adjust `scope`, `state` as needed.
-  const state = `${userId}:${crypto.randomBytes(8).toString("hex")}`;
-  const params = new URLSearchParams({
-    response_type: "code",
-    client_id: CLIENT_ID,
-    redirect_uri: REDIRECT_URI,
-    scope: "openid profile", // TODO: adjust
-    state,
+export async function createBreezeLoginSession(
+  userId: string,
+  apiKey: string,
+  apiSecret: string,
+  sessionToken: string
+) {
+  const payload = {
+    appkey: apiKey,
+    secretkey: apiSecret,
+    sessionToken,
+  };
+
+  const res = await fetch(BREEZE_LOGIN_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Checksum": crypto.createHash("sha256")
+        .update(apiKey + sessionToken + apiSecret)
+        .digest("hex"),
+    },
+    body: JSON.stringify(payload),
   });
 
-  // If provider supports a session creation endpoint, you could call it here.
-  const loginUrl = `${ICICI_AUTH_BASE}/oauth/authorize?${params.toString()}`;
-  // Save state mapping to DB to validate callback (optional)
-  await query(
-    `INSERT INTO icici_oauth_states (user_id, state, created_at) VALUES ($1, $2, NOW()) ON CONFLICT (state) DO NOTHING`,
-    [userId, state]
-  ).catch(() => { /* ignore if table missing */ });
+  if (!res.ok) {
+    throw new Error(`ICICI Login failed (${res.status})`);
+  }
 
-  return { loginUrl, state };
+  const data = await res.json();
+
+  if (!data?.status || !data?.jwtToken) {
+    throw new Error("Invalid Breeze login response: missing jwtToken");
+  }
+
+  // Save JWT token in DB
+  await query(
+    `UPDATE user_credentials
+     SET icici_session_token=$1, updated_at=NOW()
+     WHERE user_id=$2`,
+    [data.jwtToken, userId]
+  );
+
+  return data.jwtToken;
 }
 
 /**
