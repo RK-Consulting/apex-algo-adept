@@ -1,11 +1,13 @@
 // backend/src/routes/icici/me.ts
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../../middleware/auth.js";
-import { getBreezeInstance } from "../../utils/breezeSession.js";
+//import { getBreezeInstance } from "../../utils/breezeSession.js";
+import breezeSession from "../../utils/breezeSession.js";
 import debug from "debug";
 
 const router = Router();
 const log = debug("apex:icici:me");
+const { getBreezeInstance } = breezeSession;
 
 /**
  * GET /api/icici/me
