@@ -11,6 +11,32 @@ const log = debug("apex:icici:callback");
 const router = Router();
 
 /**
+ * Simple callback endpoint for ICICI/Breeze OAuth or login flow
+ * Breeze may redirect the user to your backend after auth — capture tokens here.
+ */
+router.get("/auth/callback", async (req, res) => {
+  try {
+    // Query params will depend on Breeze — adapt if needed
+    const { session_token, api_key, user } = req.query;
+
+    log("Auth callback params:", { session_token: !!session_token, api_key: !!api_key, user });
+
+    // You may want to persist session_token for the current user here
+    // For now return a small page or JSON
+    return res.json({
+      success: true,
+      message: "ICICI callback received. Paste session_token into the app if needed.",
+      session_token,
+      api_key,
+      user,
+    });
+  } catch (err) {
+    log("Auth callback error:", err);
+    return res.status(500).json({ success: false, error: "Callback handling failed" });
+  }
+});
+
+/**
  * POST /api/icici/auth/callback
  * Called after user enters ICICI API Key & Secret
  */
