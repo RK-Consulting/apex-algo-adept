@@ -1,90 +1,146 @@
 // backend/src/routes/icici/stream.ts
+
 import { Router } from "express";
 import { WebSocketServer } from "ws";
-import { authenticateToken } from "../../middleware/auth.js";
+import { authenticateToken, AuthRequest } from "../../middleware/auth.js";
+import debug from "debug";
+import jwt from "jsonwebtoken";
+
 import {
   startUserStream,
   stopUserStream,
   subscribeSymbol,
   unsubscribeSymbol,
 } from "../../services/iciciRealtime.js";
-import debug from "debug";
 
 const log = debug("apex:icici:stream");
 
-// ---------------------------------------------
-// WebSocket Router Mount (HTTP → WS Upgrade)
-// ---------------------------------------------
-
 const router = Router();
 
+/* ------------------------------------------------------------------
+   REST ENDPOINTS (Subscribe/Unsubscribe/Status)
+   These are required by:
+   - Watchlist Pro Component
+   - Markets page
+-------------------------------------------------------------------*/
+
 /**
- * This GET route only exists to allow Cloudflare / Nginx / Browser
- * to hit the endpoint. Actual WS upgrade happens in server.ts
+ * GET /api/icici/stream/status
  */
-router.get("/stream", authenticateToken, (req, res) => {
+router.get("/status", authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    return res.json({
+      success: true,
+      connected: true,
+      message: "ICICI WebSocket Feed Ready",
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      connected: false,
+      error: err.message || "Stream status error",
+    });
+  }
+});
+
+/**
+ * POST /api/icici/stream/subscribe
+ * Body: { symbol, exchange? }
+ */
+router.post("/subscribe", authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user!.userId;
+    const { symbol, exchange = "NSE" } = req.body;
+
+    if (!symbol) return res.status(400).json({ error: "symbol required" });
+
+    await startUserStream(userId, () => {});
+    await subscribeSymbol(userId, symbol, exchange);
+
+    return res.json({ success: true, subscribed: symbol });
+  } catch (err: any) {
+    log("subscribe error:", err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/icici/stream/unsubscribe
+ */
+router.post("/unsubscribe", authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user!.userId;
+    const { symbol, exchange = "NSE" } = req.body;
+
+    if (!symbol) return res.status(400).json({ error: "symbol required" });
+
+    await unsubscribeSymbol(userId, symbol, exchange);
+
+    return res.json({ success: true, unsubscribed: symbol });
+  } catch (err: any) {
+    log("unsubscribe error:", err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET (dummy)
+ * Allows browser/Nginx to confirm WS endpoint exists.
+ */
+router.get("/", authenticateToken, (req, res) => {
   return res.json({
     success: true,
-    message: "WebSocket available at ws://host/api/icici/stream",
+    ws: "WebSocket available at wss://host/api/icici/stream",
   });
 });
 
 export { router as iciciStreamRouter };
 
-/**
- * This function must be called from server.ts after HTTP server is created:
- *
- *    import { initIciciStreamServer } from "./routes/icici/stream.js";
- *    const wss = initIciciStreamServer(server);
- */
+/* ------------------------------------------------------------------
+   REAL WEBSOCKET UPGRADE IMPLEMENTATION
+   Called from server.ts → initIciciStreamServer(server)
+-------------------------------------------------------------------*/
+
 export function initIciciStreamServer(server) {
   const wss = new WebSocketServer({ noServer: true });
 
-  // Handle upgrade request from Express server
-  server.on("upgrade", async (request, socket, head) => {
-    if (!request.url?.startsWith("/api/icici/stream")) return;
+  server.on("upgrade", async (req, socket, head) => {
+    if (!req.url?.startsWith("/api/icici/stream")) return;
 
-    // We manually run JWT validation here because this is WS, not HTTP.
     try {
-      const tokenHeader = request.headers["sec-websocket-protocol"];
-
+      const tokenHeader = req.headers["sec-websocket-protocol"];
       if (!tokenHeader) {
         socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
-        socket.destroy();
-        return;
+        return socket.destroy();
       }
 
       const token = Array.isArray(tokenHeader) ? tokenHeader[0] : tokenHeader;
-
       const decoded = await authenticateWsToken(token);
-      request.userId = decoded.userId;
+
+      req.userId = decoded.userId;
     } catch (err) {
-      log("WS Auth failed:", err);
+      log("WS auth failed:", err);
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
-      socket.destroy();
-      return;
+      return socket.destroy();
     }
 
-    wss.handleUpgrade(request, socket, head, (ws) => {
-      wss.emit("connection", ws, request);
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.emit("connection", ws, req);
     });
   });
 
-  // Main WebSocket connection handler
   wss.on("connection", async (ws, req) => {
     const userId = req.userId;
-    log("WS: User connected:", userId);
+    log("WS User connected:", userId);
 
-    // Attach Breeze realtime stream
     const stream = await startUserStream(userId, (tick) => {
       if (ws.readyState === ws.OPEN) {
-        ws.send(JSON.stringify({ type: "tick", data: tick }));
+        ws.send(JSON.stringify({ type: "tick", ...tick }));
       }
     });
 
-    ws.send(JSON.stringify({ type: "connected", message: "ICICI live feed connected" }));
+    ws.send(JSON.stringify({ type: "connected", userId }));
 
-    // Handle incoming messages from frontend
     ws.on("message", async (msg) => {
       try {
         const data = JSON.parse(msg.toString());
@@ -103,9 +159,6 @@ export function initIciciStreamServer(server) {
           case "ping":
             ws.send(JSON.stringify({ type: "pong" }));
             break;
-
-          default:
-            log("Unknown WS action:", data);
         }
       } catch (err) {
         log("WS message error:", err);
@@ -113,12 +166,12 @@ export function initIciciStreamServer(server) {
     });
 
     ws.on("close", () => {
-      log("WS: User disconnected:", userId);
       stopUserStream(userId);
+      log("WS closed:", userId);
     });
 
     ws.on("error", (err) => {
-      log("WS Error:", err);
+      log("WS error:", err);
       stopUserStream(userId);
     });
   });
@@ -127,12 +180,9 @@ export function initIciciStreamServer(server) {
 }
 
 /**
- * JWT validator for WebSocket protocol header
- * This reuses your normal middleware logic.
+ * JWT validator for WS protocol header
  */
-import jwt from "jsonwebtoken";
-
-async function authenticateWsToken(token: string): Promise<any> {
+function authenticateWsToken(token) {
   return new Promise((resolve, reject) => {
     jwt.verify(token, process.env.JWT_SECRET!, (err, decoded) => {
       if (err) return reject(err);
