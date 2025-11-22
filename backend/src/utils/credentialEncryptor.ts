@@ -1,6 +1,4 @@
 // backend/src/utils/credentialEncryptor.ts
-import crypto from "crypto";
-
 /**
  * ************************************************************
  *  Unified Encryption Utility for AlphaForge
@@ -15,96 +13,77 @@ import crypto from "crypto";
  * ************************************************************
  */
 
+import crypto from "crypto";
+
 const SALT = "alphaforge-credentials-v1";
-const KEY_LEN = 32;          // AES-256
-const ITERATIONS = 100_000;  // PBKDF2 cost
+const KEY_LEN = 32; // AES-256
+const ITERATIONS = 100_000;
+const DIGEST = "sha256";
 
 /**
- * Derive AES-256 key from MASTER SECRET
+ * Derive a strong AES key from the master secret in .env
+ * Throws if CREDENTIALS_ENCRYPTION_KEY is missing.
  */
 export function getEncryptionKey(): Buffer {
-  const master = process.env.CREDENTIALS_ENCRYPTION_KEY;
-  if (!master) {
-    throw new Error("CREDENTIALS_ENCRYPTION_KEY is missing in .env");
+  const masterSecret = process.env.CREDENTIALS_ENCRYPTION_KEY;
+  if (!masterSecret) {
+    throw new Error("CREDENTIALS_ENCRYPTION_KEY missing in environment");
   }
-
-  return crypto.pbkdf2Sync(master, SALT, ITERATIONS, KEY_LEN, "sha256");
+  return crypto.pbkdf2Sync(masterSecret, SALT, ITERATIONS, KEY_LEN, DIGEST);
 }
 
 /**
- * Encrypt STRING with AES-256-GCM
+ * Encrypt a string (utf8) or object (JSON) using AES-256-GCM.
+ * Returns { encrypted: base64, iv: base64 } where encrypted = ciphertext + authTag.
  */
-export function encryptData(
-  data: string,
-  key: Buffer
-): { iv: string; encrypted: string } {
-  const iv = crypto.randomBytes(12); // 96-bit recommended IV
-  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+export function encryptDataRaw(data: string | object, key?: Buffer) {
+  const k = key ?? getEncryptionKey();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", k, iv);
 
-  const encrypted = Buffer.concat([
-    cipher.update(data, "utf8"),
-    cipher.final()
-  ]);
-
+  const plain = typeof data === "string" ? data : JSON.stringify(data);
+  const encrypted = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
   const authTag = cipher.getAuthTag();
-
-  // payload = ciphertext + tag
   const payload = Buffer.concat([encrypted, authTag]).toString("base64");
-
-  return {
-    iv: iv.toString("base64"),
-    encrypted: payload,
-  };
+  return { encrypted: payload, iv: iv.toString("base64") };
 }
 
 /**
- * Decrypt STRING encrypted via encryptData()
+ * Decrypt previously encrypted blob produced by encryptDataRaw.
+ * Returns string — caller can JSON.parse if it stored an object.
  */
-export function decryptData(
-  encryptedData: string,
-  iv: string,
-  key: Buffer
-): string {
-  const ivBuf = Buffer.from(iv, "base64");
+export function decryptDataRaw(encryptedData: string, ivBase64: string, key?: Buffer): string {
+  const k = key ?? getEncryptionKey();
+  const iv = Buffer.from(ivBase64, "base64");
   const buf = Buffer.from(encryptedData, "base64");
+  const authTag = buf.slice(-16);
+  const enc = buf.slice(0, -16);
 
-  const tag = buf.slice(-16);
-  const ciphertext = buf.slice(0, -16);
-
-  const decipher = crypto.createDecipheriv("aes-256-gcm", key, ivBuf);
-  decipher.setAuthTag(tag);
-
-  const decrypted = Buffer.concat([
-    decipher.update(ciphertext),
-    decipher.final()
-  ]).toString("utf8");
-
-  return decrypted;
+  const decipher = crypto.createDecipheriv("aes-256-gcm", k, iv);
+  decipher.setAuthTag(authTag);
+  const out = Buffer.concat([decipher.update(enc), decipher.final()]).toString("utf8");
+  return out;
 }
 
 /**
- * Encrypt an OBJECT (auto JSON.stringify)
+ * Convenience: encrypt an object and return JSON-ready blob
  */
-export function encryptObject(obj: any) {
-  const key = getEncryptionKey();
-  const json = JSON.stringify(obj);
-
-  return encryptData(json, key);
+export function encryptJSON(obj: any) {
+  return encryptDataRaw(obj);
 }
 
 /**
- * Decrypt OBJECT payload back to JS object
+ * Convenience: decrypt JSON blob previously saved with encryptJSON
  */
-export function decryptObject(payload: { iv: string; encrypted: string }) {
-  const key = getEncryptionKey();
-  const str = decryptData(payload.encrypted, payload.iv, key);
-  return JSON.parse(str);
+export function decryptJSON(payload: { encrypted: string; iv: string }) {
+  const s = decryptDataRaw(payload.encrypted, payload.iv);
+  return JSON.parse(s);
 }
 
 export default {
   getEncryptionKey,
-  encryptData,
-  decryptData,
-  encryptObject,
-  decryptObject,
+  encryptDataRaw,
+  decryptDataRaw,
+  encryptJSON,
+  decryptJSON,
 };
