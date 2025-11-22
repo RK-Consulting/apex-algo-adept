@@ -17,5 +17,5 @@
     "sourceMap": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "backend/src/icici_old", "backend/src/icici_old/**"]
+  "exclude": ["node_modules", "dist", "src/icici_old", "src/icici_old/**"]
 }
