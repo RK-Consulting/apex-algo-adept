@@ -18,8 +18,8 @@ import { credentialsRouter } from "./routes/credentials.js";
 // -----------------------------------------------------------
 
 import { iciciBrokerRouter } from "./routes/iciciBroker.js";                 // Store/Retrieve encrypted credentials + Connect
-import { iciciStatusRouter } from "./routes/iciciStatus.js";                 // Connection status & session info
-import { iciciBacktestRouter } from "./routes/iciciBacktest.js";             // (Kept) Backtesting endpoint
+// import { iciciStatusRouter } from "./routes/iciciStatus.js";                 // Connection status & session info
+// import { iciciBacktestRouter } from "./routes/iciciBacktest.js";             // (Kept) Backtesting endpoint
 import { iciciStreamControlRouter } from "./routes/icici/streamControlRouter.js"; // WS handshake controller
 
 // ❌ DO NOT IMPORT OLD ROUTES HERE ANYMORE
