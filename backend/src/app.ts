@@ -1,3 +1,4 @@
+// /backend/src/app.ts
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -12,17 +13,23 @@ import authRouter from "./routes/auth.js";
 import { strategyRouter } from "./routes/strategies.js";
 import { credentialsRouter } from "./routes/credentials.js";
 
-// ICICI Modules
-import { iciciBrokerRouter } from "./routes/iciciBroker.js";
-import { marketDataRouter } from "./routes/icici/marketData.js";
-import { iciciOrdersRouter } from "./routes/icici/orders.js";
-import { iciciPortfolioRouter } from "./routes/icici/portfolio.js";
-import { iciciMeRouter } from "./routes/icici/me.js";
-import { iciciAuthCallbackRouter } from "./routes/icici/authCallback.js";
-import { iciciStatusRouter } from "./routes/icici/status.js";
-import { iciciStreamRouter } from "./routes/icici/stream.js";
+// -----------------------------------------------------------
+// NEW ICICI ROUTERS (AFTER CLEANUP)
+// -----------------------------------------------------------
 
-import { iciciBacktestRouter } from "./routes/iciciBacktest.js";
+import { iciciBrokerRouter } from "./routes/iciciBroker.js";                 // Store/Retrieve encrypted credentials + Connect
+import { iciciStatusRouter } from "./routes/iciciStatus.js";                 // Connection status & session info
+import { iciciBacktestRouter } from "./routes/iciciBacktest.js";             // (Kept) Backtesting endpoint
+import { iciciStreamControlRouter } from "./routes/icici/streamControlRouter.js"; // WS handshake controller
+
+// ❌ DO NOT IMPORT OLD ROUTES HERE ANYMORE
+// ❌ marketDataRouter
+// ❌ iciciOrdersRouter
+// ❌ iciciPortfolioRouter
+// ❌ iciciMeRouter
+// ❌ iciciAuthCallbackRouter
+// ❌ iciciStatusRouter (old one)
+// ❌ iciciStreamRouter (old one)
 
 dotenv.config();
 
@@ -43,7 +50,6 @@ app.use(
         "https://www.alphaforge.skillsifter.in",
       ];
 
-      // Cloudflare pages previews
       if (origin.endsWith(".apex-algo-adept.pages.dev"))
         return callback(null, true);
 
@@ -88,26 +94,27 @@ app.get("/health", (_req, res) =>
 );
 
 /* -------------------------------------------------------
-   Main API Routes
+   MAIN API ROUTES
 ------------------------------------------------------- */
 app.use("/api/auth", authRouter);
 app.use("/api/strategies", strategyRouter);
 app.use("/api/credentials", credentialsRouter);
 
 /* -------------------------------------------------------
-   ICICI — Unified Routing
+   ICICI — Unified NEW Routing
 ------------------------------------------------------- */
-app.use("/api/icici", iciciBrokerRouter);         // Store encrypted API keys
-app.use("/api/icici", iciciAuthCallbackRouter);   // OAuth-like callback
-app.use("/api/icici", iciciStatusRouter);         // Broker connection status
 
-app.use("/api/icici/market", marketDataRouter);   // LTP, quotes, OHLC
-app.use("/api/icici", iciciOrdersRouter);         // Orders
-app.use("/api/icici/portfolio", iciciPortfolioRouter); // Holdings, positions
-app.use("/api/icici", iciciMeRouter);             // Breeze session validation
+// Store encrypted broker creds + Connect using API Key/Secret/SessionToken
+app.use("/api/icici", iciciBrokerRouter);
 
+// Check connection/session status
+app.use("/api/icici", iciciStatusRouter);
+
+// Backtesting (existing separate module)
 app.use("/api/icici/backtest", iciciBacktestRouter);
-app.use("/api/icici", iciciStreamRouter);         // WebSocket handshake
+
+// WebSocket handshake + stream token verification (NEW)
+app.use("/api/icici/stream", iciciStreamControlRouter);
 
 /* -------------------------------------------------------
    Global Error Handler
