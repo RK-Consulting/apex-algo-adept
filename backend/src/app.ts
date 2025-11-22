@@ -20,7 +20,7 @@ import { credentialsRouter } from "./routes/credentials.js";
 import { iciciBrokerRouter } from "./routes/iciciBroker.js";                 // Store/Retrieve encrypted credentials + Connect
 import { iciciStatusRouter } from "./routes/iciciStatus.js";                 // Connection status & session info
 import { iciciBacktestRouter } from "./routes/iciciBacktest.js";             // (Kept) Backtesting endpoint
-import { iciciStreamControlRouter } from "./routes/icici/streamControlRouter.js"; // WS handshake controller
+// import { iciciStreamControlRouter } from "./routes/icici/streamControlRouter.js"; // WS handshake controller
 
 // ❌ DO NOT IMPORT OLD ROUTES HERE ANYMORE
 // ❌ marketDataRouter
@@ -114,7 +114,7 @@ app.use("/api/icici", iciciStatusRouter);
 app.use("/api/icici/backtest", iciciBacktestRouter);
 
 // WebSocket handshake + stream token verification (NEW)
-app.use("/api/icici/stream", iciciStreamControlRouter);
+// app.use("/api/icici/stream", iciciStreamControlRouter);
 
 /* -------------------------------------------------------
    Global Error Handler
