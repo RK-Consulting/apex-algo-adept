@@ -11,13 +11,15 @@
  *        - /api/icici/stream/unsubscribe
  *    • WebSocket server:
  *        - Upgrade HTTP → WebSocket
- *        - Authenticate using JWT via sec-websocket-protocol
- *        - Forward live ticks from iciciRealtime.ts
- *        - Handle subscribe/unsubscribe dynamically
+ *        - Authenticate using:
+ *              1) sec-websocket-protocol
+ *              2) URL query ?token=
+ *    • Forward live ticks
+ *    • Handle dynamic subscribe / unsubscribe
  *
- *  Notes:
- *    - Strict TypeScript safe
- *    - Extends IncomingMessage with userId for WS sessions
+ *  Cloudflare Friendly:
+ *    - Cloudflare strips WebSocket headers sometimes
+ *    - Therefore URL ?token= is required
  * ************************************************************
  */
 
@@ -53,7 +55,6 @@ interface WsRequest extends IncomingMessage {
 
 /* --------------------------------------------------------------
    GET /api/icici/stream/status
-   WebSocket service health check
 -------------------------------------------------------------- */
 iciciStreamRouter.get("/status", authenticateToken, async (_req, res) => {
   return res.json({
@@ -112,7 +113,7 @@ iciciStreamRouter.post(
 
 /* --------------------------------------------------------------
    GET /api/icici/stream
-   Dummy endpoint for browsers/Nginx
+   Dummy endpoint
 -------------------------------------------------------------- */
 iciciStreamRouter.get("/", authenticateToken, (_req, res) => {
   return res.json({
@@ -122,14 +123,13 @@ iciciStreamRouter.get("/", authenticateToken, (_req, res) => {
 });
 
 /* ***************************************************************
-   REAL WEBSOCKET UPGRADE IMPLEMENTATION
-   Called from server.ts → initIciciStreamServer(server)
+   WEBSOCKET SERVER IMPLEMENTATION
 *************************************************************** */
 export function initIciciStreamServer(server: any) {
   const wss = new WebSocketServer({ noServer: true });
 
   /* ------------------------------------------------------------
-     Handle raw HTTP → WS upgrade
+     Handle HTTP → WS upgrade
   ------------------------------------------------------------ */
   server.on(
     "upgrade",
@@ -137,17 +137,39 @@ export function initIciciStreamServer(server: any) {
       if (!req.url?.startsWith("/api/icici/stream")) return;
 
       try {
-        const tokenHeader = req.headers["sec-websocket-protocol"];
-        if (!tokenHeader) {
+        let token: string | undefined;
+
+        // ======================================================
+        // MODE 1: Header → sec-websocket-protocol
+        // ======================================================
+        const proto = req.headers["sec-websocket-protocol"];
+        if (proto) {
+          token = Array.isArray(proto) ? proto[0] : proto;
+        }
+
+        // ======================================================
+        // MODE 2: URL query string → ?token=xyz
+        // Required for Cloudflare workers / CF proxy
+        // ======================================================
+        if (!token && req.url) {
+          try {
+            const u = new URL(req.url, "https://dummy-origin");
+            const qp = u.searchParams.get("token");
+            if (qp) token = qp;
+          } catch {
+            /* ignore invalid urls */
+          }
+        }
+
+        // Missing token
+        if (!token) {
+          log("WS auth failed: No token provided");
           socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
           return socket.destroy();
         }
 
-        const token = Array.isArray(tokenHeader)
-          ? tokenHeader[0]
-          : tokenHeader;
-
-        const decoded = await authenticateWsToken(token);
+        // Validate token
+        const decoded: any = await authenticateWsToken(token);
         if (!decoded?.userId) throw new Error("Invalid token");
 
         req.userId = decoded.userId;
@@ -157,6 +179,7 @@ export function initIciciStreamServer(server: any) {
         return socket.destroy();
       }
 
+      // Allow the WS connection
       wss.handleUpgrade(req, socket, head, (ws) => {
         wss.emit("connection", ws, req);
       });
@@ -164,13 +187,13 @@ export function initIciciStreamServer(server: any) {
   );
 
   /* ------------------------------------------------------------
-     WebSocket connection lifecycle
+     When WS is connected
   ------------------------------------------------------------ */
   wss.on("connection", async (ws: WebSocket, req: WsRequest) => {
     const userId = req.userId!;
     log("WS User connected:", userId);
 
-    // Start realtime feed stream
+    // Start streaming
     await startUserStream(userId, (tick) => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "tick", ...tick }));
@@ -180,7 +203,7 @@ export function initIciciStreamServer(server: any) {
     ws.send(JSON.stringify({ type: "connected", userId }));
 
     /* ----------------------------------------------------------
-       Handle messages from the client
+       WS Incoming Messages
     ---------------------------------------------------------- */
     ws.on("message", async (msg: string | Buffer) => {
       try {
@@ -215,7 +238,7 @@ export function initIciciStreamServer(server: any) {
     });
 
     /* ----------------------------------------------------------
-       Cleanup on close/error
+       CLOSE / ERROR
     ---------------------------------------------------------- */
     ws.on("close", () => {
       stopUserStream(userId);
@@ -223,8 +246,8 @@ export function initIciciStreamServer(server: any) {
     });
 
     ws.on("error", (err) => {
-      log("WS error:", err);
       stopUserStream(userId);
+      log("WS error:", err);
     });
   });
 
@@ -232,7 +255,7 @@ export function initIciciStreamServer(server: any) {
 }
 
 /* ***************************************************************
-   JWT VALIDATION FOR WS PROTOCOL HEADER
+   JWT VALIDATION
 *************************************************************** */
 function authenticateWsToken(token: string): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -242,3 +265,4 @@ function authenticateWsToken(token: string): Promise<any> {
     });
   });
 }
+
