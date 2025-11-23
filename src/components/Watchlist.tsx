@@ -76,7 +76,7 @@ export function Watchlist() {
   // WS + polling fallback
   useEffect(() => {
     if (!token) return;
-    const wsUrl = `${backendUrl.replace("https://", "wss://")}/api/icici/stream/live`;
+    const wsUrl = `${backendUrl.replace("https://", "wss://")}/api/icici/stream`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
