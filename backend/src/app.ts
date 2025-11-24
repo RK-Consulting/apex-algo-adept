@@ -12,6 +12,7 @@ import { errorHandler } from "./middleware/errorHandler.js";
 import authRouter from "./routes/auth.js";
 import { strategyRouter } from "./routes/strategies.js";
 import { credentialsRouter } from "./routes/credentials.js";
+import { watchlistRouter } from "./routes/watchlist.js";
 
 // -----------------------------------------------------------
 // NEW ICICI ROUTERS (AFTER CLEANUP)
@@ -100,6 +101,8 @@ app.get("/health", (_req, res) =>
 app.use("/api/auth", authRouter);
 app.use("/api/strategies", strategyRouter);
 app.use("/api/credentials", credentialsRouter);
+app.use("/api/watchlist", watchlistRouter);
+
 
 /* -------------------------------------------------------
    ICICI — Unified NEW Routing
