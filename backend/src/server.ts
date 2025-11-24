@@ -18,7 +18,7 @@ import {
 
 const log = debug("apex:server");
 
-const PORT = Number(process.env.PORT || 8080);
+const PORT = Number(process.env.PORT || 3000);
 
 /* -------------------------------------------------------
    Create HTTP server (needed for WebSocket upgrades)
