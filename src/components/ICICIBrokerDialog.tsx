@@ -24,7 +24,7 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8080";
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
 
   const handleSave = async () => {
     if (!apiKey || !apiSecret) {
