@@ -23,14 +23,14 @@ module.exports = {
       env: {
         NODE_ENV: "development",
         //PORT: 8080
-        PORT: 3000
+        PORT: 3000,
         DOTENV_CONFIG_PATH: "/var/www/apex-algo-adept/backend/.env"
       },
 
       env_production: {
         NODE_ENV: "production",
         //PORT: 8080
-        PORT: 3000
+        PORT: 3000,
         DOTENV_CONFIG_PATH: "/var/www/apex-algo-adept/backend/.env"
       },
 
