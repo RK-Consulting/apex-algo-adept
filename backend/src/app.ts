@@ -1,9 +1,11 @@
 // /backend/src/app.ts
+import dotenv from "dotenv";
+dotenv.config();
 import express from "express";
 //import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
-import dotenv from "dotenv";
+
 
 import { requestLogger } from "./middleware/logger.js";
 import { errorHandler } from "./middleware/errorHandler.js";
@@ -33,7 +35,7 @@ import { iciciStreamRouter } from "./routes/icici/stream.js";
 // ❌ iciciStatusRouter (old one)
 // ❌ iciciStreamRouter (old one)
 
-dotenv.config();
+
 
 const app = express();
 
