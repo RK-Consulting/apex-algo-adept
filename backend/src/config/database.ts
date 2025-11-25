@@ -1,9 +1,10 @@
 // src/config/database.ts
-import pg from "pg";
 import dotenv from "dotenv";
+dotenv.config({ path: "/var/www/apex-algo-adept/backend/.env" });
+import pg from "pg";
 import debug from "debug";
 
-dotenv.config();
+//dotenv.config();
 
 const log = debug("apex:db");
 const { Pool } = pg;
