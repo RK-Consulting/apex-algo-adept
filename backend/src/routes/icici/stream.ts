@@ -180,7 +180,8 @@ export function initIciciStreamServer(server: any) {
       }
 
       // Allow the WS connection
-      wss.handleUpgrade(req, socket, head, (ws) => {
+      // wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.handleUpgrade(req, socket, head, (ws: WebSocket) => {
         wss.emit("connection", ws, req);
       });
     }
@@ -245,7 +246,8 @@ export function initIciciStreamServer(server: any) {
       log("WS closed:", userId);
     });
 
-    ws.on("error", (err) => {
+    //ws.on("error", (err) => {
+    ws.on("error", (err: Error) => {
       stopUserStream(userId);
       log("WS error:", err);
     });
