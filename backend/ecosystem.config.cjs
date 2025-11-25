@@ -30,6 +30,7 @@ module.exports = {
         NODE_ENV: "production",
         //PORT: 8080
         PORT: 3000
+        DOTENV_CONFIG_PATH: "/var/www/apex-algo-adept/backend/.env"
       },
 
       autorestart: true,
