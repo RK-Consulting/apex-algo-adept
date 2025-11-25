@@ -16,6 +16,7 @@ module.exports = {
       cwd: "/var/www/apex-algo-adept/backend",
 
       exec_mode: "fork",                     // ❗ Breeze cannot run in cluster mode
+      node_args: "--require dotenv/config",
       instances: 1,
 
       // Load environment variables from .env
