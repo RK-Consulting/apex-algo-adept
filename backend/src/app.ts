@@ -1,6 +1,6 @@
 // /backend/src/app.ts
 import express from "express";
-import cors from "cors";
+//import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
 import dotenv from "dotenv";
@@ -40,7 +40,7 @@ const app = express();
 /* -------------------------------------------------------
    CORS CONFIG (Cloudflare Pages + your domain)
 ------------------------------------------------------- */
-app.use(
+/* app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
@@ -65,7 +65,7 @@ app.use(
   })
 );
 
-app.options("*", cors());
+app.options("*", cors()); */
 
 /* -------------------------------------------------------
    Security + Compression + Parsers
