@@ -1,6 +1,7 @@
 // /backend/src/app.ts
 import dotenv from "dotenv";
-dotenv.config();
+//dotenv.config();
+dotenv.config({ path: "/var/www/apex-algo-adept/backend/.env" });
 import express from "express";
 //import cors from "cors";
 import helmet from "helmet";
