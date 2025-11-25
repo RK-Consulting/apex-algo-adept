@@ -63,8 +63,10 @@ export default function Markets() {
   useEffect(() => {
     if (!token) return;
 
-    const wsUrl = `${backendUrl.replace("http", "ws")}/api/icici/stream`;
-    const ws = new WebSocket(wsUrl, ["auth", token]);
+    // const wsUrl = `${backendUrl.replace("http", "ws")}/api/icici/stream`;
+    // const ws = new WebSocket(wsUrl, ["auth", token]);
+    const wsUrl = `${backendUrl.replace("http", "ws")}/api/icici/stream?token=${encodeURIComponent(token)}`;
+    const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
