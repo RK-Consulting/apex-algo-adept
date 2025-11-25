@@ -65,7 +65,9 @@ export default function Markets() {
 
     // const wsUrl = `${backendUrl.replace("http", "ws")}/api/icici/stream`;
     // const ws = new WebSocket(wsUrl, ["auth", token]);
-    const wsUrl = `${backendUrl.replace("http", "ws")}/api/icici/stream?token=${encodeURIComponent(token)}`;
+    //const wsUrl = `${backendUrl.replace("http", "ws")}/api/icici/stream?token=${encodeURIComponent(token)}`;
+    const wsScheme = backendUrl.startsWith("https") ? "wss" : "ws";
+    const wsUrl = `${wsScheme}://${new URL(backendUrl).host}/api/icici/stream?token=${encodeURIComponent(token)}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
