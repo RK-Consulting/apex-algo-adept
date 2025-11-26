@@ -3,7 +3,8 @@ import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../../middleware/auth.js";
 import { query } from "../../config/database.js";
 //import { getEncryptionKey } from "../../utils/credentialEncryptor.js";
-import { encryptData, getEncryptionKey } from "../../utils/credentialEncryptor.js";
+//import { encryptData, getEncryptionKey } from "../../utils/credentialEncryptor.js";
+import { encryptDataRaw } from "../../utils/credentialEncryptor.js";
 import { invalidateBreezeInstance } from "../../utils/breezeSession.js";
 import debug from "debug";
 
@@ -53,8 +54,11 @@ router.post("/auth/callback", authenticateToken, async (req: AuthRequest, res) =
 
     // Encrypt credentials
     const encKey = getEncryptionKey();
-    const encApiKey = await encryptData(api_key, encKey);
-    const encApiSecret = await encryptData(api_secret, encKey);
+    //const encApiKey = await encryptData(api_key, encKey);
+    //const encApiSecret = await encryptData(api_secret, encKey);
+    const encApiKey = await encryptDataRaw(api_key, encKey);
+    const encApiSecret = await encryptDataRaw(api_secret, encKey);
+
 
     // Delete old sessions and credentials
     await query(
