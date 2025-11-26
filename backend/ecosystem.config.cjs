@@ -14,7 +14,7 @@ module.exports = {
       name: "alphaforge-api",
 
       // Load .env BEFORE loading server.js
-      script: "load-env.js",
+      script: "load-env.cjs",
       cwd: "/var/www/apex-algo-adept/backend",
 
       exec_mode: "fork",   // Breeze WS requires non-cluster mode
