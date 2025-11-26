@@ -3,7 +3,7 @@ import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../../middleware/auth.js";
 import { query } from "../../config/database.js";
 import { getEncryptionKey } from "../../utils/credentialEncryptor.js";
-import { encryptData } from "../../utils/credentialEncryptor.js";
+import { encryptData, getEncryptionKey } from "../../utils/credentialEncryptor.js";
 import { invalidateBreezeInstance } from "../../utils/breezeSession.js";
 import debug from "debug";
 
