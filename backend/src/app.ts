@@ -26,6 +26,7 @@ import { iciciStatusRouter } from "./routes/iciciStatus.js";                 // 
 import { iciciBacktestRouter } from "./routes/iciciBacktest.js";             // (Kept) Backtesting endpoint
 // import { iciciStreamControlRouter } from "./routes/icici/streamControlRouter.js"; // WS handshake controller
 import { iciciStreamRouter } from "./routes/icici/stream.js";
+import { iciciAuthCallbackRouter } from "./routes/icici/authCallback.js";
 
 // ❌ DO NOT IMPORT OLD ROUTES HERE ANYMORE
 // ❌ marketDataRouter
@@ -123,6 +124,7 @@ app.use("/api/icici/backtest", iciciBacktestRouter);
 // WebSocket handshake + stream token verification (NEW)
 app.use("/api/icici/stream", iciciStreamRouter);
 
+app.use("/api/icici", iciciAuthCallbackRouter);
 /* -------------------------------------------------------
    Global Error Handler
 ------------------------------------------------------- */
