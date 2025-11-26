@@ -33,6 +33,9 @@ import { encryptJSON, decryptJSON } from "./credentialEncryptor.js";
 import { BreezeConnect } from "breezeconnect";
 import debug from "debug";
 import fetch from "node-fetch";
+// at top of file add (ESM import)
+import crypto from "crypto";
+
 
 const log = debug("apex:icici:breeze");
 
@@ -79,23 +82,34 @@ export async function createBreezeLoginSession(
   }
 
   // Compute SHA256 checksum
-  const checksum = require("crypto")
+  /* const checksum = require("crypto")
     .createHash("sha256")
+    .update(apiKey + sessionToken + apiSecret)
+    .digest("hex"); */
+
+    // Compute SHA256 checksum using ESM crypto
+  const checksum = crypto.createHash("sha256")
     .update(apiKey + sessionToken + apiSecret)
     .digest("hex");
 
-  const res = await fetch(BREEZE_LOGIN_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Checksum": checksum,
-    },
-    body: JSON.stringify({
-      appkey: apiKey,
-      secretkey: apiSecret,
-      sessionToken,
-    }),
-  });
+  let res;
+  try{
+    res = await fetch(BREEZE_LOGIN_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Checksum": checksum,
+      },
+      body: JSON.stringify({
+        appkey: apiKey,
+        secretkey: apiSecret,
+        sessionToken,
+      }),
+    });
+  } catch (e: any) {
+    log("Network error calling Breeze login: %O", e);
+    throw new Error("Network error contacting Breeze login: " + e?.message);
+  }
 
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
