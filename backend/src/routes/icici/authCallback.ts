@@ -14,37 +14,32 @@ const router = Router();
  * Breeze may redirect the user to your backend after auth — capture tokens here.
  */
 router.get("/auth/callback", async (req, res) => {
-  const sessionToken = req.query.session_token || "";
-  const apiKey = req.query.api_key || "";
-  const user = req.query.user || "";
+  const code = req.query.code || "";
+  if (!code) {
+    return res.send("<h3>Missing code from ICICI redirect</h3>");
+  }
 
+  // send code to frontend
   return res.send(`
     <html>
-      <head><title>ICICI Login Completed</title></head>
       <body>
         <h3>ICICI Login Successful</h3>
-        <p>Processing session token…</p>
+        <p>Processing...</p>
 
         <script>
-          const session_token = "${sessionToken}";
-          const api_key = "${apiKey}";
-          const user = "${user}";
-
-          // Callback to your frontend window (React)
           if (window.opener) {
             window.opener.postMessage(
-              { type: "ICICI_LOGIN", session_token, api_key, user },
+              { type: "ICICI_CODE", code: "${code}" },
               "*"
             );
             window.close();
-          } else {
-            document.body.innerHTML += "<p>Please close this window.</p>";
           }
         </script>
       </body>
     </html>
   `);
 });
+
 
 
 /**
