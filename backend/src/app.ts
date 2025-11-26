@@ -112,10 +112,10 @@ app.use("/api/watchlist", watchlistRouter);
 ------------------------------------------------------- */
 
 // Store encrypted broker creds + Connect using API Key/Secret/SessionToken
-app.use("/api/icici", iciciBrokerRouter);
+app.use("/api/icici/broker", iciciBrokerRouter);
 
 // Check connection/session status
-app.use("/api/icici", iciciStatusRouter);
+app.use("/api/icici/status", iciciStatusRouter);
 
 // Backtesting (existing separate module)
 app.use("/api/icici/backtest", iciciBacktestRouter);
