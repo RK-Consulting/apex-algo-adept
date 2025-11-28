@@ -1,20 +1,20 @@
 // backend/src/routes/icici/authCallback.ts
 import { Router } from "express";
+
 const router = Router();
 
 /**
  * Breeze R50 callback:
  * ICICI redirects user here with:
- *   ?session_token=xxxxx
+ *   ?apisession=xxxxx
  *
- * We DO NOT get “code”.
- * We DO NOT use OAuth flow.
+ * No OAuth code. No session_token.
  */
 router.get("/auth/callback", async (req, res) => {
-  const sessionToken = req.query.session_token || "";
+  const apiSession = req.query.apisession || "";
 
-  if (!sessionToken) {
-    return res.send("<h3>Missing session_token from ICICI</h3>");
+  if (!apiSession) {
+    return res.send("<h3>Missing apisession from ICICI</h3>");
   }
 
   return res.send(`
@@ -22,13 +22,13 @@ router.get("/auth/callback", async (req, res) => {
       <head><title>ICICI Login Completed</title></head>
       <body>
         <h3>ICICI Login Successful</h3>
-        <p>Processing session token…</p>
+        <p>Processing apisession…</p>
 
         <script>
-          const token = "${sessionToken}";
+          const apisession = "${apiSession}";
           if (window.opener) {
             window.opener.postMessage(
-              { type: "ICICI_LOGIN", session_token: token },
+              { type: "ICICI_LOGIN", apisession },
               "*"
             );
             window.close();
