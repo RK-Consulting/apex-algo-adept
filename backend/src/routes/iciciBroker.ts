@@ -112,7 +112,12 @@ router.post("/connect", authenticateToken, async (req, res) => {
 router.post("/complete", authenticateToken, async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.userId;
-    const { api_key, api_secret, apisession } = req.body;
+    // const { api_key, api_secret, apisession } = req.body;
+    let { api_key, api_secret, session_token } = req.body;
+
+    // accept apisession as alias
+    if (!session_token && req.body.apisession)
+      session_token = req.body.apisession;
 
     if (!api_key || !api_secret || !apisession) {
       return res.status(400).json({
