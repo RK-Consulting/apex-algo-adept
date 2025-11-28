@@ -29,36 +29,36 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
   const backendUrl =
     import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
 
-  // 🔥 Listen for session token from popup
- useEffect(() => {
-  function receiveMessage(ev: MessageEvent) {
-    if (ev?.data?.type === "ICICI_LOGIN") {
-      const session = String(ev.data.session_token || "").trim();
+  // 🔥 Capture ICICI apisession from popup
+  useEffect(() => {
+    function receiveMessage(ev: MessageEvent) {
+      if (ev?.data?.type === "ICICI_LOGIN") {
+        const sessionToken = String(ev.data.session_token || "").trim();
+        if (!sessionToken) return;
 
-      if (!session) return;
+        console.log("Received ICICI session_token →", sessionToken);
+        setApisession(sessionToken);
+        localStorage.setItem("icici_apisession", sessionToken);
 
-      console.log("ICICI session_token received →", session);
-      setApisession(session);
-      localStorage.setItem("icici_apisession", session);
-
-      toast({
-        title: "ICICI Session Received",
-        description: "Your apisession was captured automatically.",
-      });
+        toast({
+          title: "Session Received",
+          description: "ICICI apisession captured successfully.",
+        });
+      }
     }
-  }
 
-  window.addEventListener("message", receiveMessage);
-  return () => window.removeEventListener("message", receiveMessage);
-}, []);
+    window.addEventListener("message", receiveMessage);
+    return () => window.removeEventListener("message", receiveMessage);
+  }, []);
 
-
-
+  /* -------------------------------------------------------
+   * SAVE API KEY & SECRET
+   * -----------------------------------------------------*/
   const handleSave = async () => {
     if (!apiKey || !apiSecret) {
       toast({
-        title: "Missing",
-        description: "API Key and Secret required",
+        title: "Missing values",
+        description: "API Key and Secret are required",
         variant: "destructive",
       });
       return;
@@ -84,11 +84,14 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
       const j = await res.json();
       if (!res.ok) throw new Error(j.error);
 
-      toast({ title: "Saved", description: "Credentials saved" });
+      toast({
+        title: "Saved",
+        description: "API Key & Secret saved successfully.",
+      });
     } catch (err: any) {
       toast({
         title: "Error",
-        description: err.message || "Save failed",
+        description: err.message || "Failed to save credentials",
         variant: "destructive",
       });
     } finally {
@@ -96,11 +99,14 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
     }
   };
 
+  /* -------------------------------------------------------
+   * COMPLETE BREEZE LOGIN
+   * -----------------------------------------------------*/
   const handleComplete = async () => {
     if (!apiKey || !apiSecret || !apisession) {
       toast({
-        title: "Missing",
-        description: "API Key, Secret and apisession required",
+        title: "Missing values",
+        description: "API Key, Secret & apisession are required",
         variant: "destructive",
       });
       return;
@@ -129,7 +135,7 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
 
       toast({
         title: "Connected",
-        description: "ICICI Breeze connected successfully",
+        description: "ICICI Breeze connected successfully.",
       });
 
       setApiKey("");
@@ -139,7 +145,7 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
     } catch (err: any) {
       toast({
         title: "Error",
-        description: err.message || "Login failed",
+        description: err.message || "Failed to complete login",
         variant: "destructive",
       });
     } finally {
@@ -151,7 +157,7 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
     if (!apiKey) {
       toast({
         title: "Missing API Key",
-        description: "Enter API Key first",
+        description: "Please enter your API Key first",
         variant: "destructive",
       });
       return;
@@ -172,10 +178,65 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle>Connect ICICI (Breeze R50)</DialogTitle>
           <DialogDescription>
-            Enter API Key + Secret → Login → apisession → Complete Login
+            Save API Key + Secret → Login to ICICI → apisession → Complete Login.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3 py-4">
           <div>
             <Label>API Key</Label>
+            <Input
+              disabled={loading}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <Label>API Secret</Label>
+            <Input
+              type="password"
+              disabled={loading}
+              value={apiSecret}
+              onChange={(e) => setApiSecret(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <Label>Session Token (apisession)</Label>
+
+            <div className="flex justify-between items-center mt-1">
+              <Button onClick={openICICILogin} variant="link">
+                Open ICICI Login <ExternalLink className="ml-1 h-3 w-3" />
+              </Button>
+            </div>
+
+            <Input
+              disabled={loading}
+              value={apisession}
+              onChange={(e) => setApisession(e.target.value)}
+            />
+
+            <p className="text-xs text-muted-foreground mt-1">
+              Login in popup → apisession auto-filled.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={loading}>
+            {loading && <Loader2 className="animate-spin mr-2 h-4 w-4" />}
+            Save
+          </Button>
+          <Button onClick={handleComplete} disabled={loading}>
+            {loading && <Loader2 className="animate-spin mr-2 h-4 w-4" />}
+            Complete Login
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
