@@ -30,20 +30,28 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
     import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
 
   // 🔥 Listen for session token from popup
-  useEffect(() => {
-    function receiveMessage(ev: MessageEvent) {
-      if (ev?.data?.type === "ICICI_LOGIN") {
-        setApisession(ev.data.session_token);
-        toast({
-          title: "Session received",
-          description: `apisession received from ICICI`,
-        });
-      }
-    }
+ useEffect(() => {
+  function receiveMessage(ev: MessageEvent) {
+    if (ev?.data?.type === "ICICI_LOGIN") {
+      const session = String(ev.data.session_token || "").trim();
 
-    window.addEventListener("message", receiveMessage);
-    return () => window.removeEventListener("message", receiveMessage);
-  }, []);
+      if (!session) return;
+
+      console.log("ICICI session_token received →", session);
+      setApisession(session);
+      localStorage.setItem("icici_apisession", session);
+
+      toast({
+        title: "ICICI Session Received",
+        description: "Your apisession was captured automatically.",
+      });
+    }
+  }
+
+  window.addEventListener("message", receiveMessage);
+  return () => window.removeEventListener("message", receiveMessage);
+}, []);
+
 
   const handleSave = async () => {
     if (!apiKey || !apiSecret) {
