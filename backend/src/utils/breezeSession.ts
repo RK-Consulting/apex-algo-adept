@@ -25,7 +25,10 @@
 
 // backend/src/utils/breezeSession.ts
 //--------------------------------------------------------
-//  ICICI Breeze Server-to-Server Login (OPTION 1)
+//  ICICI Breeze R50 Login (NO OAuth)
+//  - Uses POST /breezeapi/api/v1/login
+//  - Computes checksum = SHA256(appkey + apisession + secretkey)
+//  - Stores JWT token returned by ICICI
 //--------------------------------------------------------
 
 import { query } from "../config/database.js";
@@ -33,9 +36,7 @@ import { encryptJSON, decryptJSON } from "./credentialEncryptor.js";
 import { BreezeConnect } from "breezeconnect";
 import debug from "debug";
 import fetch from "node-fetch";
-// at top of file add (ESM import)
 import crypto from "crypto";
-
 
 const log = debug("apex:icici:breeze");
 
@@ -45,9 +46,7 @@ const BREEZE_LOGIN_URL =
 
 const CACHE_TTL_MS = 15 * 60 * 1000;
 
-// ------------------------------
-// 🔥 Type Definitions
-// ------------------------------
+// Expected response from Breeze login API
 interface BreezeLoginResponse {
   jwtToken?: string;
   expiresAt?: string | null;
@@ -62,7 +61,7 @@ export type BreezeStoredSession = {
   raw?: any;
 };
 
-// Cache of BreezeConnect instances per user
+// Per-user BreezeConnect cache
 const breezeCache = new Map<
   string,
   { breeze: BreezeConnect; expiresAt: number }
@@ -70,30 +69,26 @@ const breezeCache = new Map<
 
 /**
  * createBreezeLoginSession
+ *  - Uses apiKey + apiSecret + apisession (NOT sessionToken)
  */
 export async function createBreezeLoginSession(
   userId: string,
   apiKey: string,
   apiSecret: string,
-  sessionToken: string
+  apisession: string
 ): Promise<BreezeStoredSession> {
-  if (!userId || !apiKey || !apiSecret || !sessionToken) {
+  if (!userId || !apiKey || !apiSecret || !apisession) {
     throw new Error("createBreezeLoginSession: missing parameters");
   }
 
-  // Compute SHA256 checksum
-  /* const checksum = require("crypto")
+  // ICICI requires SHA256(appkey + apisession + secretkey)
+  const checksum = crypto
     .createHash("sha256")
-    .update(apiKey + sessionToken + apiSecret)
-    .digest("hex"); */
-
-    // Compute SHA256 checksum using ESM crypto
-  const checksum = crypto.createHash("sha256")
-    .update(apiKey + sessionToken + apiSecret)
+    .update(apiKey + apisession + apiSecret)
     .digest("hex");
 
   let res;
-  try{
+  try {
     res = await fetch(BREEZE_LOGIN_URL, {
       method: "POST",
       headers: {
@@ -103,12 +98,12 @@ export async function createBreezeLoginSession(
       body: JSON.stringify({
         appkey: apiKey,
         secretkey: apiSecret,
-        sessionToken,
+        sessionToken: apisession,     // R50 uses this field name even though query param is apisession
       }),
     });
   } catch (e: any) {
-    log("Network error calling Breeze login: %O", e);
-    throw new Error("Network error contacting Breeze login: " + e?.message);
+    log("Network error contacting Breeze login: %O", e);
+    throw new Error("Network error contacting Breeze login: " + e.message);
   }
 
   if (!res.ok) {
@@ -116,12 +111,9 @@ export async function createBreezeLoginSession(
     throw new Error(`Breeze login failed: ${res.status} ${txt}`);
   }
 
-  // ------------------------------
-  // ✅ FIXED: typed JSON response
-  // ------------------------------
   const json = (await res.json()) as BreezeLoginResponse;
 
-  if (!json?.jwtToken) {
+  if (!json.jwtToken) {
     throw new Error("Breeze login: missing jwtToken in response");
   }
 
@@ -135,16 +127,17 @@ export async function createBreezeLoginSession(
 
   await query(
     `
-    INSERT INTO user_credentials (user_id, broker_name, icici_credentials, created_at, updated_at)
-    VALUES ($1, 'icici', $2, NOW(), NOW())
-    ON CONFLICT (user_id, broker_name)
-    DO UPDATE SET icici_credentials = $2, updated_at = NOW()
-  `,
+      INSERT INTO user_credentials (user_id, broker_name, icici_credentials, created_at, updated_at)
+      VALUES ($1, 'icici', $2, NOW(), NOW())
+      ON CONFLICT (user_id, broker_name)
+      DO UPDATE SET icici_credentials = $2, updated_at = NOW()
+    `,
     [userId, JSON.stringify(encrypted)]
   );
 
   invalidateBreezeInstance(userId);
   log("Saved Breeze JWT for user %s", userId);
+
   return session;
 }
 
@@ -160,11 +153,9 @@ export async function getSessionForUser(
   );
 
   if (!r.rows.length) return null;
+  if (!r.rows[0].icici_credentials) return null;
 
-  const payload = r.rows[0].icici_credentials;
-  if (!payload) return null;
-
-  return decryptJSON(payload);
+  return decryptJSON(r.rows[0].icici_credentials);
 }
 
 /**
@@ -172,9 +163,11 @@ export async function getSessionForUser(
  */
 export async function clearSessionForUser(userId: string) {
   await query(
-    `UPDATE user_credentials
-     SET icici_credentials = NULL, updated_at = NOW()
-     WHERE user_id = $1 AND broker_name = 'icici'`,
+    `
+      UPDATE user_credentials
+      SET icici_credentials = NULL, updated_at = NOW()
+      WHERE user_id = $1 AND broker_name = 'icici'
+    `,
     [userId]
   );
   invalidateBreezeInstance(userId);
@@ -203,10 +196,7 @@ export async function getBreezeInstance(
     if ((breeze as any).setApiKey && session.raw?.appkey)
       (breeze as any).setApiKey(session.raw.appkey);
   } catch (e) {
-    log(
-      "Warning: BreezeConnect setSessionToken/setApiKey may not exist in this version: %O",
-      e
-    );
+    log("Warning: BreezeConnect version mismatch: %O", e);
   }
 
   breezeCache.set(userId, {
