@@ -119,7 +119,7 @@ router.post("/complete", authenticateToken, async (req: AuthRequest, res) => {
     if (!session_token && req.body.apisession)
       session_token = req.body.apisession;
 
-    if (!api_key || !api_secret || !apisession) {
+    if (!api_key || !api_secret || !session_token) {
       return res.status(400).json({
         error: "api_key, api_secret, apisession required"
       });
@@ -139,7 +139,7 @@ router.post("/complete", authenticateToken, async (req: AuthRequest, res) => {
       userId,
       api_key,
       api_secret,
-      apisession
+      session_token
     );
 
     return res.json({
