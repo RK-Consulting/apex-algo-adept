@@ -1,0 +1,169 @@
+{
+  "info": {
+    "name": "AlphaForge Trading API",
+    "_postman_id": "9baf7c5a-45b2-44b0-bb7d-postman-collection",
+    "description": "Complete Postman Collection for AlphaForge Backend + ICICI Breeze R50 Integration",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+
+  "variable": [
+    { "key": "baseUrl", "value": "https://api.alphaforge.skillsifter.in" },
+    { "key": "authToken", "value": "" }
+  ],
+
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Signup",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/signup",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"test123\"\n}"
+            },
+            "header": [{ "key": "Content-Type", "value": "application/json" }]
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"test123\"\n}"
+            },
+            "header": [{ "key": "Content-Type", "value": "application/json" }]
+          }
+        },
+        {
+          "name": "Verify Token",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/verify",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ]
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "ICICI",
+      "item": [
+        {
+          "name": "Store API Key + Secret",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/icici/broker/store",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"api_key\": \"YOUR_KEY\",\n  \"api_secret\": \"YOUR_SECRET\"\n}"
+            }
+          }
+        },
+
+        {
+          "name": "Complete Breeze Login (Generate JWT)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/icici/broker/complete",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"api_key\": \"YOUR_KEY\",\n  \"api_secret\": \"YOUR_SECRET\",\n  \"session_token\": \"538xxxxx\"\n}"
+            }
+          }
+        },
+
+        {
+          "name": "Auth Callback (Popup Redirect Test)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/icici/auth/callback?session_token=TEST"
+          }
+        },
+
+        {
+          "name": "ICICI Status",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/icici/status",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ]
+          }
+        },
+
+        {
+          "name": "Start Stream",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/icici/stream/start",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbols\": [\"NSE:RELIANCE\"]\n}"
+            }
+          }
+        },
+
+        {
+          "name": "Stop Stream",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/icici/stream/stop",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ]
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "Strategies",
+      "item": [
+        {
+          "name": "List Strategies",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/strategies",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ]
+          }
+        },
+        {
+          "name": "Create Strategy",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/strategies",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My Strategy\",\n  \"description\": \"Test strategy\"\n}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
