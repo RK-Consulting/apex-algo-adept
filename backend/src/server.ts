@@ -1,29 +1,20 @@
 // backend/src/server.ts
 import dotenv from "dotenv";
-//dotenv.config();
 dotenv.config({ path: "/var/www/apex-algo-adept/backend/.env" });
 
 import http from "http";
 import debug from "debug";
-
 import app from "./app.js";
 import pool from "./config/database.js";
 
-import {
-  initIciciStreamServer
-} from "./routes/icici/stream.js";
+// Correct ICICI WS initializer import
+import { initIciciStreamServer } from "./routes/icici/stream.js";
 
-import {
-  stopAllRealtimeStreams
-} from "./services/iciciRealtime.js";
+import { stopAllRealtimeStreams } from "./services/iciciRealtime.js";
 
 const log = debug("apex:server");
-
 const PORT = Number(process.env.PORT || 3000);
 
-/* -------------------------------------------------------
-   Create HTTP server (needed for WebSocket upgrades)
-------------------------------------------------------- */
 const server = http.createServer(app);
 
 server.listen(PORT, "0.0.0.0", () => {
@@ -32,9 +23,7 @@ server.listen(PORT, "0.0.0.0", () => {
   console.log(`🔗 Health: http://0.0.0.0:${PORT}/health`);
 });
 
-/* -------------------------------------------------------
-   Initialize ICICI WebSocket Upgrade Handler
-------------------------------------------------------- */
+// Initialize WebSocket Upgrade Handler
 try {
   initIciciStreamServer(server);
   console.log("🔌 ICICI Realtime WebSocket initialized.");
@@ -42,9 +31,7 @@ try {
   console.error("❌ Failed to initialize ICICI WebSocket:", err);
 }
 
-/* -------------------------------------------------------
-   Graceful Shutdown
-------------------------------------------------------- */
+// Graceful shutdown
 async function shutdown(signal: string) {
   console.log(`\n🛑 Received ${signal}. Shutting down gracefully...`);
 
