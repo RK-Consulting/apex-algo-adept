@@ -53,5 +53,3 @@ router.get("/auth/callback", async (req, res) => {
 });
 
 export { router as iciciAuthCallbackRouter };
-
-
