@@ -18,9 +18,9 @@ import { watchlistRouter } from "./routes/watchlist.js";
 // -----------------------------------------------------------
 // Correct ICICI router imports
 // -----------------------------------------------------------
-import { iciciBrokerRouter } from "./routes/icici/iciciBroker.js";
-import { iciciStatusRouter } from "./routes/icici/iciciStatus.js";
-import { iciciBacktestRouter } from "./routes/icici/iciciBacktest.js";
+import { iciciBrokerRouter } from "./routes/iciciBroker.js";
+import { iciciStatusRouter } from "./routes/iciciStatus.js";
+import { iciciBacktestRouter } from "./routes/iciciBacktest.js";
 import { iciciStreamRouter } from "./routes/icici/stream.js";
 import { iciciAuthCallbackRouter } from "./routes/icici/authCallback.js";
 
