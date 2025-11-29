@@ -31,6 +31,13 @@
 //  - Stores JWT token returned by ICICI
 //--------------------------------------------------------
 
+//--------------------------------------------------------
+//  ICICI Breeze R50 Login (NO OAuth)
+//  - Uses POST /breezeapi/api/v1/login
+//  - Computes checksum = SHA256(appkey + apisession + secretkey)
+//  - Stores JWT token in DB
+//--------------------------------------------------------
+
 import { query } from "../config/database.js";
 import { encryptJSON, decryptJSON } from "./credentialEncryptor.js";
 import { BreezeConnect } from "breezeconnect";
@@ -46,30 +53,33 @@ const BREEZE_LOGIN_URL =
 
 const CACHE_TTL_MS = 15 * 60 * 1000;
 
-// Expected response from Breeze login API
 interface BreezeLoginResponse {
   jwtToken?: string;
   expiresAt?: string | null;
+
+  // ICICI is inconsistent → normalize later
   appkey?: string;
+  appKey?: string;
+  AppKey?: string;
+  APPKEY?: string;
+
   [key: string]: any;
 }
 
 export type BreezeStoredSession = {
   jwtToken: string;
   expires_at?: string;
-  refresh_token?: string;
   raw?: any;
 };
 
-// Per-user BreezeConnect cache
 const breezeCache = new Map<
   string,
   { breeze: BreezeConnect; expiresAt: number }
 >();
 
 /**
- * createBreezeLoginSession
- *  - Uses apiKey + apiSecret + apisession (NOT sessionToken)
+ * 1) Create Breeze Login Session
+ *    apiKey + apiSecret + apisession (NOT OAuth)
  */
 export async function createBreezeLoginSession(
   userId: string,
@@ -81,7 +91,7 @@ export async function createBreezeLoginSession(
     throw new Error("createBreezeLoginSession: missing parameters");
   }
 
-  // ICICI requires SHA256(appkey + apisession + secretkey)
+  // Required by ICICI: SHA256(appkey + apisession + secretkey)
   const checksum = crypto
     .createHash("sha256")
     .update(apiKey + apisession + apiSecret)
@@ -98,7 +108,7 @@ export async function createBreezeLoginSession(
       body: JSON.stringify({
         appkey: apiKey,
         secretkey: apiSecret,
-        sessionToken: apisession,     // R50 uses this field name even though query param is apisession
+        sessionToken: apisession, // ICICI expects this field name
       }),
     });
   } catch (e: any) {
@@ -108,14 +118,26 @@ export async function createBreezeLoginSession(
 
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
+    log("ICICI Breeze login response:", txt);
     throw new Error(`Breeze login failed: ${res.status} ${txt}`);
   }
 
   const json = (await res.json()) as BreezeLoginResponse;
 
   if (!json.jwtToken) {
+    log("Breeze login response missing jwtToken:", json);
     throw new Error("Breeze login: missing jwtToken in response");
   }
+
+  // Normalize appkey variations
+  const normalizedAppKey =
+    json.appkey ||
+    json.appKey ||
+    json.AppKey ||
+    json.APPKEY ||
+    apiKey;
+
+  json.appkey = normalizedAppKey;
 
   const session: BreezeStoredSession = {
     jwtToken: json.jwtToken,
@@ -136,13 +158,13 @@ export async function createBreezeLoginSession(
   );
 
   invalidateBreezeInstance(userId);
-  log("Saved Breeze JWT for user %s", userId);
+  log("✔ Saved Breeze JWT for user %s", userId);
 
   return session;
 }
 
 /**
- * getSessionForUser
+ * 2) Retrieve stored session
  */
 export async function getSessionForUser(
   userId: string
@@ -159,7 +181,7 @@ export async function getSessionForUser(
 }
 
 /**
- * clearSessionForUser
+ * 3) Clear stored session
  */
 export async function clearSessionForUser(userId: string) {
   await query(
@@ -174,7 +196,7 @@ export async function clearSessionForUser(userId: string) {
 }
 
 /**
- * getBreezeInstance
+ * 4) Get Breeze Instance
  */
 export async function getBreezeInstance(
   userId: string
@@ -208,7 +230,7 @@ export async function getBreezeInstance(
 }
 
 /**
- * invalidateBreezeInstance
+ * 5) Invalidate cached instance
  */
 export function invalidateBreezeInstance(userId: string) {
   breezeCache.delete(userId);
