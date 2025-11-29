@@ -3,15 +3,23 @@ import { Router } from "express";
 
 const router = Router();
 
+/**
+ * ICICI Breeze R50 callback
+ * Expected ICICI redirect formats:
+ *   ?apisession=XXXX         (main R50 format)
+ *   ?session_token=XXXX      (fallback)
+ *   ?code=XXXX               (rare fallback)
+ */
 router.get("/auth/callback", async (req, res) => {
+  // 🔥 Unified token extraction
   const sessionFromICICI =
-    req.query.session_token ||
-    req.query.apisession ||
-    req.query.code ||
+    req.query.apisession ||      // primary ICICI param
+    req.query.session_token ||   // fallback
+    req.query.code ||            // fallback
     "";
 
   if (!sessionFromICICI) {
-    return res.send("<h3>Missing session_token / apisession from ICICI</h3>");
+    return res.send("<h3>Missing apisession / session_token from ICICI</h3>");
   }
 
   return res.send(`
@@ -38,3 +46,4 @@ router.get("/auth/callback", async (req, res) => {
 });
 
 export { router as iciciAuthCallbackRouter };
+
