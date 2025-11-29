@@ -9,7 +9,12 @@ export function useIciciStream(symbols = []) {
   useEffect(() => {
     const token = getToken();
     if (!token) return;
-
+    const iciciConnected = localStorage.getItem("icici_connected") === "true";
+    const apisession = localStorage.getItem("icici_apisession");
+    if (!iciciConnected || !apisession) {
+      console.warn("ICICI not connected → skipping WebSocket init");
+      return () => {};
+    }
     const ws = new WebSocket(
       `${import.meta.env.VITE_API_URL.replace("https://", "wss://")}/api/icici/stream?token=${token}`
     );
