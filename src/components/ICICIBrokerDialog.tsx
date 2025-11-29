@@ -137,7 +137,7 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
         title: "Connected",
         description: "ICICI Breeze connected successfully.",
       });
-
+      localStorage.setItem("icici_connected", "true");
       setApiKey("");
       setApiSecret("");
       setApisession("");
