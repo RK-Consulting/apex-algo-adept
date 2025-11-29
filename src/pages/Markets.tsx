@@ -66,6 +66,13 @@ export default function Markets() {
     // const wsUrl = `${backendUrl.replace("http", "ws")}/api/icici/stream`;
     // const ws = new WebSocket(wsUrl, ["auth", token]);
     //const wsUrl = `${backendUrl.replace("http", "ws")}/api/icici/stream?token=${encodeURIComponent(token)}`;
+    const iciciConnected = localStorage.getItem("icici_connected") === "true";
+    const apisession = localStorage.getItem("icici_apisession");
+    if (!iciciConnected || !apisession) {
+      console.warn("ICICI not connected → skipping WebSocket init");
+      return () => {};
+     }
+    
     const wsScheme = backendUrl.startsWith("https") ? "wss" : "ws";
     const wsUrl = `${wsScheme}://${new URL(backendUrl).host}/api/icici/stream?token=${encodeURIComponent(token)}`;
     const ws = new WebSocket(wsUrl);
