@@ -22,19 +22,16 @@ import { getSessionForUser } from "../utils/breezeSession.js";
 export const iciciStatusRouter = Router();
 
 /**
- * -----------------------------------------------------------
- *  GET /api/icici/status
- *  Returns ICICI connection + credential status
- * -----------------------------------------------------------
+ * GET /api/icici/status
+ * (Notice: route is "/" because app.ts already sets /api/icici/status)
  */
-iciciStatusRouter.get("/status", authenticateToken, async (req: AuthRequest, res) => {
+iciciStatusRouter.get("/", authenticateToken, async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.userId;
 
-    // Check if encrypted credentials exist
     const result = await query(
-      `SELECT icici_credentials 
-       FROM user_credentials 
+      `SELECT icici_credentials
+       FROM user_credentials
        WHERE user_id = $1 AND broker_name = 'icici'`,
       [userId]
     );
@@ -42,9 +39,7 @@ iciciStatusRouter.get("/status", authenticateToken, async (req: AuthRequest, res
     const hasCredentials =
       result.rows.length > 0 && result.rows[0].icici_credentials !== null;
 
-    // Check ICICI JWT session (stored in DB)
     const session = await getSessionForUser(userId);
-
     const isConnected = !!session?.jwtToken;
 
     return res.json({
