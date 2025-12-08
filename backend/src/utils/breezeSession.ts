@@ -1,49 +1,26 @@
 // backend/src/utils/breezeSession.ts
-//--------------------------------------------------------
-//  ICICI Breeze Server-to-Server Login (OPTION 1)
-//  - No OAuth
-//  - Uses POST /breezeapi/api/v1/login
-//  - Computes X-Checksum: SHA256(appkey + sessionToken + secretkey)
-//  - Stores JWT token in DB
-//--------------------------------------------------------
-
 /**
- * ************************************************************
- *  Unified Breeze Session utilities (AlphaForge)
- *  -----------------------------------------------------------
- *  Responsibilities:
- *   - Create Breeze JWT login using API Key / Secret & sessionToken
- *   - Store encrypted Breeze JWT session in user_credentials
- *   - Provide helper to retrieve decrypted session token for a user
- *   - Provide getBreezeInstance(userId) -> BreezeConnect instance
+ * Unified Breeze Session utilities (AlphaForge) - TypeScript
  *
- *  Notes:
- *   - Uses AES-encryption util in credentialEncryptor.ts
- *   - Caches BreezeConnect instances per-user to avoid repeated connect()
- * ************************************************************
+ * Responsibilities:
+ *  - Create Breeze JWT login using API Key / Secret & apisession (server-to-server login)
+ *  - Store encrypted Breeze JWT session in user_credentials.icici_credentials
+ *  - Provide helper to retrieve decrypted session token for a user
+ *  - Provide getBreezeInstance(userId) -> BreezeConnect instance (cached)
+ *
+ * Notes:
+ *  - Uses AES-encryption util in credentialEncryptor.ts   (encryptJSON / decryptJSON)
+ *  - Uses axios for HTTP to avoid node-fetch ESM issues
+ *  - Checksum computed as SHA256( timestamp + JSONPostData + secret_key )
+ *  - X-Timestamp header set to YYYY-MM-DDTHH:MM:SS.000Z (UTC)
  */
 
-// backend/src/utils/breezeSession.ts
-//--------------------------------------------------------
-//  ICICI Breeze R50 Login (NO OAuth)
-//  - Uses POST /breezeapi/api/v1/login
-//  - Computes checksum = SHA256(appkey + apisession + secretkey)
-//  - Stores JWT token returned by ICICI
-//--------------------------------------------------------
-
-//--------------------------------------------------------
-//  ICICI Breeze R50 Login (NO OAuth)
-//  - Uses POST /breezeapi/api/v1/login
-//  - Computes checksum = SHA256(appkey + apisession + secretkey)
-//  - Stores JWT token in DB
-//--------------------------------------------------------
-
+import axios from "axios";
+import crypto from "crypto";
+import debug from "debug";
 import { query } from "../config/database.js";
 import { encryptJSON, decryptJSON } from "./credentialEncryptor.js";
 import { BreezeConnect } from "breezeconnect";
-import debug from "debug";
-import fetch from "node-fetch";
-import crypto from "crypto";
 
 const log = debug("apex:icici:breeze");
 
@@ -51,24 +28,11 @@ const BREEZE_LOGIN_URL =
   process.env.BREEZE_LOGIN_URL ||
   "https://api.icicidirect.com/breezeapi/api/v1/login";
 
-const CACHE_TTL_MS = 15 * 60 * 1000;
-
-interface BreezeLoginResponse {
-  jwtToken?: string;
-  expiresAt?: string | null;
-
-  // ICICI is inconsistent → normalize later
-  appkey?: string;
-  appKey?: string;
-  AppKey?: string;
-  APPKEY?: string;
-
-  [key: string]: any;
-}
+const CACHE_TTL_MS = Number(process.env.BREEZE_INSTANCE_TTL_MS || 15 * 60 * 1000);
 
 export type BreezeStoredSession = {
   jwtToken: string;
-  expires_at?: string;
+  expires_at?: string | null;
   raw?: any;
 };
 
@@ -77,148 +41,176 @@ const breezeCache = new Map<
   { breeze: BreezeConnect; expiresAt: number }
 >();
 
+/** ISO timestamp in required format YYYY-MM-DDTHH:MM:SS.000Z */
+function isoTimestamp(): string {
+  const iso = new Date().toISOString();
+  return iso.slice(0, 19) + ".000Z";
+}
+
 /**
- * 1) Create Breeze Login Session
- *    apiKey + apiSecret + apisession (NOT OAuth)
+ * Official checksum format (per Breeze docs):
+ * SHA256( timestamp + JSONPostData + secret_key )
+ * NOTE: JSONPostData must be stringified exactly as sent.
+ */
+function computeChecksum(timestamp: string, jsonBodyString: string, secretKey: string) {
+  const raw = timestamp + jsonBodyString + secretKey;
+  return crypto.createHash("sha256").update(raw, "utf8").digest("hex");
+}
+
+/**
+ * Create Breeze Login Session (server-to-server)
+ *
+ * - apiKey: AppKey from Breeze portal (public id)
+ * - secretKey: secret_key (backend-only)
+ * - apisession: the short session value returned by ICICI redirect (API_Session)
+ *
+ * The request must include X-Timestamp and X-Checksum computed as above.
  */
 export async function createBreezeLoginSession(
   userId: string,
   apiKey: string,
-  apiSecret: string,
+  secretKey: string,
   apisession: string
 ): Promise<BreezeStoredSession> {
-  if (!userId || !apiKey || !apiSecret || !apisession) {
+  if (!userId || !apiKey || !secretKey || !apisession) {
     throw new Error("createBreezeLoginSession: missing parameters");
   }
 
-  // Required by ICICI: SHA256(appkey + apisession + secretkey)
-  const checksum = crypto
-    .createHash("sha256")
-    .update(apiKey + apisession + apiSecret)
-    .digest("hex");
+  // Prepare request body exactly as we'll send it
+  // Many Breeze examples use these field names; keep them exact.
+  const bodyObj = {
+    appkey: apiKey,
+    secretkey: secretKey,
+    sessionToken: apisession,
+  };
 
-  let res;
+  const bodyStr = JSON.stringify(bodyObj);
+  const timestamp = isoTimestamp();
+  const checksum = computeChecksum(timestamp, bodyStr, secretKey);
+
+  // Perform HTTP POST
+  let resp;
   try {
-    res = await fetch(BREEZE_LOGIN_URL, {
-      method: "POST",
+    resp = await axios.post(BREEZE_LOGIN_URL, bodyObj, {
       headers: {
         "Content-Type": "application/json",
-        "X-Checksum": checksum,
+        "X-Timestamp": timestamp,
+        "X-Checksum": "token " + checksum,
+        "X-AppKey": apiKey,
       },
-      body: JSON.stringify({
-        appkey: apiKey,
-        secretkey: apiSecret,
-        sessionToken: apisession, // ICICI expects this field name
-      }),
+      timeout: 15000,
     });
-  } catch (e: any) {
-    log("Network error contacting Breeze login: %O", e);
-    throw new Error("Network error contacting Breeze login: " + e.message);
+  } catch (err: any) {
+    log("Network / HTTP error contacting Breeze login: %O", err?.response?.data ?? err?.message ?? err);
+    throw new Error("Network error contacting Breeze login: " + (err?.message || "unknown"));
   }
 
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    log("ICICI Breeze login response:", txt);
-    throw new Error(`Breeze login failed: ${res.status} ${txt}`);
+  if (!(resp && resp.status >= 200 && resp.status < 300)) {
+    log("Breeze login HTTP failure: %s %O", resp?.status, resp?.data);
+    throw new Error(`Breeze login failed: ${resp?.status} ${JSON.stringify(resp?.data)}`);
   }
 
-  const json = (await res.json()) as BreezeLoginResponse;
+  const json = resp.data as any;
 
-  if (!json.jwtToken) {
-    log("Breeze login response missing jwtToken:", json);
-    throw new Error("Breeze login: missing jwtToken in response");
+  // Response must include a JWT token (naming may vary)
+  const jwtToken = json.jwtToken || json.jwt_token || json.token || json.access_token;
+  if (!jwtToken) {
+    log("Breeze login response missing jwt token: %O", json);
+    throw new Error("Breeze login: missing jwt token in response");
   }
 
-  // Normalize appkey variations
-  const normalizedAppKey =
-    json.appkey ||
-    json.appKey ||
-    json.AppKey ||
-    json.APPKEY ||
-    apiKey;
-
-  json.appkey = normalizedAppKey;
-
-  const session: BreezeStoredSession = {
-    jwtToken: json.jwtToken,
-    expires_at: json.expiresAt || undefined,
+  const stored: BreezeStoredSession = {
+    jwtToken,
+    expires_at: json.expiresAt || json.expires_at || null,
     raw: json,
   };
 
-  const encrypted = encryptJSON(session);
+  // Store encrypted in user_credentials.icici_credentials JSON column
+  const encrypted = encryptJSON(stored);
 
+  // Upsert into user_credentials. NOTE: user_credentials must have unique(user_id, broker_name)
   await query(
     `
-      INSERT INTO user_credentials (user_id, broker_name, icici_credentials, created_at, updated_at)
-      VALUES ($1, 'icici', $2, NOW(), NOW())
-      ON CONFLICT (user_id, broker_name)
-      DO UPDATE SET icici_credentials = $2, updated_at = NOW()
+    INSERT INTO user_credentials (user_id, broker_name, icici_credentials, created_at, updated_at)
+    VALUES ($1, 'icici', $2, NOW(), NOW())
+    ON CONFLICT (user_id, broker_name)
+    DO UPDATE SET icici_credentials = $2, updated_at = NOW()
     `,
     [userId, JSON.stringify(encrypted)]
   );
 
+  // Invalidate cache for user so new Breeze instance uses new JWT
   invalidateBreezeInstance(userId);
-  log("✔ Saved Breeze JWT for user %s", userId);
 
-  return session;
+  log("✔ Saved Breeze JWT for user %s", userId);
+  return stored;
 }
 
-/**
- * 2) Retrieve stored session
- */
-export async function getSessionForUser(
-  userId: string
-): Promise<BreezeStoredSession | null> {
+/** Retrieve stored Breeze session for a user (decrypted) */
+export async function getSessionForUser(userId: string): Promise<BreezeStoredSession | null> {
   const r = await query(
     `SELECT icici_credentials FROM user_credentials WHERE user_id = $1 AND broker_name = 'icici'`,
     [userId]
   );
 
   if (!r.rows.length) return null;
-  if (!r.rows[0].icici_credentials) return null;
+  const storedJson = r.rows[0].icici_credentials;
+  if (!storedJson) return null;
 
-  return decryptJSON(r.rows[0].icici_credentials);
+  try {
+    const decrypted = decryptJSON(storedJson) as BreezeStoredSession;
+    return decrypted;
+  } catch (err) {
+    log("Failed to decrypt stored Breeze credentials for user %s: %O", userId, err);
+    return null;
+  }
 }
 
-/**
- * 3) Clear stored session
- */
+/** Clear stored session (logout) */
 export async function clearSessionForUser(userId: string) {
   await query(
-    `
-      UPDATE user_credentials
-      SET icici_credentials = NULL, updated_at = NOW()
-      WHERE user_id = $1 AND broker_name = 'icici'
-    `,
+    `UPDATE user_credentials
+     SET icici_credentials = NULL, updated_at = NOW()
+     WHERE user_id = $1 AND broker_name = 'icici'`,
     [userId]
   );
   invalidateBreezeInstance(userId);
 }
 
 /**
- * 4) Get Breeze Instance
+ * Return a BreezeConnect instance initialized with stored JWT
+ * Caches instances per-user for short TTL (CACHE_TTL_MS)
  */
-export async function getBreezeInstance(
-  userId: string
-): Promise<BreezeConnect> {
+export async function getBreezeInstance(userId: string): Promise<BreezeConnect> {
   const cached = breezeCache.get(userId);
-  if (cached && cached.expiresAt > Date.now()) return cached.breeze;
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.breeze;
+  }
 
   const session = await getSessionForUser(userId);
   if (!session?.jwtToken) {
-    throw new Error("No Breeze JWT available for user — connect first");
+    throw new Error("No Breeze JWT available for user — user must connect first");
   }
 
+  // Create BreezeConnect instance and set session/jwt/appkey if supported
   const breeze = new BreezeConnect();
 
   try {
-    if ((breeze as any).setSessionToken)
+    if (typeof (breeze as any).setSessionToken === "function") {
       (breeze as any).setSessionToken(session.jwtToken);
+    } else if ("setJwtToken" in (breeze as any)) {
+      // alternate API names
+      try {
+        (breeze as any).setJwtToken(session.jwtToken);
+      } catch {}
+    }
 
-    if ((breeze as any).setApiKey && session.raw?.appkey)
-      (breeze as any).setApiKey(session.raw.appkey);
-  } catch (e) {
-    log("Warning: BreezeConnect version mismatch: %O", e);
+    const appkey = session.raw?.appkey || session.raw?.appKey || process.env.ICICI_APP_KEY;
+    if (appkey && typeof (breeze as any).setApiKey === "function") {
+      (breeze as any).setApiKey(appkey);
+    }
+  } catch (err) {
+    log("Warning: BreezeConnect instance init - version mismatch or missing setters: %O", err);
   }
 
   breezeCache.set(userId, {
@@ -229,9 +221,7 @@ export async function getBreezeInstance(
   return breeze;
 }
 
-/**
- * 5) Invalidate cached instance
- */
+/** Invalidate cached BreezeConnect instance */
 export function invalidateBreezeInstance(userId: string) {
   breezeCache.delete(userId);
   log("Invalidated Breeze cache for user %s", userId);
