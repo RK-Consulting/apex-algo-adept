@@ -16,16 +16,15 @@ import { credentialsRouter } from "./routes/credentials.js";
 import { watchlistRouter } from "./routes/watchlist.js";
 
 // -----------------------------------------------------------
-// Correct ICICI router imports
+// ICICI ROUTERS (CLEANED + CORRECT)
 // -----------------------------------------------------------
-import { iciciAuthLoginRouter } from "./routes/icici/authLogin.js";
-import { iciciBrokerRouter } from "./routes/iciciBroker.js";
-import { iciciStatusRouter } from "./routes/iciciStatus.js";
-import { iciciBacktestRouter } from "./routes/iciciBacktest.js";
-import { iciciStreamRouter } from "./routes/icici/stream.js";
-import { iciciAuthCallbackRouter } from "./routes/icici/authCallback.js";
-import { iciciAuthRouter } from "./routes/iciciAuth.js";
-import { iciciOrderRoutes } from "./routes/icici/orders.js";
+import { iciciAuthRouter } from "./routes/iciciAuth.js";               // /api/icici/auth/*
+import { iciciOrderRoutes } from "./routes/icici/orders.js";          // /api/icici/orders/*
+import { iciciStreamRouter } from "./routes/icici/stream.js";         // /api/icici/stream/*
+import { iciciStatusRouter } from "./routes/iciciStatus.js";          // /api/icici/status
+import { iciciBrokerRouter } from "./routes/iciciBroker.js";          // /api/icici/broker
+import { iciciBacktestRouter } from "./routes/iciciBacktest.js";      // /api/icici/backtest
+// (REMOVE unused authLogin/authCallback routers)
 
 const app = express();
 
@@ -53,36 +52,25 @@ app.get("/health", (_req, res) =>
   })
 );
 
-// Core API
+// -----------------------------------------------------------
+// CORE API
+// -----------------------------------------------------------
 app.use("/api/auth", authRouter);
 app.use("/api/strategies", strategyRouter);
 app.use("/api/credentials", credentialsRouter);
 app.use("/api/watchlist", watchlistRouter);
 
 // -----------------------------------------------------------
-// ICICI — All new correct routes
+// ICICI DIRECT API STACK (FINAL + CORRECT)
 // -----------------------------------------------------------
 
-app.use("/api/icici", iciciAuthLoginRouter);
-
-// Save API key/secret + apisession
-app.use("/api/icici/broker", iciciBrokerRouter);
-
-// Status checks
-app.use("/api/icici/status", iciciStatusRouter);
-
-// Backtesting
-app.use("/api/icici/backtest", iciciBacktestRouter);
-
-// WebSocket controller
-app.use("/api/icici/stream", iciciStreamRouter);
-
-// OAuth callback endpoint
-app.use("/api/icici/auth", iciciAuthCallbackRouter);
+// 🔥 This router contains:
+// GET /api/icici/auth/login         → opens ICICI login page
+// POST /api/icici/auth/callback     → receives apisession
 app.use("/api/icici/auth", iciciAuthRouter);
 
-app.use("/api/icici", iciciOrderRoutes);
-// Global error handler
-app.use(errorHandler);
+// Save API key/secret + apisession (optional storage)
+app.use("/api/icici/broker", iciciBrokerRouter);
 
-export default app;
+// Status checking
+app.use("/api/icici/status",
