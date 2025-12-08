@@ -77,39 +77,71 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
   /* -------------------------------------------------------
    * RECEIVE LOGIN RESULT FROM POPUP
    * -----------------------------------------------------*/
-  const handleMessage = useCallback(
-    (event: MessageEvent) => {
-      if (!event.data) return;
+const handleMessage = useCallback(
+  async (event: MessageEvent) => {
+    if (!event.data) return;
 
-      // SUCCESS
-      if (event.data.type === "ICICI_LOGIN") {
+    // SUCCESS: ICICI Login completed, apisession received
+    if (event.data.type === "ICICI_LOGIN") {
+      const apisession = event.data.apisession;
+      if (!apisession) {
+        toast({ title: "ICICI Error", description: "Missing apisession", variant: "destructive" });
+        return;
+      }
+
+      setStatus("loading");
+
+      try {
+        const backend = import.meta.env.VITE_BACKEND_URL || "https://api.alphaforge.skillsifter.in";
+
+        // Send apisession + stored key/secret to backend
+        const resp = await fetch(`${backend}/api/icici/auth/callback`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+          body: JSON.stringify({
+            apisession,
+            api_key: localStorage.getItem("icici_api_key"),
+            api_secret: localStorage.getItem("icici_api_secret"),
+          }),
+        });
+
+        const json = await resp.json();
+
+        if (!resp.ok) throw new Error(json.error || "Callback failed");
+
+        // SUCCESS
+        localStorage.setItem("icici_session_token", json.session_token);
+        localStorage.setItem("icici_connected", "true");
+
         setStatus("success");
         setMessage("ICICI account connected successfully!");
 
-        localStorage.setItem(
-          "icici_session_token",
-          event.data.session_token || ""
-        );
-        localStorage.setItem("icici_connected", "true");
-
         toast({
           title: "ICICI Connected",
-          description: "Your ICICI Direct account is now linked.",
+          description: "Your ICICI Direct account is linked.",
         });
 
-        setForcedReconnect(false);
-        setTimeout(() => onOpenChange(false), 1500);
-      }
-
-      // ERROR
-      if (event.data.type === "ICICI_LOGIN_ERROR") {
+        setTimeout(() => onOpenChange(false), 1200);
+      } catch (err: any) {
         setStatus("error");
-        setMessage(event.data.error || "Login failed.");
-        toast({ title: "ICICI Login Error", variant: "destructive" });
+        setMessage(err.message || "Login failed");
+        toast({ title: "ICICI Error", description: err.message, variant: "destructive" });
       }
-    },
-    [onOpenChange, toast]
-  );
+    }
+
+    // ERROR coming from popup
+    if (event.data.type === "ICICI_LOGIN_ERROR") {
+      setStatus("error");
+      setMessage(event.data.error || "Login failed");
+      toast({ title: "ICICI Login Error", variant: "destructive" });
+    }
+  },
+  [onOpenChange, toast]
+);
+
 
   useEffect(() => {
     window.addEventListener("message", handleMessage);
