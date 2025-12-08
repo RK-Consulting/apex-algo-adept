@@ -1,4 +1,4 @@
-// /src/pages/Markets.tsx
+// src/pages/Markets.tsx
 import { useEffect, useState, useRef } from "react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
@@ -26,89 +26,224 @@ const indexSymbols = [
 
 const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
 
+type Tick = {
+  stockCode?: string; // sometimes Breeze uses different names
+  symbol?: string;
+  ltp?: number;
+  last?: number;
+  high?: number;
+  low?: number;
+  change?: number;
+  percentChange?: number;
+  volume?: number;
+  [k: string]: any;
+};
+
 export default function Markets() {
-  const [indexData, setIndexData] = useState<any[]>([]);
-  const [stockData, setStockData] = useState<any[]>([]);
+  const [indexMap, setIndexMap] = useState<Record<string, Tick>>({});
+  const [stockMap, setStockMap] = useState<Record<string, Tick>>({});
   const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimer = useRef<number | null>(null);
+  const reconnectAttempts = useRef(0);
 
   const token = localStorage.getItem("authToken") || localStorage.getItem("token");
+  const iciciConnected = localStorage.getItem("icici_connected") === "true";
 
-  const fetchQuote = async (symbol: string) => {
+  // Helper to format numbers
+  const formatPrice = (p?: number) =>
+    p == null ? "..." : p.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const formatVolume = (v?: number) =>
+    typeof v !== "number" ? "N/A" : v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(1)}K` : String(v);
+
+  // Control API subscribe/unsubscribe helpers
+  async function controlSubscribe(symbol: string, exchange = "NSE") {
+    if (!token) return;
     try {
-      const res = await fetch(`${backendUrl}/api/icici/market/quote?symbol=${symbol}`, { headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) return null;
-      const json = await res.json();
-      // defensive access
-      return json.quote?.Success?.[0] || json.quote || null;
-    } catch {
-      return null;
+      await fetch(`${backendUrl}/api/icici/stream/subscribe`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ symbol, exchange }),
+      });
+    } catch (e) {
+      console.warn("subscribe control error", e);
     }
-  };
+  }
 
+  async function controlUnsubscribe(symbol: string, exchange = "NSE") {
+    if (!token) return;
+    try {
+      await fetch(`${backendUrl}/api/icici/stream/unsubscribe`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ symbol, exchange }),
+      });
+    } catch (e) {
+      console.warn("unsubscribe control error", e);
+    }
+  }
+
+  // Establish WS connection and subscribe
   useEffect(() => {
     if (!token) return;
-    const fetchAll = async () => {
-      const indexRes = await Promise.all(indexSymbols.map((i) => fetchQuote(i.symbol)));
-      setIndexData(indexRes.map((q, idx) => q ? { symbol: indexSymbols[idx].symbol, price: q.ltp || q.LastPrice, high: q.high, low: q.low, change: q.change, change_percent: q.percentChange } : {}));
+    if (!iciciConnected) {
+      console.warn("ICICI not connected → skipping realtime WS init");
+      return;
+    }
 
-      const stockRes = await Promise.all(stockSymbols.map((s) => fetchQuote(s.symbol)));
-      setStockData(stockRes.map((q, idx) => q ? { symbol: stockSymbols[idx].symbol, price: q.ltp || q.LastPrice, high: q.high, low: q.low, change: q.change, change_percent: q.percentChange, volume: q.volume } : {}));
-    };
-
-    fetchAll();
-    const iv = setInterval(fetchAll, 1000);
-    return () => clearInterval(iv);
-  }, [token]);
-
-  useEffect(() => {
-    if (!token) return;
-
-    // const wsUrl = `${backendUrl.replace("http", "ws")}/api/icici/stream`;
-    // const ws = new WebSocket(wsUrl, ["auth", token]);
-    //const wsUrl = `${backendUrl.replace("http", "ws")}/api/icici/stream?token=${encodeURIComponent(token)}`;
-    const iciciConnected = localStorage.getItem("icici_connected") === "true";
-    const apisession = localStorage.getItem("icici_apisession");
-    if (!iciciConnected || !apisession) {
-      console.warn("ICICI not connected → skipping WebSocket init");
-      return () => {};
-     }
-    
     const wsScheme = backendUrl.startsWith("https") ? "wss" : "ws";
-    const wsUrl = `${wsScheme}://${new URL(backendUrl).host}/api/icici/stream?token=${encodeURIComponent(token)}`;
-    const ws = new WebSocket(wsUrl);
+    const host = new URL(backendUrl).host;
+    const wsUrl = `${wsScheme}://${host}/ws/icici?token=${encodeURIComponent(token)}`;
+
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch (err) {
+      console.error("Failed to create WebSocket:", err);
+      return;
+    }
+
     wsRef.current = ws;
 
     ws.onopen = () => {
-      console.log("WS Connected");
-      // Subscribe via control endpoint (safer than sending many WS messages)
-      stockSymbols.forEach(async (s) => {
-        try {
-          await fetch(`${backendUrl}/api/icici/stream/subscribe`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ symbol: s.symbol, exchange: s.exchange })
-          });
-        } catch {}
-      });
+      console.log("ICICI WS connected:", wsUrl);
+      reconnectAttempts.current = 0;
+
+      // Subscribe indices first
+      indexSymbols.forEach((i) => controlSubscribe(i.symbol, i.exchange));
+
+      // Subscribe stocks
+      stockSymbols.forEach((s) => controlSubscribe(s.symbol, s.exchange));
     };
 
     ws.onmessage = (evt) => {
       try {
-        const payload = JSON.parse(evt.data);
-        if (payload?.type === "tick" && payload.data) {
-          const tick = payload.data;
-          setStockData((prev)=> prev.map((it)=> it.symbol === tick.stockCode ? { ...it, price: tick.ltp, high: tick.high, low: tick.low, change: tick.change, change_percent: tick.percentChange } : it));
+        const payload = JSON.parse(evt.data) as Tick;
+
+        // If backend sends an error-like tick for session expiry
+        if ((payload as any)?.error === "ICICI_SESSION_EXPIRED") {
+          console.warn("ICICI session expired (via WS)");
+          window.dispatchEvent(new CustomEvent("ICICI_SESSION_EXPIRED"));
+          return;
         }
-      } catch (e) { console.error(e); }
+
+        // Determine symbol key (breeze commonly uses stockCode)
+        const symbol = (payload.stockCode || payload.symbol || "").toString().toUpperCase();
+        if (!symbol) return;
+
+        // Normalize fields
+        const tick: Tick = {
+          stockCode: symbol,
+          ltp: payload.ltp ?? payload.last ?? payload.price ?? payload.lastPrice,
+          high: payload.high,
+          low: payload.low,
+          change: payload.change,
+          percentChange: payload.percentChange ?? payload.percent_change ?? payload.change_percent,
+          volume: payload.volume,
+          ...payload,
+        };
+
+        // If symbol matches an index, update indexMap
+        if (indexSymbols.some((i) => i.symbol === symbol)) {
+          setIndexMap((prev) => ({ ...prev, [symbol]: tick }));
+          return;
+        }
+
+        // Otherwise update stock map
+        if (stockSymbols.some((s) => s.symbol === symbol)) {
+          setStockMap((prev) => ({ ...prev, [symbol]: tick }));
+        }
+      } catch (e) {
+        console.error("WS message parse error", e);
+      }
     };
 
-    ws.onclose = () => setTimeout(()=> window.location.reload(), 3000);
-    ws.onerror = (e) => console.error("WS error", e);
-    return () => ws.close();
-  }, [token]);
+    ws.onerror = (e) => {
+      console.error("ICICI WS error", e);
+    };
 
-  const formatPrice = (p: number) => p?.toLocaleString("en-IN", { minimumFractionDigits: 2 });
-  const formatVolume = (v: number) => v >= 1_000_000 ? `${(v/1_000_000).toFixed(1)}M` : v >= 1000 ? `${(v/1000).toFixed(1)}K` : v || "N/A";
+    ws.onclose = (ev) => {
+      console.warn("ICICI WS closed", ev);
+      // attempt reconnect with backoff
+      reconnectAttempts.current = Math.min(10, reconnectAttempts.current + 1);
+      const delay = Math.min(30_000, 1000 * Math.pow(1.8, reconnectAttempts.current));
+      reconnectTimer.current = window.setTimeout(() => {
+        // re-run effect by setting ref to null then creating new WS
+        if (wsRef.current) wsRef.current = null;
+        // trigger effect by calling connect again (we accomplish by creating new WebSocket below)
+        // but since useEffect won't re-run automatically, we perform manual reconnect:
+        try {
+          const newWs = new WebSocket(wsUrl);
+          wsRef.current = newWs;
+          // attach same handlers (simple approach: reload page after delay as fallback)
+          newWs.onopen = () => {
+            console.log("ICICI WS reconnected (auto)");
+            reconnectAttempts.current = 0;
+          };
+          newWs.onmessage = ws.onmessage;
+          newWs.onclose = ws.onclose;
+          newWs.onerror = ws.onerror;
+        } catch (err) {
+          console.error("Reconnect failed, reloading in 3s", err);
+          setTimeout(() => window.location.reload(), 3000);
+        }
+      }, delay);
+    };
+
+    // Cleanup: unsubscribe + close websocket
+    return () => {
+      // clear reconnect timer
+      if (reconnectTimer.current) {
+        clearTimeout(reconnectTimer.current);
+        reconnectTimer.current = null;
+      }
+
+      // request unsubscribe for everything we subscribed
+      indexSymbols.forEach((i) => controlUnsubscribe(i.symbol, i.exchange));
+      stockSymbols.forEach((s) => controlUnsubscribe(s.symbol, s.exchange));
+
+      try {
+        ws.close();
+      } catch {}
+      wsRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, iciciConnected]);
+
+  // Merge maps to arrays for rendering in original order
+  const indexData = indexSymbols.map((i) => {
+    const d = indexMap[i.symbol] || {};
+    return {
+      symbol: i.symbol,
+      name: i.name,
+      price: d.ltp ?? d.last ?? null,
+      high: d.high ?? null,
+      low: d.low ?? null,
+      change: d.change ?? 0,
+      change_percent: d.percentChange ?? 0,
+    };
+  });
+
+  const stockData = stockSymbols.map((s) => {
+    const d = stockMap[s.symbol] || {};
+    return {
+      symbol: s.symbol,
+      name: s.name,
+      price: d.ltp ?? d.last ?? null,
+      high: d.high ?? null,
+      low: d.low ?? null,
+      change: d.change ?? 0,
+      change_percent: d.percentChange ?? 0,
+      volume: d.volume ?? 0,
+      marketCap: s.marketCap,
+    };
+  });
 
   return (
     <SidebarProvider>
@@ -128,18 +263,17 @@ export default function Markets() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {indexSymbols.map((idx, i)=> {
-                const d = indexData[i] || {};
-                const trend = (d?.change || 0) >= 0 ? "up" : "down";
+              {indexData.map((d) => {
+                const trend = (d.change || 0) >= 0 ? "up" : "down";
                 return (
-                  <Card key={idx.symbol}>
+                  <Card key={d.symbol}>
                     <CardContent className="pt-6">
                       <div>
                         <div className="flex items-center justify-between">
-                          <h3 className="font-semibold text-sm">{idx.name}</h3>
+                          <h3 className="font-semibold text-sm">{d.name}</h3>
                           <div className={`w-2 h-2 rounded-full ${trend === "up" ? "bg-success" : "bg-destructive"} animate-pulse`} />
                         </div>
-                        <div className="text-2xl font-mono font-bold">{formatPrice(d.price) || "..."}</div>
+                        <div className="text-2xl font-mono font-bold">{formatPrice(d.price as number)}</div>
                         <div className={`flex items-center gap-1 text-sm font-medium ${trend === "up" ? "text-success" : "text-destructive"}`}>
                           {trend === "up" ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
                           <span>{(d.change || 0).toFixed(2)}</span>
@@ -177,14 +311,13 @@ export default function Markets() {
                         </tr>
                       </thead>
                       <tbody>
-                        {stockSymbols.map((s, idx)=> {
-                          const d = stockData[idx] || {};
+                        {stockData.map((d) => {
                           const trend = (d.change || 0) >= 0 ? "up" : "down";
                           return (
-                            <tr key={s.symbol} className="border-b border-border hover:bg-muted/20">
-                              <td className="p-3 font-mono font-semibold">{s.symbol}</td>
-                              <td className="p-3 text-muted-foreground">{s.name}</td>
-                              <td className="p-3 text-right font-mono font-semibold">₹{formatPrice(d.price)}</td>
+                            <tr key={d.symbol} className="border-b border-border hover:bg-muted/20">
+                              <td className="p-3 font-mono font-semibold">{d.symbol}</td>
+                              <td className="p-3 text-muted-foreground">{d.name}</td>
+                              <td className="p-3 text-right font-mono font-semibold">₹{formatPrice(d.price as number)}</td>
                               <td className="p-3 text-right">
                                 <div className={`flex justify-end items-center gap-1 text-sm font-medium ${trend === "up" ? "text-success" : "text-destructive"}`}>
                                   {trend === "up" ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
@@ -192,7 +325,7 @@ export default function Markets() {
                                 </div>
                               </td>
                               <td className="p-3 text-right font-mono text-sm">{formatVolume(d.volume)}</td>
-                              <td className="p-3 text-right text-muted-foreground">{s.marketCap}</td>
+                              <td className="p-3 text-right text-muted-foreground">{d.marketCap}</td>
                               <td className="p-3 text-right">
                                 <div className="flex justify-end gap-2">
                                   <Button size="sm" variant="ghost"><Star className="w-3 h-3" /></Button>
