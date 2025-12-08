@@ -32,7 +32,7 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
   const backend = import.meta.env.VITE_API_URL || "https://api.alphaforge.skillsifter.in";
 
   const popup = window.open(
-    `${backend}/icici/auth/login`,
+    `${backend}/api/icici/auth/login`,
     "iciciLogin",
     "width=500,height=700"
   );
