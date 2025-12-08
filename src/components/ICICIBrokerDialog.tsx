@@ -26,22 +26,22 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
   /* -------------------------------------------------------
    * OPEN POPUP FOR ICICI LOGIN
    * -----------------------------------------------------*/
-  const startICICILogin = () => {
-    setStatus("loading");
-    setMessage("");
+ const startICICILogin = () => {
+  setStatus("loading");
 
-    const popup = window.open(
-      "/api/icici/auth/login",
-      "iciciLogin",
-      "width=500,height=700"
-    );
+  const backend = import.meta.env.VITE_API_URL || "https://api.alphaforge.skillsifter.in";
 
-    if (!popup) {
-      setStatus("error");
-      setMessage("Popup blocked. Enable popups for this site.");
-      toast({ title: "Popup Blocked", variant: "destructive" });
-    }
-  };
+  const popup = window.open(
+    `${backend}/icici/auth/login`,
+    "iciciLogin",
+    "width=500,height=700"
+  );
+
+  if (!popup) {
+    setStatus("error");
+    setMessage("Popup blocked. Enable popups.");
+  }
+};
 
   /* -------------------------------------------------------
    * RECEIVE LOGIN RESULT FROM POPUP
