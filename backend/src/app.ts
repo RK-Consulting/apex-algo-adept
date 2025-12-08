@@ -73,4 +73,20 @@ app.use("/api/icici/auth", iciciAuthRouter);
 app.use("/api/icici/broker", iciciBrokerRouter);
 
 // Status checking
-app.use("/api/icici/status",
+app.use("/api/icici/status", iciciStatusRouter);
+
+// Backtesting
+app.use("/api/icici/backtest", iciciBacktestRouter);
+
+// WebSocket streaming (Breeze WS wrap)
+app.use("/api/icici/stream", iciciStreamRouter);
+
+// Orders engine
+app.use("/api/icici", iciciOrderRoutes);
+
+// -----------------------------------------------------------
+// GLOBAL ERROR HANDLER
+// -----------------------------------------------------------
+app.use(errorHandler);
+
+export default app;
