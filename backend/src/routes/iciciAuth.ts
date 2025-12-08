@@ -1,53 +1,36 @@
 // backend/src/routes/iciciAuth.ts
 
 import { Router } from "express";
-import { authenticateToken } from "../middleware/auth.js";
-import {
-  createBreezeLoginSession,
-} from "../utils/breezeSession.js";
+import { authenticateToken, AuthRequest } from "../middleware/auth.js";
+import { createBreezeLoginSession } from "../utils/breezeSession.js";
 
 const router = Router();
 
-/**
- * 1) Redirect user to ICICI Login Page
- */
-router.get("/auth/login", authenticateToken, async (req, res) => {
-  const apiKey = req.query.api_key || req.user?.icici_api_key;
+router.get("/auth/login", authenticateToken, async (req: AuthRequest, res) => {
+  const apiKey = req.query.api_key;
+  if (!apiKey) return res.status(400).send("Missing API key");
 
-  if (!apiKey) {
-    return res.status(400).send("Missing API Key");
-  }
+  const url = `https://api.icicidirect.com/apiuser/login?api_key=${encodeURIComponent(
+    String(apiKey)
+  )}`;
 
-  const loginUrl =
-    `https://api.icicidirect.com/apiuser/login?api_key=${encodeURIComponent(String(apiKey))}`;
-
-  return res.redirect(loginUrl);
+  return res.redirect(url);
 });
 
-/**
- * 2) Receive callback FROM ICICI (POST)
- */
-router.post("/auth/callback", authenticateToken, async (req, res) => {
+router.post("/auth/callback", authenticateToken, async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.userId;
     const { apisession, api_key, api_secret } = req.body;
 
-    if (!apisession || !api_key || !api_secret) {
-      return res.status(400).json({ error: "Missing parameters" });
-    }
+    if (!apisession || !api_key || !api_secret)
+      return res.status(400).json({ error: "Missing callback parameters" });
 
-    const session = await createBreezeLoginSession(
-      userId,
-      api_key,
-      api_secret,
-      apisession
-    );
+    const session = await createBreezeLoginSession(userId, api_key, api_secret, apisession);
 
     return res.json({
       success: true,
       session_token: session.jwtToken,
     });
-
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
