@@ -24,24 +24,53 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
   const { toast } = useToast();
 
   /* -------------------------------------------------------
-   * OPEN POPUP FOR ICICI LOGIN
+   * FIXED: ICICI Login Popup
+   * Adds ?api_key=YOUR_ICICI_API_KEY
    * -----------------------------------------------------*/
- const startICICILogin = () => {
-  setStatus("loading");
+  const startICICILogin = () => {
+    setStatus("loading");
 
-  const backend = import.meta.env.VITE_API_URL || "https://api.alphaforge.skillsifter.in";
+    const backend =
+      import.meta.env.VITE_BACKEND_URL ||
+      import.meta.env.VITE_API_URL ||
+      "https://api.alphaforge.skillsifter.in";
 
-  const popup = window.open(
-    `${backend}/api/icici/auth/login`,
-    "iciciLogin",
-    "width=500,height=700"
-  );
+    // IMPORTANT — must match backend route:
+    // router.get("/auth/login", ... requires ?api_key=...)
+    const apiKey = import.meta.env.VITE_ICICI_API_KEY;
 
-  if (!popup) {
-    setStatus("error");
-    setMessage("Popup blocked. Enable popups.");
-  }
-};
+    if (!apiKey) {
+      setStatus("error");
+      setMessage("ICICI_APP_KEY missing in environment");
+      toast({
+        title: "ICICI API Key Missing",
+        description:
+          "Add VITE_ICICI_API_KEY to your frontend .env to enable login.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const loginUrl =
+      backend.replace(/\/$/, "") +
+      `/api/icici/auth/login?api_key=${encodeURIComponent(apiKey)}`;
+
+    const popup = window.open(
+      loginUrl,
+      "iciciLogin",
+      "width=500,height=700"
+    );
+
+    if (!popup) {
+      setStatus("error");
+      setMessage("Popup blocked. Enable popups.");
+      toast({
+        title: "Popup Blocked",
+        description: "Please allow popups for ICICI authentication.",
+        variant: "destructive",
+      });
+    }
+  };
 
   /* -------------------------------------------------------
    * RECEIVE LOGIN RESULT FROM POPUP
@@ -50,7 +79,7 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
     (event: MessageEvent) => {
       if (!event.data) return;
 
-      // SUCCESS → ICICI_LOGIN
+      // SUCCESS
       if (event.data.type === "ICICI_LOGIN") {
         setStatus("success");
         setMessage("ICICI account connected successfully!");
@@ -66,7 +95,7 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
           description: "Your ICICI Direct account is now linked.",
         });
 
-        setForcedReconnect(false); // clear reconnect mode
+        setForcedReconnect(false);
         setTimeout(() => onOpenChange(false), 1500);
       }
 
@@ -87,16 +116,13 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
 
   /* -------------------------------------------------------
    * GLOBAL SESSION EXPIRY HANDLER
-   * Triggers when App.tsx dispatches event:
-   * → SHOW_ICICI_RECONNECT_DIALOG
    * -----------------------------------------------------*/
   useEffect(() => {
-    function handleReconnectEvent(e: any) {
+    function handleReconnectEvent() {
       setForcedReconnect(true);
       setStatus("idle");
       setMessage("");
 
-      // Auto-open the dialog
       onOpenChange(true);
     }
 
@@ -123,14 +149,14 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
           </DialogTitle>
         </DialogHeader>
 
-        {/* 🔥 WARNING BANNER WHEN SESSION EXPIRED */}
+        {/* WARNING BANNER */}
         {forcedReconnect && (
           <div className="p-3 rounded bg-red-100 border border-red-300 text-red-700 text-sm">
             Your ICICI session has expired. Please reconnect.
           </div>
         )}
 
-        {/* Idle State */}
+        {/* Idle */}
         {status === "idle" && (
           <div>
             <p>
@@ -140,7 +166,9 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
             </p>
 
             <Button className="mt-4 w-full" onClick={startICICILogin}>
-              {forcedReconnect ? "Reconnect ICICI Direct" : "Connect ICICI Direct"}
+              {forcedReconnect
+                ? "Reconnect ICICI Direct"
+                : "Connect ICICI Direct"}
             </Button>
           </div>
         )}
