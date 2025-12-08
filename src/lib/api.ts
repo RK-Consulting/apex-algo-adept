@@ -44,6 +44,16 @@ export async function request(
   return body;
 }
 
+export const api = {
+  get: (path: string) => request(path),
+  post: (path: string, body?: any) =>
+    request(path, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+};
+
+
 // ICICI APIs
 export const ICICI = {
   status: () => api.get("/icici/status"),
