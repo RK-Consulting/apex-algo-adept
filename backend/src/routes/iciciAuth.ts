@@ -1,4 +1,5 @@
 // backend/src/routes/iciciAuth.ts
+
 import { Router } from "express";
 import debug from "debug";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
@@ -8,27 +9,36 @@ const log = debug("apex:icici:auth");
 const router = Router();
 
 /**
+ * ========================================================================
  * GET /api/icici/auth/login
- * -------------------------
- * Public endpoint. Redirects user (popup) to ICICI login page.
+ * ------------------------------------------------------------------------
+ * Public endpoint.
+ * Redirects user (popup) to ICICI Direct login page.
  *
- * Usage:
- *  - frontend will call: `${BACKEND}/api/icici/auth/login?api_key=XXXXX`
- *  - if api_key is missing we fall back to an env-configured API key.
+ * The frontend popup will call:
+ *    `${BACKEND}/api/icici/auth/login?api_key=XXXXX`
  *
- * NOTE: This must be public (no JWT required) because the popup will be opened
- * from the browser and won't include Authorization headers.
+ * If api_key is missing → fallback to env DEFAULT_ICICI_APPKEY.
+ *
+ * ⚠ This must remain PUBLIC. No JWT.
+ * The popup is opened by the browser, so Authorization headers DO NOT exist.
+ * ========================================================================
  */
 router.get("/auth/login", (req, res) => {
   try {
-    const apiKey = String(req.query.api_key || process.env.DEFAULT_ICICI_APPKEY || "").trim();
+    const apiKey = String(
+      req.query.api_key || process.env.DEFAULT_ICICI_APPKEY || ""
+    ).trim();
 
     if (!apiKey) {
       log("Missing api_key in /auth/login request");
       return res.status(400).send("Missing api_key");
     }
 
-    const loginUrl = `https://api.icicidirect.com/apiuser/login?api_key=${encodeURIComponent(apiKey)}`;
+    const loginUrl = `https://api.icicidirect.com/apiuser/login?api_key=${encodeURIComponent(
+      apiKey
+    )}`;
+
     log("Redirecting to ICICI login:", loginUrl);
     return res.redirect(loginUrl);
   } catch (err: any) {
@@ -38,18 +48,23 @@ router.get("/auth/login", (req, res) => {
 });
 
 /**
+ * ========================================================================
  * GET /api/icici/auth/callback
- * ----------------------------
- * ICICI will redirect the browser here after successful login with query:
- *   ?apisession=XXXXX
+ * ------------------------------------------------------------------------
+ * ICICI redirects user here after successful login:
+ *      ?apisession=XXXXX
  *
- * This endpoint is public and returns a small HTML page that posts the
- * apisession back to the opener window (the popup parent) and closes itself.
+ * This endpoint is PUBLIC and returns a temporary HTML page that sends the
+ * apisession back to the opener window via postMessage.
  *
- * The frontend popup's message handler receives:
- *  { type: "ICICI_LOGIN_SUCCESS", apisession: "XXXXX" }
+ * Frontend popup listener receives:
+ *    { type: "ICICI_LOGIN", apisession: "XXXXX" }
  *
- * If something goes wrong we send an ICICI_LOGIN_ERROR postMessage.
+ * If error:
+ *    { type: "ICICI_LOGIN_ERROR", error: "..." }
+ *
+ * Then window closes automatically.
+ * ========================================================================
  */
 router.get("/auth/callback", (req, res) => {
   try {
@@ -57,12 +72,16 @@ router.get("/auth/callback", (req, res) => {
 
     if (!apisession) {
       log("Missing apisession in callback");
+
       return res.send(`
         <html><body>
           <h3>ICICI callback received without apisession</h3>
           <script>
             if (window.opener) {
-              window.opener.postMessage({ type: "ICICI_LOGIN_ERROR", error: "Missing apisession" }, "*");
+              window.opener.postMessage(
+                { type: "ICICI_LOGIN_ERROR", error: "Missing apisession" },
+                "*"
+              );
               window.close();
             } else {
               document.body.innerHTML += "<p>Please close this window.</p>";
@@ -72,7 +91,7 @@ router.get("/auth/callback", (req, res) => {
       `);
     }
 
-    // Send apisession back to the opener (frontend popup listener)
+    // Successful login → send apisession to frontend popup
     return res.send(`
       <html><body>
         <h3>ICICI Login Successful — you may close this window</h3>
@@ -80,14 +99,20 @@ router.get("/auth/callback", (req, res) => {
           (function(){
             try {
               if (window.opener) {
-                window.opener.postMessage({ type: "ICICI_LOGIN_SUCCESS", apisession: "${apisession}" }, "*");
+                window.opener.postMessage(
+                  { type: "ICICI_LOGIN", apisession: "${apisession}" },
+                  "*"
+                );
                 window.close();
               } else {
-                document.body.innerHTML += "<p>No opener: please copy the apisession and paste it into the app.</p>";
+                document.body.innerHTML += "<p>No opener detected.</p>";
               }
-            } catch (e) {
+            } catch(e) {
               if (window.opener) {
-                window.opener.postMessage({ type: "ICICI_LOGIN_ERROR", error: "Callback postMessage failed" }, "*");
+                window.opener.postMessage(
+                  { type: "ICICI_LOGIN_ERROR", error: "Callback postMessage failed" },
+                  "*"
+                );
                 window.close();
               } else {
                 document.body.innerHTML += "<p>Callback failed.</p>";
@@ -104,43 +129,63 @@ router.get("/auth/callback", (req, res) => {
 });
 
 /**
+ * ========================================================================
  * POST /api/icici/auth/callback
- * -----------------------------
- * Authenticated endpoint (requires JWT). The frontend calls this endpoint
- * after it receives the short apisession from the popup. This route then
- * performs the server-to-server Breeze login (using api_key + api_secret)
- * and stores the Breeze JWT into the user's credentials.
+ * ------------------------------------------------------------------------
+ * Authenticated server-to-server Breeze login.
  *
- * Body JSON expected:
+ * Frontend calls this AFTER receiving the temporary "apisession" from popup.
+ *
+ * Required JSON body:
  * {
  *   "apisession": "XXXXX",
- *   "api_key": "APPKEY",
+ *   "api_key":    "APPKEY",
  *   "api_secret": "SECRET"
  * }
  *
- * Response:
- * { success: true, session_token: "<breeze-jwt>" }
+ * Server will:
+ *   - Exchange apisession + app key/secret with ICICI
+ *   - Receive a Breeze JWT
+ *   - Store encrypted credentials in DB
+ *
+ * Returns:
+ *   { success: true, session_token: "<breeze-jwt>" }
+ * ========================================================================
  */
-router.post("/auth/callback", authenticateToken, async (req: AuthRequest, res) => {
-  try {
-    const userId = req.user!.userId;
-    const { apisession, api_key, api_secret } = req.body;
+router.post(
+  "/auth/callback",
+  authenticateToken,
+  async (req: AuthRequest, res) => {
+    try {
+      const userId = req.user!.userId;
+      const { apisession, api_key, api_secret } = req.body;
 
-    if (!apisession || !api_key || !api_secret) {
-      return res.status(400).json({ error: "Missing parameters: apisession, api_key, api_secret required" });
+      if (!apisession || !api_key || !api_secret) {
+        return res.status(400).json({
+          error:
+            "Missing parameters: apisession, api_key, api_secret required",
+        });
+      }
+
+      const session = await createBreezeLoginSession(
+        userId,
+        api_key,
+        api_secret,
+        apisession
+      );
+
+      return res.json({
+        success: true,
+        session_token: session.jwtToken,
+      });
+    } catch (err: any) {
+      log("Error in POST /auth/callback:", err);
+      return res
+        .status(500)
+        .json({ error: err.message || "Callback processing failed" });
     }
-
-    const session = await createBreezeLoginSession(userId, api_key, api_secret, apisession);
-
-    return res.json({
-      success: true,
-      session_token: session.jwtToken,
-    });
-  } catch (err: any) {
-    log("Error in POST /auth/callback:", err);
-    return res.status(500).json({ error: err.message || "Callback processing failed" });
   }
-});
+);
 
 export const iciciAuthRouter = router;
 export default router;
