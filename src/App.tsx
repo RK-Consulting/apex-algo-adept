@@ -1,4 +1,5 @@
 // FRONTEND /src/App.tsx 
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -6,6 +7,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
+// Pages
 import Index from "./pages/Index";
 import Markets from "./pages/Markets";
 import Strategies from "./pages/Strategies";
@@ -17,91 +19,134 @@ import NotFound from "./pages/NotFound";
 import StockDetails from "./pages/StockDetails";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
-
-// 🔥 Add this import
 import ICICICallback from "./pages/ICICICallback";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
+const App = () => {
 
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <Index />
-              </ProtectedRoute>
-            }
-          />
+  /* -------------------------------------------------------
+   * GLOBAL ICICI SESSION EXPIRY + MISSING HANDLER
+   * -----------------------------------------------------*/
+  useEffect(() => {
+    function handleExpired() {
+      console.log("⚠️ ICICI session expired");
+      localStorage.removeItem("icici_connected");
 
-          {/* 🌟 NEW ROUTE FOR ICICI CALLBACK */}
-          <Route path="/icici-callback" element={<ICICICallback />} />
+      window.dispatchEvent(
+        new CustomEvent("SHOW_ICICI_RECONNECT_DIALOG", {
+          detail: { expired: true }
+        })
+      );
+    }
 
-          <Route
-            path="/markets"
-            element={
-              <ProtectedRoute>
-                <Markets />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/strategies"
-            element={
-              <ProtectedRoute>
-                <Strategies />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/portfolio"
-            element={
-              <ProtectedRoute>
-                <Portfolio />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/analytics"
-            element={
-              <ProtectedRoute>
-                <Analytics />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/settings"
-            element={
-              <ProtectedRoute>
-                <Settings />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="/logout" element={<Logout />} />
+    function handleMissing() {
+      console.log("⚠️ ICICI session missing");
 
-          <Route
-            path="/stock/:symbol"
-            element={
-              <ProtectedRoute>
-                <StockDetails />
-              </ProtectedRoute>
-            }
-          />
+      window.dispatchEvent(
+        new CustomEvent("SHOW_ICICI_RECONNECT_DIALOG", {
+          detail: { missing: true }
+        })
+      );
+    }
 
-          {/* CATCH ALL */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+    window.addEventListener("ICICI_SESSION_EXPIRED", handleExpired);
+    window.addEventListener("ICICI_SESSION_MISSING", handleMissing);
+
+    return () => {
+      window.removeEventListener("ICICI_SESSION_EXPIRED", handleExpired);
+      window.removeEventListener("ICICI_SESSION_MISSING", handleMissing);
+    };
+  }, []);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            
+            {/* Public Routes */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+
+            {/* ICICI OAuth Redirect Handler */}
+            <Route path="/icici-callback" element={<ICICICallback />} />
+
+            {/* Protected Routes */}
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <Index />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/markets"
+              element={
+                <ProtectedRoute>
+                  <Markets />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/strategies"
+              element={
+                <ProtectedRoute>
+                  <Strategies />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/portfolio"
+              element={
+                <ProtectedRoute>
+                  <Portfolio />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/analytics"
+              element={
+                <ProtectedRoute>
+                  <Analytics />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <Settings />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route path="/logout" element={<Logout />} />
+
+            <Route
+              path="/stock/:symbol"
+              element={
+                <ProtectedRoute>
+                  <StockDetails />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Catch-All */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;
