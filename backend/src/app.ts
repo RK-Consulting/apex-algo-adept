@@ -18,13 +18,13 @@ import { watchlistRouter } from "./routes/watchlist.js";
 // -----------------------------------------------------------
 // Correct ICICI router imports
 // -----------------------------------------------------------
-import { iciciAuthLoginRouter } from "./routes/icici/authLogin";
+import { iciciAuthLoginRouter } from "./routes/icici/authLogin.js";
 import { iciciBrokerRouter } from "./routes/iciciBroker.js";
 import { iciciStatusRouter } from "./routes/iciciStatus.js";
 import { iciciBacktestRouter } from "./routes/iciciBacktest.js";
 import { iciciStreamRouter } from "./routes/icici/stream.js";
 import { iciciAuthCallbackRouter } from "./routes/icici/authCallback.js";
-import { iciciAuthRouter } from "./routes/iciciAuth";
+import { iciciAuthRouter } from "./routes/iciciAuth.js";
 import { iciciOrderRoutes } from "./routes/icici/orders.js";
 
 const app = express();
