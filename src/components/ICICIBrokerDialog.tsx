@@ -51,15 +51,17 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
       return;
     }
 
-    const loginUrl =
-      backend.replace(/\/$/, "") +
-      `/api/icici/auth/login?api_key=${encodeURIComponent(apiKey)}`;
+    // const loginUrl =
+      //  backend.replace(/\/$/, "") +
+     // `/api/icici/auth/login?api_key=${encodeURIComponent(apiKey)}`;
 
-    const popup = window.open(
-      loginUrl,
-      "iciciLogin",
-      "width=500,height=700"
-    );
+   const uid = localStorage.getItem("uid") || localStorage.getItem("userId");
+
+   const popup = window.open(
+     `${backend}/api/icici/auth/login?api_key=${encodeURIComponent(
+       import.meta.env.VITE_ICICI_API_KEY)}&uid=${uid}`,
+     "iciciLogin", "width=500,height=700"
+   );
 
     if (!popup) {
       setStatus("error");
