@@ -10,7 +10,9 @@ export async function request(
   path: string,
   opts: RequestInit = {}
 ): Promise<any> {
-  const token = localStorage.getItem("token");
+  const token =
+    localStorage.getItem("token") ||
+    localStorage.getItem("authToken");
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -28,29 +30,39 @@ export async function request(
 
   const text = await res.text().catch(() => "");
   let body: any = null;
+
   try {
     body = text ? JSON.parse(text) : null;
   } catch {
     body = text;
   }
 
- if (!res.ok) {
-  const err = new Error(body?.error || body?.message || res.statusText);
-  (err as any).status = res.status;
+  // Error Handler
+  if (!res.ok) {
+    const err = new Error(
+      body?.error || body?.message || res.statusText || "Request failed"
+    ) as any;
 
-  // 🔥 Detect ICICI expiry
-  if (body?.error === "ICICI_SESSION_EXPIRED") {
-    window.dispatchEvent(new CustomEvent("ICICI_SESSION_EXPIRED"));
+    err.status = res.status;
+
+    // 🔥 Detect ICICI expiry
+    if (body?.error === "ICICI_SESSION_EXPIRED") {
+      window.dispatchEvent(new CustomEvent("ICICI_SESSION_EXPIRED"));
+    }
+
+    if (body?.error === "ICICI_SESSION_MISSING") {
+      window.dispatchEvent(new CustomEvent("ICICI_SESSION_MISSING"));
+    }
+
+    throw err;
   }
 
-  if (body?.error === "ICICI_SESSION_MISSING") {
-    window.dispatchEvent(new CustomEvent("ICICI_SESSION_MISSING"));
-  }
-
-  throw err;
+  return body;
 }
 
-
+// -----------------------------------------------------------
+// API WRAPPER
+// -----------------------------------------------------------
 export const api = {
   get: (path: string) => request(path),
   post: (path: string, body?: any) =>
@@ -60,22 +72,28 @@ export const api = {
     }),
 };
 
-
-// ICICI APIs
+// -----------------------------------------------------------
+// ICICI WRAPPER
+// -----------------------------------------------------------
 export const ICICI = {
   status: () => api.get("/icici/status"),
-  callback: (payload) => api.post("/icici/auth/callback", payload),
+  callback: (payload: any) => api.post("/icici/auth/callback", payload),
   connect: () => api.post("/icici/connect"),
   me: () => api.get("/icici/me"),
+
+  // Orders
   orders: () => api.get("/icici/orders"),
   holdings: () => api.get("/icici/portfolio/holdings"),
   positions: () => api.get("/icici/portfolio/positions"),
   funds: () => api.get("/icici/portfolio/funds"),
   summary: () => api.get("/icici/portfolio/summary"),
-  quote: (symbol, exchange = "NSE") =>
+
+  // Market Data
+  quote: (symbol: string, exchange = "NSE") =>
     api.get(`/icici/market/quote?symbol=${symbol}&exchange=${exchange}`),
-  ohlc: (payload) => api.post("/icici/market/ohlc", payload),
-  ltp: (symbol, exchange = "NSE") =>
+
+  ohlc: (payload: any) => api.post("/icici/market/ohlc", payload),
+
+  ltp: (symbol: string, exchange = "NSE") =>
     api.get(`/icici/market/ltp?symbol=${symbol}&exchange=${exchange}`),
 };
-
