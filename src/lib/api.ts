@@ -34,15 +34,22 @@ export async function request(
     body = text;
   }
 
-  if (!res.ok) {
-    const err = new Error(body?.error || body?.message || res.statusText || "Request failed");
-    (err as any).status = res.status;
-    (err as any).body = body;
-    throw err;
+ if (!res.ok) {
+  const err = new Error(body?.error || body?.message || res.statusText);
+  (err as any).status = res.status;
+
+  // 🔥 Detect ICICI expiry
+  if (body?.error === "ICICI_SESSION_EXPIRED") {
+    window.dispatchEvent(new CustomEvent("ICICI_SESSION_EXPIRED"));
   }
 
-  return body;
+  if (body?.error === "ICICI_SESSION_MISSING") {
+    window.dispatchEvent(new CustomEvent("ICICI_SESSION_MISSING"));
+  }
+
+  throw err;
 }
+
 
 export const api = {
   get: (path: string) => request(path),
