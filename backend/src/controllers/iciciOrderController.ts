@@ -1,65 +1,74 @@
-// backend/controllers/iciciOrderController.ts
+// backend/src/controllers/iciciOrderController.ts
+
 import { Request, Response } from "express";
+import { AuthRequest } from "../middleware/auth.js";
 import { ICICIOrderService } from "../services/iciciOrderService.js";
 
 export class ICICIOrderController {
-  static async placeOrder(req: Request, res: Response) {
+
+  // ---------------- PLACE ORDER ----------------
+  static async placeOrder(req: AuthRequest, res: Response) {
     try {
-      const userId = (req as any).user.userId;
+      const userId = req.user!.userId;
       const data = await ICICIOrderService.placeOrder(userId, req.body);
-      res.json(data);
+      return res.json({ success: true, data });
     } catch (err: any) {
-      res.status(500).json({ error: err.message, detail: err?.response?.data });
+      return res.status(400).json({ success: false, error: err.message });
     }
   }
 
-  static async modifyOrder(req: Request, res: Response) {
+  // ---------------- MODIFY ORDER ----------------
+  static async modifyOrder(req: AuthRequest, res: Response) {
     try {
-      const userId = (req as any).user.userId;
+      const userId = req.user!.userId;
       const data = await ICICIOrderService.modifyOrder(userId, req.body);
-      res.json(data);
+      return res.json({ success: true, data });
     } catch (err: any) {
-      res.status(500).json({ error: err.message, detail: err?.response?.data });
+      return res.status(400).json({ success: false, error: err.message });
     }
   }
 
-  static async cancelOrder(req: Request, res: Response) {
+  // ---------------- CANCEL ORDER ----------------
+  static async cancelOrder(req: AuthRequest, res: Response) {
     try {
-      const userId = (req as any).user.userId;
+      const userId = req.user!.userId;
       const data = await ICICIOrderService.cancelOrder(userId, req.body);
-      res.json(data);
+      return res.json({ success: true, data });
     } catch (err: any) {
-      res.status(500).json({ error: err.message, detail: err?.response?.data });
+      return res.status(400).json({ success: false, error: err.message });
     }
   }
 
-  static async orderbook(req: Request, res: Response) {
+  // ---------------- ORDER BOOK ----------------
+  static async orderbook(req: AuthRequest, res: Response) {
     try {
-      const userId = (req as any).user.userId;
-      const data = await ICICIOrderService.orderbook(userId);
-      res.json(data);
+      const userId = req.user!.userId;
+      const data = await ICICIOrderService.getOrderBook(userId);
+      return res.json({ success: true, data });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      return res.status(400).json({ success: false, error: err.message });
     }
   }
 
-  static async positions(req: Request, res: Response) {
+  // ---------------- POSITIONS ----------------
+  static async positions(req: AuthRequest, res: Response) {
     try {
-      const userId = (req as any).user.userId;
-      const data = await ICICIOrderService.positions(userId);
-      res.json(data);
+      const userId = req.user!.userId;
+      const data = await ICICIOrderService.getPositions(userId);
+      return res.json({ success: true, data });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      return res.status(400).json({ success: false, error: err.message });
     }
   }
 
-  static async holdings(req: Request, res: Response) {
+  // ---------------- HOLDINGS ----------------
+  static async holdings(req: AuthRequest, res: Response) {
     try {
-      const userId = (req as any).user.userId;
-      const data = await ICICIOrderService.holdings(userId);
-      res.json(data);
+      const userId = req.user!.userId;
+      const data = await ICICIOrderService.getHoldings(userId);
+      return res.json({ success: true, data });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      return res.status(400).json({ success: false, error: err.message });
     }
   }
 }
