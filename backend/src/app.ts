@@ -67,7 +67,7 @@ app.use("/api/watchlist", watchlistRouter);
 // 🔥 This router contains:
 // GET /api/icici/auth/login         → opens ICICI login page
 // POST /api/icici/auth/callback     → receives apisession
-app.use("/api/icici/auth", iciciAuthRouter);
+app.use("/api/icici", iciciAuthRouter);
 
 // Save API key/secret + apisession (optional storage)
 app.use("/api/icici/broker", iciciBrokerRouter);
