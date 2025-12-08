@@ -18,6 +18,7 @@ import { watchlistRouter } from "./routes/watchlist.js";
 // -----------------------------------------------------------
 // Correct ICICI router imports
 // -----------------------------------------------------------
+import { iciciAuthLoginRouter } from "./routes/icici/authLogin";
 import { iciciBrokerRouter } from "./routes/iciciBroker.js";
 import { iciciStatusRouter } from "./routes/iciciStatus.js";
 import { iciciBacktestRouter } from "./routes/iciciBacktest.js";
@@ -60,6 +61,8 @@ app.use("/api/watchlist", watchlistRouter);
 // -----------------------------------------------------------
 // ICICI — All new correct routes
 // -----------------------------------------------------------
+
+app.use("/api/icici", iciciAuthLoginRouter);
 
 // Save API key/secret + apisession
 app.use("/api/icici/broker", iciciBrokerRouter);
