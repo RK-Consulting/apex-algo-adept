@@ -1,100 +1,67 @@
-// backend/services/iciciOrderService.ts
 // backend/src/services/iciciOrderService.ts
 
 import fetch from "node-fetch";
 import { getSessionForUser } from "../utils/breezeSession.js";
-import crypto from "crypto";
 
-const BASE_URL = "https://api.icicidirect.com/breezeapi/api/v1";
+const BASE = "https://api.icicidirect.com/breezeapi/api/v1";
 
 export class ICICIOrderService {
-
-  static async getJwt(userId: string) {
+  static async jwt(userId: string) {
     const session = await getSessionForUser(userId);
-
-    if (!session?.jwtToken) {
-      throw new Error("ICICI session expired. Please reconnect.");
-    }
-
+    if (!session?.jwtToken) throw new Error("ICICI session expired");
     return session.jwtToken;
   }
 
-  static async placeOrder(userId: string, payload: any) {
-    const jwt = await this.getJwt(userId);
-
-    const res = await fetch(`${BASE_URL}/placeorder`, {
+  static async placeOrder(userId: string, body: any) {
+    const res = await fetch(`${BASE}/placeorder`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: jwt,
-      },
-      body: JSON.stringify(payload),
+      headers: { "Content-Type": "application/json", Authorization: await this.jwt(userId) },
+      body: JSON.stringify(body),
     });
 
     const json = await res.json();
-
-    if (!res.ok) throw new Error(json?.Error || "Order placement failed");
-
+    if (!res.ok) throw new Error(json.error || json.status || "Order failed");
     return json;
   }
 
-  static async modifyOrder(userId: string, payload: any) {
-    const jwt = await this.getJwt(userId);
-
-    const res = await fetch(`${BASE_URL}/modifyorder`, {
+  static async modifyOrder(userId: string, body: any) {
+    const res = await fetch(`${BASE}/modifyorder`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: jwt,
-      },
-      body: JSON.stringify(payload),
+      headers: { "Content-Type": "application/json", Authorization: await this.jwt(userId) },
+      body: JSON.stringify(body),
     });
 
     return res.json();
   }
 
-  static async cancelOrder(userId: string, payload: any) {
-    const jwt = await this.getJwt(userId);
-
-    const res = await fetch(`${BASE_URL}/cancelorder`, {
+  static async cancelOrder(userId: string, body: any) {
+    const res = await fetch(`${BASE}/cancelorder`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: jwt,
-      },
-      body: JSON.stringify(payload),
+      headers: { "Content-Type": "application/json", Authorization: await this.jwt(userId) },
+      body: JSON.stringify(body),
     });
 
     return res.json();
   }
 
   static async getOrderBook(userId: string) {
-    const jwt = await this.getJwt(userId);
-
-    const res = await fetch(`${BASE_URL}/orderbook`, {
-      headers: { Authorization: jwt },
+    const res = await fetch(`${BASE}/orderbook`, {
+      headers: { Authorization: await this.jwt(userId) },
     });
-
     return res.json();
   }
 
   static async getPositions(userId: string) {
-    const jwt = await this.getJwt(userId);
-
-    const res = await fetch(`${BASE_URL}/positions`, {
-      headers: { Authorization: jwt },
+    const res = await fetch(`${BASE}/positions`, {
+      headers: { Authorization: await this.jwt(userId) },
     });
-
     return res.json();
   }
 
   static async getHoldings(userId: string) {
-    const jwt = await this.getJwt(userId);
-
-    const res = await fetch(`${BASE_URL}/holdings`, {
-      headers: { Authorization: jwt },
+    const res = await fetch(`${BASE}/holdings`, {
+      headers: { Authorization: await this.jwt(userId) },
     });
-
     return res.json();
   }
 }
