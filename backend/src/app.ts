@@ -23,6 +23,7 @@ import { iciciStatusRouter } from "./routes/iciciStatus.js";
 import { iciciBacktestRouter } from "./routes/iciciBacktest.js";
 import { iciciStreamRouter } from "./routes/icici/stream.js";
 import { iciciAuthCallbackRouter } from "./routes/icici/authCallback.js";
+import { iciciAuthRouter } from "./routes/iciciAuth";
 
 const app = express();
 
@@ -74,7 +75,7 @@ app.use("/api/icici/stream", iciciStreamRouter);
 
 // OAuth callback endpoint
 app.use("/api/icici/auth", iciciAuthCallbackRouter);
-
+app.use("/api/icici/auth", iciciAuthRouter);
 // Global error handler
 app.use(errorHandler);
 
