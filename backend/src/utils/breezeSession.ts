@@ -76,17 +76,18 @@ export async function createBreezeLoginSession(
     throw new Error("createBreezeLoginSession: missing parameters");
   }
 
-  // Prepare request body exactly as we'll send it
-  // Many Breeze examples use these field names; keep them exact.
+  // ---------------------------------------------------------------------
+  // FIX 1: Breeze requires exact field names app_key, secret_key, session_token
+  // ---------------------------------------------------------------------
   const bodyObj = {
-    appkey: apiKey,
-    secretkey: secretKey,
-    sessionToken: apisession,
+    app_key: apiKey.trim(),
+    secret_key: secretKey.trim(),
+    session_token: apisession.trim(),
   };
 
   const bodyStr = JSON.stringify(bodyObj);
   const timestamp = isoTimestamp();
-  const checksum = computeChecksum(timestamp, bodyStr, secretKey);
+  const checksum = computeChecksum(timestamp, bodyStr, secretKey.trim());
 
   // Perform HTTP POST
   let resp;
@@ -95,8 +96,13 @@ export async function createBreezeLoginSession(
       headers: {
         "Content-Type": "application/json",
         "X-Timestamp": timestamp,
-        "X-Checksum": "token " + checksum,
-        "X-AppKey": apiKey,
+
+        // ---------------------------------------------------------------------
+        // FIX 2: X-Checksum must be: "checksum <value>" not "token <value>"
+        // ---------------------------------------------------------------------
+        "X-Checksum": "checksum " + checksum,
+
+        "X-AppKey": apiKey.trim(),
       },
       timeout: 15000,
     });
@@ -113,22 +119,29 @@ export async function createBreezeLoginSession(
   const json = resp.data as any;
 
   // Response must include a JWT token (naming may vary)
-  const jwtToken = json.jwtToken || json.jwt_token || json.token || json.access_token;
+  const jwtToken =
+    json.jwtToken ||
+    json.jwt_token ||
+    json.token ||
+    json.access_token;
+
   if (!jwtToken) {
     log("Breeze login response missing jwt token: %O", json);
     throw new Error("Breeze login: missing jwt token in response");
   }
 
+  // ---------------------------------------------------------------------
+  // FIX 3: Preserve app_key so getBreezeInstance can rehydrate correctly
+  // ---------------------------------------------------------------------
   const stored: BreezeStoredSession = {
     jwtToken,
     expires_at: json.expiresAt || json.expires_at || null,
-    raw: json,
+    raw: { ...json, app_key: apiKey.trim() },
   };
 
   // Store encrypted in user_credentials.icici_credentials JSON column
   const encrypted = encryptJSON(stored);
 
-  // Upsert into user_credentials. NOTE: user_credentials must have unique(user_id, broker_name)
   await query(
     `
     INSERT INTO user_credentials (user_id, broker_name, icici_credentials, created_at, updated_at)
@@ -192,20 +205,23 @@ export async function getBreezeInstance(userId: string): Promise<BreezeConnect> 
     throw new Error("No Breeze JWT available for user — user must connect first");
   }
 
-  // Create BreezeConnect instance and set session/jwt/appkey if supported
   const breeze = new BreezeConnect();
 
   try {
+    // FIX 4: Support multiple Breeze SDK versions
     if (typeof (breeze as any).setSessionToken === "function") {
       (breeze as any).setSessionToken(session.jwtToken);
-    } else if ("setJwtToken" in (breeze as any)) {
-      // alternate API names
-      try {
-        (breeze as any).setJwtToken(session.jwtToken);
-      } catch {}
+    } else if (typeof (breeze as any).setJwtToken === "function") {
+      (breeze as any).setJwtToken(session.jwtToken);
+    } else if (typeof (breeze as any).setAccessToken === "function") {
+      (breeze as any).setAccessToken(session.jwtToken);
     }
 
-    const appkey = session.raw?.appkey || session.raw?.appKey || process.env.ICICI_APP_KEY;
+    const appkey =
+      session.raw?.app_key ||
+      session.raw?.appKey ||
+      process.env.ICICI_APP_KEY;
+
     if (appkey && typeof (breeze as any).setApiKey === "function") {
       (breeze as any).setApiKey(appkey);
     }
