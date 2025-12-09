@@ -7,6 +7,35 @@ import { authenticateToken, AuthRequest } from "../../middleware/auth.js";
 const router = Router();
 
 /**
+ * GET /api/icici/auth/callback
+ * ICICI redirects here with: ?apisession=XXXX
+ */
+router.get("/auth/callback", (req, res) => {
+  try {
+    const { apisession } = req.query;
+
+    if (!apisession) {
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/dashboard?icici=error&msg=no_session`
+      );
+    }
+
+    console.log("[ICICI Callback] Received apisession:", apisession);
+
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/icici-callback?apisession=${apisession}`
+    );
+
+  } catch (err) {
+    console.error("[ICICI Callback] Error:", err);
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/dashboard?icici=error&msg=unexpected_failure`
+    );
+  }
+});
+
+
+/**
  * POST /api/icici/auth/callback
  * Body:
  *   { apisession: string }
