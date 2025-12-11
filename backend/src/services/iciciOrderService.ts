@@ -1,47 +1,101 @@
 // backend/src/services/iciciOrderService.ts
-import { getBreezeInstance } from "../utils/breezeSession.js";
-import debug from "debug";
 
-const log = debug("apex:icici:orders");
+import fetch from "node-fetch";
+import { getSessionForUser } from "../utils/breezeSession.js";
 
-interface OrderParams {
-  stock_code: string;
-  exchange_code: string;
-  product: string;
-  action: string;
-  order_type: string;
-  quantity: string;
-  price: string;
-  validity: string;
-  [key: string]: string;
-}
+const BASE = "https://api.icicidirect.com/breezeapi/api/v1";
 
 export class ICICIOrderService {
-  static async placeOrder(userId: string, params: OrderParams) {
-    try {
-      const breeze = await getBreezeInstance(userId);
-      const data = await breeze.placeOrder(params);
-      return data;
-    } catch (err: any) {
-      log("Place order error for %s: %O", userId, err);
-      throw err;
+  static async jwt(userId: string) {
+    const session = await getSessionForUser(userId);
+    if (!session?.jwtToken) throw new Error("ICICI session expired");
+    return session.jwtToken;
+  }
+
+  // ---------------- PLACE ORDER ----------------
+  static async placeOrder(userId: string, body: any) {
+    const res = await fetch(`${BASE}/placeorder`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: await this.jwt(userId),
+      },
+      body: JSON.stringify(body),
+    });
+
+    const json: any = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      const msg =
+        json?.error ||
+        json?.Error ||
+        json?.message ||
+        json?.status ||
+        "Order failed";
+
+      throw new Error(msg);
     }
+
+    return json;
   }
 
-  // Similar for modifyOrder, cancelOrder, etc. (add as needed)
+  // ---------------- MODIFY ORDER ----------------
+  static async modifyOrder(userId: string, body: any) {
+    const res = await fetch(`${BASE}/modifyorder`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: await this.jwt(userId),
+      },
+      body: JSON.stringify(body),
+    });
 
+    const json: any = await res.json().catch(() => ({}));
+    return json;
+  }
+
+  // ---------------- CANCEL ORDER ----------------
+  static async cancelOrder(userId: string, body: any) {
+    const res = await fetch(`${BASE}/cancelorder`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: await this.jwt(userId),
+      },
+      body: JSON.stringify(body),
+    });
+
+    const json: any = await res.json().catch(() => ({}));
+    return json;
+  }
+
+  // ---------------- ORDER BOOK ----------------
   static async getOrderBook(userId: string) {
-    const breeze = await getBreezeInstance(userId);
-    return await breeze.getOrderBook();
+    const res = await fetch(`${BASE}/orderbook`, {
+      headers: { Authorization: await this.jwt(userId) },
+    });
+
+    const json: any = await res.json().catch(() => ({}));
+    return json;
   }
 
+  // ---------------- POSITIONS ----------------
   static async getPositions(userId: string) {
-    const breeze = await getBreezeInstance(userId);
-    return await breeze.getPositions();
+    const res = await fetch(`${BASE}/positions`, {
+      headers: { Authorization: await this.jwt(userId) },
+    });
+
+    const json: any = await res.json().catch(() => ({}));
+    return json;
   }
 
+  // ---------------- HOLDINGS ----------------
   static async getHoldings(userId: string) {
-    const breeze = await getBreezeInstance(userId);
-    return await breeze.getHoldings();
+    const res = await fetch(`${BASE}/holdings`, {
+      headers: { Authorization: await this.jwt(userId) },
+    });
+
+    const json: any = await res.json().catch(() => ({}));
+    return json;
   }
 }
