@@ -14,7 +14,7 @@ import authRouter from "./routes/auth.js";
 import { strategyRouter } from "./routes/strategies.js";
 import { credentialsRouter } from "./routes/credentials.js";
 import { watchlistRouter } from "./routes/watchlist.js";
-import { loginLimiter } from "./middleware/rateLimiter.js";
+import { loginLimiter, apiLimiter } from "./middleware/rateLimiter.js";
 
 // -----------------------------------------------------------
 // ICICI ROUTERS (CLEANED + CORRECT)
@@ -61,6 +61,11 @@ app.use("/api/strategies", strategyRouter);
 app.use("/api/credentials", credentialsRouter);
 app.use("/api/watchlist", watchlistRouter);
 
+// Apply globally or selectively
+app.use("/api/", apiLimiter);                           // 100 req/min for all API
+app.use("/api/icici/auth/complete", loginLimiter);      // 10 attempts per 15 min for ICICI login
+app.use("/api/auth/login", loginLimiter);               // also protect your own login
+
 // -----------------------------------------------------------
 // ICICI DIRECT API STACK (FINAL + CORRECT)
 // -----------------------------------------------------------
@@ -89,6 +94,6 @@ app.use("/api/icici", iciciOrderRoutes);
 // GLOBAL ERROR HANDLER
 // -----------------------------------------------------------
 app.use(errorHandler);
-app.post("/api/icici/auth/complete", loginLimiter, iciciAuthCallbackRouter);
+//app.post("/api/icici/auth/complete", loginLimiter, iciciAuthCallbackRouter);
 
 export default app;
