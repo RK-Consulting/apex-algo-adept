@@ -15,3 +15,10 @@ export const authLimiter = rateLimit({
   max: 100,
   message: { error: "Too many auth attempts — try ." },
 });
+
+// Extra-strict limiter just for ICICI callback & login endpoints
+export const iciciLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,                         // only 5 attempts per 15 min
+  message: { error: "Too many ICICI login attempts — your IP may get blocked!" },
+});
