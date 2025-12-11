@@ -1,48 +1,26 @@
-// src/config/breeze.ts
-/**
- * 🚨 IMPORTANT NOTICE:
- * Breeze should NOT be initialized globally anymore.
- *
- * Your backend now uses per-user ICICI credentials stored in Postgres,
- * and all authenticated sessions must be generated via:
- *
- *    getBreezeInstance(userId)
- *
- * located in: src/utils/breezeSession.ts
- *
- * This file provides a safe stub ONLY to prevent old imports from breaking.
- * DO NOT use this exported instance for live trading, quotes or orders.
- */
-
-import { BreezeConnect } from "breezeconnect";
-
-// ⚠️ Create a low-privilege placeholder instance.
-// This instance should NOT be used for trading or data fetching.
-// It allows legacy imports to stay functional without breaking the app.
-const breeze = new BreezeConnect();
-
-// Soft warning to remind developers
-if (process.env.NODE_ENV !== "production") {
-  console.warn(
-    "[WARN] src/config/breeze.ts loaded. This global Breeze instance is deprecated. " +
-      "Use getBreezeInstance(userId) instead."
-  );
-}
+// src/config/breeze.ts  ←  Keep the same path so old imports BREAK LOUDLY
 
 /**
- * @deprecated DO NOT USE.
- * Exported only to avoid breaking legacy code.
- * Live trading must always use getBreezeInstance().
+ * GLOBAL BREEZE INSTANCE IS DEAD.
+ *
+ * You are trying to import the old global Breeze instance.
+ * This has been removed because it causes:
+ *   • All users sharing one ICICI account
+ *   • Silent session corruption
+ *   • Impossible horizontal scaling
+ *
+ * USE PER-USER INSTANCES INSTEAD:
+ *
+ *   import { getBreezeInstance } from "../utils/breezeSession.js";
+ *   const breeze = await getBreezeInstance(userId);
+ *
+ * If you're seeing this error, fix your code NOW.
  */
-export { breeze };
 
-/**
- * @deprecated DO NOT USE.
- * Included for backward compatibility ONLY.
- */
-export async function initBreezeSession(): Promise<void> {
-  console.warn(
-    "[WARN] initBreezeSession() called — this function is no longer required. " +
-      "All sessions are now user-specific via getBreezeInstance()."
-  );
-}
+throw new Error(
+  `[FATAL] Global Breeze instance is forbidden!\n` +
+  `→ You imported src/config/breeze.ts\n` +
+  `→ This file was removed for security and correctness.\n\n` +
+  `Fix: Use getBreezeInstance(userId) from src/utils/breezeSession.ts instead.\n\n` +
+  `Stack trace (so you know exactly which file is wrong):`
+);
