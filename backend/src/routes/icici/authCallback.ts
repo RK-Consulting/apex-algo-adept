@@ -1,118 +1,101 @@
-// backend/src/routes/icici/authCallback.ts
+// src/routes/icici/authCallback.ts
 import { Router } from "express";
 import axios from "axios";
-import { query } from "../../config/database.js";
-import { authenticateToken, AuthRequest } from "../../middleware/auth.js";
+import debug from "debug";
+import { authenticateJWT } from "../../middleware/auth.js";
+import { pool } from "../../config/database.js";
+import { encryptJSON, decryptJSON } from "../../utils/credentialEncryptor.js";
 
+const log = debug("apex:icici:callback");
 const router = Router();
 
-/**
- * GET /api/icici/auth/callback
- * ICICI redirects here with: ?apisession=XXXX
- */
-router.get("/auth/callback", (req, res) => {
+// STEP 1: ICICI redirects here with GET + ?apisession=xxx (NO AUTH HEADERS!)
+router.get("/api/icici/auth/callback", async (req, res) => {
   try {
     const { apisession } = req.query;
-
-    if (!apisession) {
-      return res.redirect(
-        `${process.env.FRONTEND_URL}/dashboard?icici=error&msg=no_session`
-      );
+    if (!apisession || typeof apisession !== "string") {
+      return res.redirect(`${process.env.FRONTEND_URL}/dashboard?icici=error&msg=no_session`);
     }
 
-    console.log("[ICICI Callback] Received apisession:", apisession);
+    log("Received apisession: %s", apisession);
 
-    return res.redirect(
-      `${process.env.FRONTEND_URL}/icici-callback?apisession=${apisession}`
-    );
-
-  } catch (err) {
-    console.error("[ICICI Callback] Error:", err);
-    return res.redirect(
-      `${process.env.FRONTEND_URL}/dashboard?icici=error&msg=unexpected_failure`
-    );
+    // Forward to frontend callback page
+    return res.redirect(`${process.env.FRONTEND_URL}/icici-callback?apisession=${apisession}`);
+  } catch (error: any) {
+    log("GET callback error:", error);
+    return res.redirect(`${process.env.FRONTEND_URL}/dashboard?icici=error`);
   }
 });
 
+// STEP 2: Frontend sends apisession here to complete login
+router.post("/api/icici/auth/complete", authenticateJWT, async (req: any, res) => {
+  const { apisession } = req.body;
+  const userId = req.user.userId;
 
-/**
- * POST /api/icici/auth/callback
- * Body:
- *   { apisession: string }
- *
- * NOTE:
- * CustomerDetails API requires:
- *  - GET request
- *  - Query parameters (SessionToken, AppKey)
- *  - NO checksum, NO X-Timestamp, NO auth headers
- */
-router.post(
-  "/auth/callback",
-  authenticateToken,
-  async (req: AuthRequest, res) => {
-    try {
-      const { apisession } = req.body;
-      const userId = req.user!.userId;
+  if (!apisession) {
+    return res.status(400).json({ error: "API session required" });
+  }
 
-      if (!apisession) {
-        return res.status(400).json({ error: "Missing apisession" });
+  try {
+    // Get user's stored (encrypted) credentials
+    const { rows } = await pool.query(
+      `SELECT api_key, api_secret FROM icici_credentials WHERE user_id = $1`,
+      [userId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(400).json({ error: "No ICICI credentials found" });
+    }
+
+    const { api_key, api_secret } = rows[0];
+
+    // CRITICAL FIX: CustomerDetails expects body, not query params
+    const cdResponse = await axios.get(
+      "https://api.icicidirect.com/breezeapi/api/v1/customerdetails",
+      {
+        headers: { "Content-Type": "application/json" },
+        data: JSON.stringify({
+          SessionToken: apisession,
+          AppKey: api_key,
+        }),
+        timeout: 10000,
       }
+    );
 
-      // Correct CustomerDetails API call
-      const cdResp = await axios.get(
-        "https://api.icicidirect.com/breezeapi/api/v1/customerdetails",
-        {
-          params: {
-            SessionToken: String(apisession),
-            AppKey: process.env.ICICI_APP_KEY!,
-          },
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+    const sessionToken = cdResponse.data?.Success?.session_token;
+    if (!sessionToken) {
+      throw new Error("Failed to get session_token from CustomerDetails");
+    }
 
-      const data = cdResp.data;
+    // Store encrypted session token
+    const encryptedToken = encryptJSON({ sessionToken });
 
-      if (!data?.Success?.session_token) {
-        return res.status(500).json({
-          error: "ICICI did not return session_token",
-          detail: data,
-        });
-      }
+    await pool.query(
+      `INSERT INTO icici_sessions (user_id, session_token, created_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (user_id) DO UPDATE SET session_token = $2`,
+      [userId, encryptedToken]
+    );
 
-      const sessionToken = data.Success.session_token;
-      const idirect_userid = data.Success.idirect_userid || null;
-      const idirect_user_name = data.Success.idirect_user_name || null;
+    log("ICICI login completed for user:", userId);
 
-      // Store ICICI session token in Postgres
-      const insert = await query(
-        `
-        INSERT INTO icici_sessions (user_id, session_token, idirect_userid, idirect_user_name)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id, created_at
-        `,
-        [userId, sessionToken, idirect_userid, idirect_user_name]
-      );
+    return res.json({
+      success: true,
+      message: "ICICI connected successfully",
+    });
+  } catch (error: any) {
+    log("Complete auth error:", error.response?.data || error.message);
 
-      return res.json({
-        success: true,
-        session_token: sessionToken,
-        icici_user: {
-          idirect_userid,
-          idirect_user_name,
-        },
-        session_record: insert.rows[0],
-      });
-    } catch (err: any) {
-      console.error(
-        "ICICI callback error:",
-        err.response?.data || err.message
-      );
-      return res.status(500).json({
-        error: "Failed to complete ICICI login",
-        detail: err.response?.data || err.message,
+    if (error.response?.status === 403) {
+      return res.status(403).json({
+        error: "Forbidden - Check your API credentials and server IP whitelist",
       });
     }
-  }
-);
 
-export const iciciAuthCallbackRouter = router;
+    return res.status(500).json({
+      error: error.message || "Login failed",
+    });
+  }
+});
+
+export default router;
