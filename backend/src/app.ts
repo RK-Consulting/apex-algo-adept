@@ -14,6 +14,7 @@ import authRouter from "./routes/auth.js";
 import { strategyRouter } from "./routes/strategies.js";
 import { credentialsRouter } from "./routes/credentials.js";
 import { watchlistRouter } from "./routes/watchlist.js";
+import { loginLimiter } from "./middleware/rateLimiter.js";
 
 // -----------------------------------------------------------
 // ICICI ROUTERS (CLEANED + CORRECT)
@@ -88,5 +89,6 @@ app.use("/api/icici", iciciOrderRoutes);
 // GLOBAL ERROR HANDLER
 // -----------------------------------------------------------
 app.use(errorHandler);
+app.post("/api/icici/auth/complete", loginLimiter, iciciAuthCallbackRouter);
 
 export default app;
