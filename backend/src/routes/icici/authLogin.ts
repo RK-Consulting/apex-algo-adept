@@ -1,20 +1,33 @@
-// /backend/src/routes/icici/authLogin.ts
+// backend/src/routes/icici/authLogin.ts
 import { Router } from "express";
+import { AuthRequest } from "../../middleware/auth.js";
+import { getUserBreezeAuth } from "../../utils/breezeSession.js";
+import debug from "debug";
+
+const log = debug("apex:icici:login");
 
 const router = Router();
 
-router.get("/auth/login", (req, res) => {
-  const appKey = process.env.ICICI_APP_KEY;
+// Initiate login (per-user api_key from DB)
+router.get("/auth/login", authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user!.userId;
 
-  if (!appKey) {
-    return res.status(500).send("ICICI_APP_KEY missing in environment");
+    const { api_key } = await getUserBreezeAuth(userId);
+
+    if (!api_key) {
+      return res.status(400).json({ error: "API key not configured for user" });
+    }
+
+    const loginUrl = `https://api.icicidirect.com/apiuser/login?api_key=${encodeURIComponent(api_key)}`;
+
+    log("Redirecting user %s to ICICI login", userId);
+
+    return res.redirect(loginUrl);
+  } catch (err) {
+    log("Login init error:", err);
+    return res.status(500).json({ error: "Failed to initiate login" });
   }
-
-  const loginUrl =
-    "https://api.icicidirect.com/apiuser/login?api_key=" +
-    encodeURIComponent(appKey);
-
-  return res.redirect(loginUrl);
 });
 
 export const iciciAuthLoginRouter = router;
