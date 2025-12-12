@@ -6,6 +6,7 @@ import http from "http";
 import debug from "debug";
 import app from "./app.js";
 import pool from "./config/database.js";
+import redis from "./config/redis.js";
 
 // Correct ICICI WS initializer import
 import { initIciciStreamServer } from "./routes/icici/stream.js";
@@ -56,7 +57,8 @@ async function shutdown(signal: string) {
     } catch (dbErr) {
       console.error("⚠ DB close error:", dbErr);
     }
-
+    await redis.quit();
+    console.log("Redis connection closed.");
     console.log("👋 Shutdown complete.");
     process.exit(0);
   } catch (err) {
