@@ -2,6 +2,7 @@
 
 import fetch from "node-fetch";
 import { getSessionForUser } from "../utils/breezeSession.js";
+import { placeOrder as breezePlaceOrder, getOrders, cancelOrder } from './breezeClient';
 
 const BASE = "https://api.icicidirect.com/breezeapi/api/v1";
 
@@ -13,31 +14,19 @@ export class ICICIOrderService {
   }
 
   // ---------------- PLACE ORDER ----------------
-  static async placeOrder(userId: string, body: any) {
-    const res = await fetch(`${BASE}/placeorder`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: await this.jwt(userId),
-      },
-      body: JSON.stringify(body),
-    });
+ // NEW CODE
 
-    const json: any = await res.json().catch(() => ({}));
+export async function placeOrder(userId: string, orderData: any) {
+  return await breezePlaceOrder(userId, orderData);
+}
 
-    if (!res.ok) {
-      const msg =
-        json?.error ||
-        json?.Error ||
-        json?.message ||
-        json?.status ||
-        "Order failed";
+export async function getOrderList(userId: string, exchangeCode: string, fromDate: string, toDate: string) {
+  return await getOrders(userId, exchangeCode, fromDate, toDate);
+}
 
-      throw new Error(msg);
-    }
-
-    return json;
-  }
+export async function cancelOrderById(userId: string, exchangeCode: string, orderId: string) {
+  return await cancelOrder(userId, exchangeCode, orderId);
+}
 
   // ---------------- MODIFY ORDER ----------------
   static async modifyOrder(userId: string, body: any) {
