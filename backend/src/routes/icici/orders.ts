@@ -1,22 +1,60 @@
 // backend/src/routes/icici/orders.ts
-
 import { Router } from "express";
-import { authenticateToken } from "../../middleware/auth.js";
-import { ICICIOrderController } from "../../controllers/iciciOrderController.js";
+import { authenticateJWT } from "../../middleware/auth.js";
+import { iciciLimiter } from "../../middleware/rateLimiter.js";
+import * as OrderService from "../../services/iciciOrderService.js";
 
 const router = Router();
 
-// Order operations
-router.post("/place", authenticateToken, ICICIOrderController.placeOrder);
-router.post("/modify", authenticateToken, ICICIOrderController.modifyOrder);
-router.post("/cancel", authenticateToken, ICICIOrderController.cancelOrder);
+// All order routes protected + rate limited
+router.use(authenticateJWT, iciciLimiter);
 
-// Fetch orders
-router.get("/orders", authenticateToken, ICICIOrderController.orderbook);
+router.post("/place", async (req: any, res) => {
+  try {
+    const result = await OrderService.placeOrder(req.user.userId, req.body);
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-// Portfolio
-router.get("/positions", authenticateToken, ICICIOrderController.positions);
-router.get("/holdings", authenticateToken, ICICIOrderController.holdings);
+router.get("/list", async (req: any, res) => {
+  try {
+    const { exchangeCode, fromDate, toDate } = req.query;
+    const result = await OrderService.getOrders(req.user.userId, exchangeCode as string, fromDate as string, toDate as string);
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-export const iciciOrderRoutes = router;
+router.get("/detail/:orderId", async (req: any, res) => {
+  try {
+    const { exchangeCode } = req.query;
+    const result = await OrderService.getOrderDetail(req.user.userId, exchangeCode as string, req.params.orderId);
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete("/cancel", async (req: any, res) => {
+  try {
+    const { exchangeCode, orderId } = req.body;
+    const result = await OrderService.cancelOrder(req.user.userId, exchangeCode, orderId);
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put("/modify", async (req: any, res) => {
+  try {
+    const result = await OrderService.modifyOrder(req.user.userId, req.body);
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
