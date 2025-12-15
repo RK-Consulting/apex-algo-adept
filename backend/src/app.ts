@@ -66,7 +66,7 @@ app.use("/api/watchlist", watchlistRouter);
 app.use("/api/", apiLimiter);                           // 100 req/min for all API
 app.use("/api/icici/auth/complete", loginLimiter);      // 10 attempts per 15 min for ICICI login
 app.use("/api/auth/login", loginLimiter);               // also protect your own login
-/ Auth routes with stricter limiter
+// Auth routes with stricter limiter
 app.use("/api/auth", authLimiter, authRouter);
 
 // -----------------------------------------------------------
