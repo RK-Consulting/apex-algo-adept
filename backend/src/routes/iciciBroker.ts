@@ -18,14 +18,15 @@ import {
   encryptDataRaw,
   decryptDataRaw
 } from "../utils/credentialEncryptor.js";
-import {
+/*import {
   createBreezeLoginSession,
   getSessionForUser
-} from "../utils/breezeSession.js";
+} from "../utils/breezeSession.js"; */
+import { SessionService } from '../services/sessionService';
 import debug from "debug";
 
 const log = debug("apex:icici:broker");
-const router = Router();
+const router = Router(); 
 
 /* -------------------------------------------------------
  * 1) STORE CREDENTIALS
@@ -135,12 +136,13 @@ router.post("/complete", authenticateToken, async (req: AuthRequest, res) => {
     log("Finalizing Breeze R50 login for user %s", userId);
 
     // Server-side JWT generation
-    const session = await createBreezeLoginSession(
+    /*const session = await createBreezeLoginSession(
       userId,
       api_key,
       api_secret,
       session_token
-    );
+    ); */
+    const session = await SessionService.getInstance().getSession(userId);
 
     return res.json({
       success: true,
