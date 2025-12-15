@@ -3,8 +3,8 @@
 import { Router } from "express";
 import debug from "debug";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
-import { createBreezeLoginSession } from "../utils/breezeSession.js";
-
+//import { createBreezeLoginSession } from "../utils/breezeSession.js";
+import { SessionService } from '../services/sessionService';
 const log = debug("apex:icici:auth");
 const router = Router();
 
@@ -167,12 +167,13 @@ router.post(
         });
       }
 
-      const session = await createBreezeLoginSession(
+      /* const session = await createBreezeLoginSession(
         userId,
         api_key,
         api_secret,
         apisession
-      );
+      ); */
+      const session = await SessionService.getInstance().getSession(userId);
 
       return res.json({
         success: true,
