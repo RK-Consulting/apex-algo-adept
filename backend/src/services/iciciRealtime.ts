@@ -12,24 +12,31 @@
  */
 
 // (Current is fine, but for scale, consider Redis pub/sub for WS messages across instances)
-import { getBreezeInstance } from "../utils/breezeSession.js";
+// backend/src/services/iciciRealtime.ts
+import { getQuotes } from "../services/breezeClient.js";
 import debug from "debug";
 
-const log = debug("apex:icici:realtime");
+const log = debug("alphaforge:icici:realtime");
 
-// ... (rest same as current, but use getBreezeInstance for breeze)
-
-// In safeConnect:
-async function safeConnect(stream: StreamHandle) {
-  if (stream.connected || stream.connecting) return;
-
-  stream.connecting = true;
-
+// Example: Fetch quote safely (with cache built-in)
+export const fetchQuote = async (userId: string, params: {
+  stock_code: string;
+  exchange_code: string;
+  product_type: string;
+  expiry_date?: string;
+  right?: string;
+  strike_price?: string;
+}) => {
   try {
-    stream.breeze = await getBreezeInstance(stream.userId); // Ensure fresh
-    stream.breeze.connect();
-  } catch (err) {
-    stream.connecting = false;
-    log("Connect error for %s: %O", stream.userId, err);
+    const quote = await getQuotes(userId, params);
+    log("Quote fetched for %s: %O", params.stock_code, quote);
+    return quote;
+  } catch (error: any) {
+    log("Quote fetch failed:", error.message);
+    throw error; // Let WS handler send error
   }
-}
+};
+
+// In your WS onMessage/handler:
+ // const quote = await fetchQuote(userId, parsedParams);
+// ws.send(JSON.stringify(quote));
