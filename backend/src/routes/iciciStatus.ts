@@ -17,7 +17,9 @@
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 import { query } from "../config/database.js";
-import { getSessionForUser } from "../utils/breezeSession.js";
+//import { getSessionForUser } from "../utils/breezeSession.js";
+import { SessionService } from '../services/sessionService';
+
 
 export const iciciStatusRouter = Router();
 
@@ -39,7 +41,8 @@ iciciStatusRouter.get("/", authenticateToken, async (req: AuthRequest, res) => {
     const hasCredentials =
       result.rows.length > 0 && result.rows[0].icici_credentials !== null;
 
-    const session = await getSessionForUser(userId);
+    //const session = await getSessionForUser(userId);
+    const session = await SessionService.getInstance().getSession(userId);
     const isConnected = !!session?.jwtToken;
 
     return res.json({
