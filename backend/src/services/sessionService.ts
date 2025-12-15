@@ -81,6 +81,36 @@ export class SessionService {
   }
 
   /**
+   * Get user's ICICI credentials (api_key, api_secret)
+   * Returns null if no credentials found
+   * 
+   * This is used for login initiation or configuration checks
+   */
+  async getCredentials(userId: string): Promise<{ api_key: string; api_secret: string } | null> {
+    try {
+      const result = await pool.query(`
+        SELECT api_key, api_secret
+        FROM icici_credentials
+        WHERE user_id = $1
+      `, [userId]);
+
+      if (result.rows.length === 0) {
+        console.log(`[SessionService] No credentials found for user ${userId}`);
+        return null;
+      }
+
+      const credentials = result.rows[0];
+      console.log(`[SessionService] Retrieved credentials for user ${userId}`);
+
+      return credentials;
+
+    } catch (error: any) {
+      console.error(`[SessionService] Error getting credentials for user ${userId}:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
    * Save or update user's session after successful authentication
    */
   async saveSession(userId: string, sessionData: {
@@ -89,7 +119,6 @@ export class SessionService {
     user_details?: any;
   }) {
     try {
-      // Save to database
       await pool.query(`
         INSERT INTO icici_breeze_tokens 
         (user_id, session_token, apisession, user_details, connected_at)
@@ -106,9 +135,7 @@ export class SessionService {
         sessionData.user_details ? JSON.stringify(sessionData.user_details) : null
       ]);
 
-      // Invalidate cache so next getSession() fetches fresh data
       await invalidateSessionCache(userId);
-
       console.log(`[SessionService] Saved session for user ${userId}`);
 
     } catch (error: any) {
@@ -122,15 +149,11 @@ export class SessionService {
    */
   async invalidateSession(userId: string) {
     try {
-      // 1. Remove from Redis cache
       await invalidateSessionCache(userId);
-
-      // 2. Remove from database
       await pool.query(
         'DELETE FROM icici_breeze_tokens WHERE user_id = $1',
         [userId]
       );
-
       console.log(`[SessionService] Invalidated session for user ${userId}`);
 
     } catch (error: any) {
@@ -160,40 +183,5 @@ export class SessionService {
   }
 }
 
-/**
- * Get user's ICICI credentials (api_key, api_secret)
- * Returns null if no credentials found
- * 
- * This is used for login initiation or configuration checks
- */
-async getCredentials(userId: string): Promise<{ api_key: string; api_secret: string } | null> {
-  try {
-    // Try Redis cache first for credentials (optional extension; implement if frequent access)
-    // For now, query database directly (~50ms)
-    const result = await pool.query(`
-      SELECT api_key, api_secret
-      FROM icici_credentials
-      WHERE user_id = $1
-    `, [userId]);
-
-    if (result.rows.length === 0) {
-      console.log(`[SessionService] No credentials found for user ${userId}`);
-      return null;
-    }
-
-    const credentials = result.rows[0];
-    console.log(`[SessionService] Retrieved credentials for user ${userId}`);
-
-    // Optional: Cache credentials for 24 hours if you add a cacheCredentials function
-    // await cacheCredentials(userId, credentials);
-
-    return credentials;
-
-  } catch (error: any) {
-    console.error(`[SessionService] Error getting credentials for user ${userId}:`, error.message);
-    throw error;
-  }
-}
-
-// Export singleton instance for convenience
+// Export singleton instance for convenience (optional - you can also use SessionService.getInstance())
 export const sessionService = SessionService.getInstance();
