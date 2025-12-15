@@ -160,5 +160,40 @@ export class SessionService {
   }
 }
 
+/**
+ * Get user's ICICI credentials (api_key, api_secret)
+ * Returns null if no credentials found
+ * 
+ * This is used for login initiation or configuration checks
+ */
+async getCredentials(userId: string): Promise<{ api_key: string; api_secret: string } | null> {
+  try {
+    // Try Redis cache first for credentials (optional extension; implement if frequent access)
+    // For now, query database directly (~50ms)
+    const result = await pool.query(`
+      SELECT api_key, api_secret
+      FROM icici_credentials
+      WHERE user_id = $1
+    `, [userId]);
+
+    if (result.rows.length === 0) {
+      console.log(`[SessionService] No credentials found for user ${userId}`);
+      return null;
+    }
+
+    const credentials = result.rows[0];
+    console.log(`[SessionService] Retrieved credentials for user ${userId}`);
+
+    // Optional: Cache credentials for 24 hours if you add a cacheCredentials function
+    // await cacheCredentials(userId, credentials);
+
+    return credentials;
+
+  } catch (error: any) {
+    console.error(`[SessionService] Error getting credentials for user ${userId}:`, error.message);
+    throw error;
+  }
+}
+
 // Export singleton instance for convenience
 export const sessionService = SessionService.getInstance();
