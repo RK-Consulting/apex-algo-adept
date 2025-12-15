@@ -1,90 +1,48 @@
 // backend/src/services/iciciOrderService.ts
+import {
+  placeOrder as breezePlace,
+  getOrders as breezeGetOrders,
+  getOrderDetail as breezeGetDetail,
+  cancelOrder as breezeCancel,
+  modifyOrder as breezeModify,
+  getPortfolioPositions,
+  getPortfolioHoldings,
+  getFunds,
+  getMargins
+} from "../services/breezeClient.js";
 
-import fetch from "node-fetch";
-import { getSessionForUser } from "../utils/breezeSession.js";
-import { placeOrder as breezePlaceOrder, getOrders, cancelOrder } from './breezeClient';
+export const placeOrder = async (userId: string, orderData: any) => {
+  return breezePlace(userId, orderData);
+};
 
-const BASE = "https://api.icicidirect.com/breezeapi/api/v1";
+export const getOrders = async (userId: string, exchangeCode: string, fromDate: string, toDate: string) => {
+  return breezeGetOrders(userId, exchangeCode, fromDate, toDate);
+};
 
-export class ICICIOrderService {
-  static async jwt(userId: string) {
-    const session = await getSessionForUser(userId);
-    if (!session?.jwtToken) throw new Error("ICICI session expired");
-    return session.jwtToken;
-  }
+export const getOrderDetail = async (userId: string, exchangeCode: string, orderId: string) => {
+  return breezeGetDetail(userId, exchangeCode, orderId);
+};
 
-  // ---------------- PLACE ORDER ----------------
- // NEW CODE
+export const cancelOrder = async (userId: string, exchangeCode: string, orderId: string) => {
+  return breezeCancel(userId, exchangeCode, orderId);
+};
 
-export async function placeOrder(userId: string, orderData: any) {
-  return await breezePlaceOrder(userId, orderData);
-}
+export const modifyOrder = async (userId: string, modifyData: any) => {
+  return breezeModify(userId, modifyData);
+};
 
-export async function getOrderList(userId: string, exchangeCode: string, fromDate: string, toDate: string) {
-  return await getOrders(userId, exchangeCode, fromDate, toDate);
-}
+export const getPositions = async (userId: string) => {
+  return getPortfolioPositions(userId);
+};
 
-export async function cancelOrderById(userId: string, exchangeCode: string, orderId: string) {
-  return await cancelOrder(userId, exchangeCode, orderId);
-}
+export const getHoldings = async (userId: string, exchangeCode: string, fromDate?: string, toDate?: string) => {
+  return getPortfolioHoldings(userId, exchangeCode, fromDate, toDate);
+};
 
-  // ---------------- MODIFY ORDER ----------------
-  static async modifyOrder(userId: string, body: any) {
-    const res = await fetch(`${BASE}/modifyorder`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: await this.jwt(userId),
-      },
-      body: JSON.stringify(body),
-    });
+export const getFundsBalance = async (userId: string) => {
+  return getFunds(userId);
+};
 
-    const json: any = await res.json().catch(() => ({}));
-    return json;
-  }
-
-  // ---------------- CANCEL ORDER ----------------
-  static async cancelOrder(userId: string, body: any) {
-    const res = await fetch(`${BASE}/cancelorder`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: await this.jwt(userId),
-      },
-      body: JSON.stringify(body),
-    });
-
-    const json: any = await res.json().catch(() => ({}));
-    return json;
-  }
-
-  // ---------------- ORDER BOOK ----------------
-  static async getOrderBook(userId: string) {
-    const res = await fetch(`${BASE}/orderbook`, {
-      headers: { Authorization: await this.jwt(userId) },
-    });
-
-    const json: any = await res.json().catch(() => ({}));
-    return json;
-  }
-
-  // ---------------- POSITIONS ----------------
-  static async getPositions(userId: string) {
-    const res = await fetch(`${BASE}/positions`, {
-      headers: { Authorization: await this.jwt(userId) },
-    });
-
-    const json: any = await res.json().catch(() => ({}));
-    return json;
-  }
-
-  // ---------------- HOLDINGS ----------------
-  static async getHoldings(userId: string) {
-    const res = await fetch(`${BASE}/holdings`, {
-      headers: { Authorization: await this.jwt(userId) },
-    });
-
-    const json: any = await res.json().catch(() => ({}));
-    return json;
-  }
-}
+export const getMargin = async (userId: string, exchangeCode: string) => {
+  return getMargins(userId, exchangeCode);
+};
