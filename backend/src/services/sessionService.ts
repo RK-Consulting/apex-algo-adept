@@ -9,12 +9,8 @@ import { getCachedSession, cacheSession, invalidateSessionCache } from './cache'
 export class SessionService {
   private static instance: SessionService;
 
-  // Private constructor prevents direct instantiation
   private constructor() {}
 
-  /**
-   * Get singleton instance
-   */
   static getInstance(): SessionService {
     if (!this.instance) {
       this.instance = new SessionService();
@@ -25,13 +21,12 @@ export class SessionService {
 
   /**
    * Get user's ICICI session (checks Redis cache first, then database)
-   * 
+   *
    * Returns null if user has no credentials or not connected
    * Returns session object with: api_key, api_secret, session_token, apisession
    */
   async getSession(userId: string) {
     try {
-      // 1. Try Redis cache first (fast! ~5ms)
       const cached = await getCachedSession(userId);
       if (cached) {
         console.log(`[SessionService] Cache HIT for user ${userId}`);
@@ -40,9 +35,8 @@ export class SessionService {
 
       console.log(`[SessionService] Cache MISS for user ${userId}, checking database...`);
 
-      // 2. Not in cache, query database (~50ms)
       const result = await pool.query(`
-        SELECT 
+        SELECT
           c.api_key,
           c.api_secret,
           t.session_token,
@@ -54,7 +48,6 @@ export class SessionService {
         WHERE c.user_id = $1
       `, [userId]);
 
-      // 3. Check if user exists
       if (result.rows.length === 0) {
         console.log(`[SessionService] No credentials found for user ${userId}`);
         return null;
@@ -62,18 +55,15 @@ export class SessionService {
 
       const session = result.rows[0];
 
-      // 4. Check if user is connected (has session_token)
       if (!session.session_token) {
         console.log(`[SessionService] User ${userId} has credentials but not connected`);
         return null;
       }
 
-      // 5. Cache for 1 hour (3600 seconds)
       await cacheSession(userId, session);
       console.log(`[SessionService] Cached session for user ${userId}`);
 
       return session;
-
     } catch (error: any) {
       console.error(`[SessionService] Error getting session for user ${userId}:`, error.message);
       throw error;
@@ -82,9 +72,6 @@ export class SessionService {
 
   /**
    * Get user's ICICI credentials (api_key, api_secret)
-   * Returns null if no credentials found
-   * 
-   * This is used for login initiation or configuration checks
    */
   async getCredentials(userId: string): Promise<{ api_key: string; api_secret: string } | null> {
     try {
@@ -101,9 +88,7 @@ export class SessionService {
 
       const credentials = result.rows[0];
       console.log(`[SessionService] Retrieved credentials for user ${userId}`);
-
       return credentials;
-
     } catch (error: any) {
       console.error(`[SessionService] Error getting credentials for user ${userId}:`, error.message);
       throw error;
@@ -112,32 +97,31 @@ export class SessionService {
 
   /**
    * Save or update user's session after successful authentication
+   * 
+   * Security: apisession (temporary) is optional and NOT stored by default
    */
   async saveSession(userId: string, sessionData: {
     session_token: string;
-    apisession: string;
+    apisession?: string; // Optional — temporary token, not persisted
     user_details?: any;
   }) {
     try {
       await pool.query(`
-        INSERT INTO icici_breeze_tokens 
-        (user_id, session_token, apisession, user_details, connected_at)
-        VALUES ($1, $2, $3, $4, NOW())
+        INSERT INTO icici_breeze_tokens
+        (user_id, session_token, user_details, connected_at)
+        VALUES ($1, $2, $3, NOW())
         ON CONFLICT (user_id) DO UPDATE SET
           session_token = EXCLUDED.session_token,
-          apisession = EXCLUDED.apisession,
           user_details = EXCLUDED.user_details,
           connected_at = NOW()
       `, [
         userId,
         sessionData.session_token,
-        sessionData.apisession,
         sessionData.user_details ? JSON.stringify(sessionData.user_details) : null
       ]);
 
       await invalidateSessionCache(userId);
       console.log(`[SessionService] Saved session for user ${userId}`);
-
     } catch (error: any) {
       console.error(`[SessionService] Error saving session:`, error.message);
       throw error;
@@ -155,7 +139,6 @@ export class SessionService {
         [userId]
       );
       console.log(`[SessionService] Invalidated session for user ${userId}`);
-
     } catch (error: any) {
       console.error(`[SessionService] Error invalidating session:`, error.message);
       throw error;
@@ -172,7 +155,6 @@ export class SessionService {
 
   /**
    * Get session or throw error if not found
-   * Useful for middleware that requires valid session
    */
   async getSessionOrThrow(userId: string) {
     const session = await this.getSession(userId);
@@ -183,5 +165,5 @@ export class SessionService {
   }
 }
 
-// Export singleton instance for convenience (optional - you can also use SessionService.getInstance())
+// Export singleton instance
 export const sessionService = SessionService.getInstance();
