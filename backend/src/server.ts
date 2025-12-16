@@ -68,7 +68,7 @@ async function shutdown(signal: string) {
 }
 
 process.on("SIGINT", () => shutdown("SIGINT"));
-/ Graceful shutdown
+// Graceful shutdown
 process.on('SIGTERM', async () => {
   await stopAllRealtimeStreams();
   redis.quit();
