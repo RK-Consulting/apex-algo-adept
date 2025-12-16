@@ -285,3 +285,18 @@ export const fetchQuote = async (
     throw error;
   }
 };
+
+// Export the class methods for direct use (used in stream control & server shutdown)
+export const {
+  startUserStream,
+  stopUserStream,
+  subscribeSymbol,
+  unsubscribeSymbol,
+  stopAllRealtimeStreams,
+} = ICICIRealtimeService.getInstance();
+
+// Export TickData interface for use in stream route
+export type { TickData };
+
+// Export singleton instance (already there, but ensure it's present)
+export const iciciRealtimeService = ICICIRealtimeService.getInstance();
