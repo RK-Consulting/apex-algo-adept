@@ -3,11 +3,17 @@ import { Router } from "express";
 import { authenticateJWT } from "../../middleware/auth.js";
 import { iciciLimiter } from "../../middleware/rateLimiter.js";
 import * as OrderService from "../../services/iciciOrderService.js";
+import { ICICIOrderController } from '../../controllers/iciciOrderController.js';  // Assume updated
+import { authenticateToken } from '../../middleware/auth.js';  // Correct
 
 const router = Router();
+const orderController = new ICICIOrderController();
 
 // All order routes protected + rate limited
 router.use(authenticateJWT, iciciLimiter);
+// Protected Order Routes
+router.post('/place', authenticateToken, orderController.placeOrder.bind(orderController));
+router.get('/history', authenticateToken, orderController.getOrderHistory.bind(orderController));
 
 router.post("/place", async (req: any, res) => {
   try {
