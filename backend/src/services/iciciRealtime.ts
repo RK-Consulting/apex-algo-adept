@@ -16,11 +16,12 @@
 import WebSocket from "ws";
 import debug from "debug";
 import { SessionService } from "./sessionService.js";
-import { getBreezeInstance } from "./breezeClient.js"; // Correct factory
+import { getBreezeInstance } from "./breezeClient.js";
 
 const log = debug("alphaforge:icici:realtime");
 const errorLog = debug("alphaforge:icici:realtime:error");
 
+// Exported interface (directly, no redeclaration conflict)
 export interface TickData {
   symbol: string;
   ltp: number;
@@ -223,7 +224,7 @@ export class ICICIRealtimeService {
   }
 }
 
-// === EXPORTS (single, non-duplicated) ===
+// === EXPORTS ===
 export const {
   startUserStream,
   stopUserStream,
@@ -231,7 +232,5 @@ export const {
   unsubscribeSymbol,
   stopAllRealtimeStreams,
 } = ICICIRealtimeService.getInstance();
-
-export type { TickData };
 
 export const iciciRealtimeService = ICICIRealtimeService.getInstance();
