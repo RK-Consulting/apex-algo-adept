@@ -49,7 +49,7 @@ export class ICICIOrderController {
     try {
       const userId = req.user!.userId;
       const session = await SessionService.getInstance().getSessionOrThrow(userId);
-      const data = await this.orderService.getOrderBook(userId, req.body, session));
+      const data = await this.orderService.getOrderBook(userId, req.body, session);
       return res.json({ success: true, data });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });
@@ -61,7 +61,7 @@ export class ICICIOrderController {
     try {
       const userId = req.user!.userId;
       const session = await SessionService.getInstance().getSessionOrThrow(userId);
-      const data = await this.orderService.getPositions(userId, req.body, session));
+      const data = await this.orderService.getPositions(userId, req.body, session);
       return res.json({ success: true, data });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });
@@ -73,7 +73,7 @@ export class ICICIOrderController {
     try {
       const userId = req.user!.userId;
       const session = await SessionService.getInstance().getSessionOrThrow(userId);
-      const data = await this.orderService.getHoldings(userId, req.body, session));
+      const data = await this.orderService.getHoldings(userId, req.body, session);
       return res.json({ success: true, data });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });
