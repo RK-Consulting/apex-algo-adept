@@ -14,6 +14,11 @@ router.use(authenticateJWT, iciciLimiter);
 // Protected Order Routes
 router.post('/place', authenticateToken, orderController.placeOrder.bind(orderController));
 router.get('/history', authenticateToken, orderController.getOrderHistory.bind(orderController));
+router.get('/list', authenticateToken, orderController.getOrders.bind(orderController));
+router.get('/detail', authenticateToken, orderController.getOrderDetail.bind(orderController));
+router.delete('/cancel', authenticateToken, orderController.cancelOrder.bind(orderController));
+router.put('/modify', authenticateToken, orderController.modifyOrder.bind(orderController));
+
 
 router.post("/place", async (req: any, res) => {
   try {
