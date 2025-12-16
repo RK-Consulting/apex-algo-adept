@@ -42,14 +42,13 @@ router.get(
 
       const userId = req.user!.userId;
 
-      // Safely extract apisession as string | undefined (handles undefined or array)
       const safeApisession = Array.isArray(apisession)
         ? apisession[0]
         : apisession;
 
       await SessionService.getInstance().saveSession(userId, {
         session_token: sessionToken,
-        apisession: safeApisession, // Now correctly typed as string | undefined
+        apisession: safeApisession,
         user_details: customerDetails
           ? typeof customerDetails === "string"
             ? JSON.parse(customerDetails)
@@ -84,19 +83,18 @@ router.post(
         return res.status(400).json({ success: false, error: "apisession required" });
       }
 
-      // Server-side call to CustomerDetails — avoids CORS/403 preflight issues
-      const cdData = await getCustomerDetails(userId, apisession);
+      // Fixed: Pass empty string as third arg to match function signature in breezeClient.ts
+      const cdData = await getCustomerDetails(userId, apisession, "");
 
       const sessionToken = cdData?.Success?.session_token;
       if (!sessionToken) {
         throw new Error("Failed to retrieve session_token from CustomerDetails");
       }
 
-      // Save permanent session
       await SessionService.getInstance().saveSession(userId, {
         session_token: sessionToken,
-        apisession, // Store temporary apisession for debugging/reference
-        user_details: cdData?.Success, // Full customer details
+        apisession,
+        user_details: cdData?.Success,
       });
 
       log("ICICI Breeze connection completed (POST flow) for user %s", userId);
