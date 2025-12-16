@@ -127,7 +127,8 @@ router.post("/complete", authenticateToken, async (req: AuthRequest, res) => {
     }
 
     // Prevent re-login if already authenticated
-    const existing = await getSessionForUser(userId);
+    //const existing = await getSessionForUser(userId);
+    const existing = await SessionService.getInstance().getSession(userId);
     if (existing?.jwtToken) {
       log("User %s already has Breeze JWT — skipping login", userId);
       return res.json({ success: true, jwtToken: existing.jwtToken });
