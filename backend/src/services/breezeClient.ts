@@ -9,12 +9,12 @@
  * - Circuit breaker protection
  * - Redis quote caching (5s TTL)
  * - Comprehensive error mapping (401 → session invalidate)
- * - Correct BreezeConnect SDK usage (factory function)
+ * - Correct BreezeConnect SDK usage (class constructor with `new`)
  * 
  * All API calls flow through breezeRequest() for consistency
  */
 
-import BreezeConnect from "breezeconnect"; // Factory function — call directly, not with `new`
+import BreezeConnect from "breezeconnect"; // Class — use with `new`
 import axios, { AxiosError } from 'axios';
 import { Agent } from 'https';
 import { calculateChecksum, getTimestamp } from '../utils/breezeChecksum';
@@ -139,7 +139,7 @@ export async function breezeRequest<T = any>(
   }
 }
 
-// Convenience wrappers
+// Convenience wrappers (unchanged)
 export async function getCustomerDetails(
   userId: string,
   apisession: string,
@@ -150,12 +150,12 @@ export async function getCustomerDetails(
   });
 }
 
-// ... (keep all other wrappers unchanged)
+// ... (keep all other wrappers: placeOrder, getOrders, etc.)
 
 /**
  * Factory for BreezeConnect instance (used for WebSocket streaming)
  * 
- * Correct usage: BreezeConnect is a factory function
+ * Correct usage: BreezeConnect is a class — instantiate with `new`
  */
 export function getBreezeInstance(session: {
   api_key: string;
@@ -166,8 +166,8 @@ export function getBreezeInstance(session: {
     throw new Error("Invalid session for BreezeConnect instance");
   }
 
-  // Correct: Call as function (no `new`)
-  const breeze = BreezeConnect({
+  // Correct: Use `new` constructor
+  const breeze = new BreezeConnect({
     appKey: session.api_key,
   });
 
