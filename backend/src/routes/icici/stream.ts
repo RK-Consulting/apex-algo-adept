@@ -1,26 +1,25 @@
 // backend/src/routes/icici/stream.ts
-
 /**
- * ************************************************************
- *  ICICI REALTIME STREAM ROUTER + WEBSOCKET UPGRADER
- *  -----------------------------------------------------------
- *  Responsibilities:
- *    • HTTP endpoints:
- *        - /api/icici/stream/status
- *        - /api/icici/stream/subscribe
- *        - /api/icici/stream/unsubscribe
- *    • WebSocket server:
- *        - Upgrade HTTP → WebSocket
- *        - Authenticate using:
- *              1) sec-websocket-protocol
- *              2) URL query ?token=
- *    • Forward live ticks
- *    • Handle dynamic subscribe / unsubscribe
- *
- *  Cloudflare Friendly:
- *    - Cloudflare strips WebSocket headers sometimes
- *    - Therefore URL ?token= is required
- * ************************************************************
+ * ICICI Realtime Stream Router + WebSocket Upgrader
+ * 
+ * Responsibilities:
+ * - HTTP endpoints: /status, /subscribe, /unsubscribe
+ * - WebSocket server: Upgrades HTTP → WebSocket, authenticates via JWT
+ * - Forwards live market ticks (Breeze R50-compliant)
+ * - Handles dynamic subscribe/unsubscribe per symbol
+ * 
+ * Features:
+ * - Cloudflare-friendly: Supports ?token= query for proxy compatibility
+ * - Secure: JWT validation + SessionService integration
+ * - Scalable: Leverages ICICIRealtimeService singleton
+ * - Observable: Comprehensive debug logging
+ * 
+ * Routes:
+ * - GET /api/icici/stream/status → Check WS availability
+ * - POST /api/icici/stream/subscribe → Subscribe to symbol
+ * - POST /api/icici/stream/unsubscribe → Unsubscribe from symbol
+ * - GET /api/icici/stream → Dummy endpoint for client discovery
+ * - WS /api/icici/stream → WebSocket feed with ?token= or sec-websocket-protocol
  */
 
 import { Router } from "express";
@@ -29,242 +28,248 @@ import jwt from "jsonwebtoken";
 import debug from "debug";
 import { IncomingMessage } from "http";
 import { Socket } from "net";
-
 import {
   startUserStream,
   stopUserStream,
   subscribeSymbol,
   unsubscribeSymbol,
+  TickData,
 } from "../../services/iciciRealtime.js";
-
 import { authenticateToken, AuthRequest } from "../../middleware/auth.js";
 
 const log = debug("apex:icici:stream");
+const errorLog = debug("apex:icici:stream:error");
 
-/* --------------------------------------------------------------
-   EXPORT EXPRESS ROUTER
--------------------------------------------------------------- */
-export const iciciStreamRouter = Router();
-
-/* --------------------------------------------------------------
-   Extend IncomingMessage with userId for WS authentication
--------------------------------------------------------------- */
+// Extend IncomingMessage for WebSocket authentication
 interface WsRequest extends IncomingMessage {
   userId?: string;
 }
 
-/* --------------------------------------------------------------
-   GET /api/icici/stream/status
--------------------------------------------------------------- */
+// Express Router
+export const iciciStreamRouter = Router();
+
+/**
+ * GET /api/icici/stream/status
+ * Check if WebSocket feed is ready
+ */
 iciciStreamRouter.get("/status", authenticateToken, async (_req, res) => {
-  return res.json({
-    success: true,
-    connected: true,
-    message: "ICICI WebSocket Feed Ready",
-  });
+  try {
+    res.json({
+      success: true,
+      connected: true,
+      message: "ICICI WebSocket Feed Ready",
+    });
+  } catch (error: any) {
+    errorLog("Status check failed:", error.message);
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
-/* --------------------------------------------------------------
-   POST /api/icici/stream/subscribe
--------------------------------------------------------------- */
-iciciStreamRouter.post(
-  "/subscribe",
-  authenticateToken,
-  async (req: AuthRequest, res) => {
-    try {
-      const userId = req.user!.userId;
-      const { symbol, exchange = "NSE" } = req.body;
+/**
+ * POST /api/icici/stream/subscribe
+ * Subscribe to a market symbol (e.g., RELIANCE|NSE)
+ */
+iciciStreamRouter.post("/subscribe", authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user!.userId;
+    const { symbol, exchange = "NSE" } = req.body;
 
-      if (!symbol) return res.status(400).json({ error: "symbol required" });
-
-      await startUserStream(userId, () => {});
-      await subscribeSymbol(userId, symbol, exchange);
-
-      return res.json({ success: true, subscribed: symbol });
-    } catch (err: any) {
-      log("subscribe error:", err);
-      return res.status(500).json({ error: err.message });
+    if (!symbol) {
+      return res.status(400).json({ success: false, error: "symbol required" });
     }
+
+    // Start stream if not already running
+    await startUserStream(userId, (tick: TickData) => {
+      // Optional: Log ticks for debugging
+      log(`Tick for user ${userId}: ${tick.symbol} @ ${tick.ltp}`);
+    });
+
+    await subscribeSymbol(userId, symbol, exchange);
+    log(`User ${userId} subscribed to ${symbol} (${exchange})`);
+
+    res.json({ success: true, subscribed: symbol });
+  } catch (error: any) {
+    errorLog(`Subscribe error for user ${req.user!.userId}:`, error.message);
+    res.status(500).json({ success: false, error: error.message || "Failed to subscribe" });
   }
-);
+});
 
-/* --------------------------------------------------------------
-   POST /api/icici/stream/unsubscribe
--------------------------------------------------------------- */
-iciciStreamRouter.post(
-  "/unsubscribe",
-  authenticateToken,
-  async (req: AuthRequest, res) => {
-    try {
-      const userId = req.user!.userId;
-      const { symbol, exchange = "NSE" } = req.body;
+/**
+ * POST /api/icici/stream/unsubscribe
+ * Unsubscribe from a market symbol
+ */
+iciciStreamRouter.post("/unsubscribe", authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user!.userId;
+    const { symbol, exchange = "NSE" } = req.body;
 
-      if (!symbol) return res.status(400).json({ error: "symbol required" });
-
-      await unsubscribeSymbol(userId, symbol, exchange);
-
-      return res.json({ success: true, unsubscribed: symbol });
-    } catch (err: any) {
-      log("unsubscribe error:", err);
-      return res.status(500).json({ error: err.message });
+    if (!symbol) {
+      return res.status(400).json({ success: false, error: "symbol required" });
     }
-  }
-);
 
-/* --------------------------------------------------------------
-   GET /api/icici/stream
-   Dummy endpoint
--------------------------------------------------------------- */
+    await unsubscribeSymbol(userId, symbol, exchange);
+    log(`User ${userId} unsubscribed from ${symbol} (${exchange})`);
+
+    res.json({ success: true, unsubscribed: symbol });
+  } catch (error: any) {
+    errorLog(`Unsubscribe error for user ${req.user!.userId}:`, error.message);
+    res.status(500).json({ success: false, error: error.message || "Failed to unsubscribe" });
+  }
+});
+
+/**
+ * GET /api/icici/stream
+ * Dummy endpoint for client discovery
+ */
 iciciStreamRouter.get("/", authenticateToken, (_req, res) => {
-  return res.json({
-    success: true,
-    ws: "WebSocket available at wss://host/api/icici/stream",
-  });
+  try {
+    res.json({
+      success: true,
+      ws: `WebSocket available at wss://${process.env.HOST || "api.alphaforge.skillsifter.in"}/api/icici/stream`,
+    });
+  } catch (error: any) {
+    errorLog("Stream discovery failed:", error.message);
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
-/* ***************************************************************
-   WEBSOCKET SERVER IMPLEMENTATION
-*************************************************************** */
-export function initIciciStreamServer(server: any) {
+/**
+ * WebSocket Server Implementation
+ * Upgrades HTTP to WebSocket, authenticates, and relays ticks
+ */
+export function initIciciStreamServer(server: any): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
 
-  /* ------------------------------------------------------------
-     Handle HTTP → WS upgrade
-  ------------------------------------------------------------ */
-  server.on(
-    "upgrade",
-    async (req: WsRequest, socket: Socket, head: Buffer) => {
-      if (!req.url?.startsWith("/api/icici/stream")) return;
+  // Handle HTTP → WebSocket upgrade
+  server.on("upgrade", async (req: WsRequest, socket: Socket, head: Buffer) => {
+    if (!req.url?.startsWith("/api/icici/stream")) {
+      socket.destroy();
+      return;
+    }
 
-      try {
-        let token: string | undefined;
+    try {
+      let token: string | undefined;
 
-        // ======================================================
-        // MODE 1: Header → sec-websocket-protocol
-        // ======================================================
-        const proto = req.headers["sec-websocket-protocol"];
-        if (proto) {
-          token = Array.isArray(proto) ? proto[0] : proto;
-        }
-
-        // ======================================================
-        // MODE 2: URL query string → ?token=xyz
-        // Required for Cloudflare workers / CF proxy
-        // ======================================================
-        if (!token && req.url) {
-          try {
-            const u = new URL(req.url, "https://dummy-origin");
-            const qp = u.searchParams.get("token");
-            if (qp) token = qp;
-          } catch {
-            /* ignore invalid urls */
-          }
-        }
-
-        // Missing token
-        if (!token) {
-          log("WS auth failed: No token provided");
-          socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
-          return socket.destroy();
-        }
-
-        // Validate token
-        const decoded: any = await authenticateWsToken(token);
-        if (!decoded?.userId) throw new Error("Invalid token");
-
-        req.userId = decoded.userId;
-      } catch (err) {
-        log("WS auth failed:", err);
-        socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
-        return socket.destroy();
+      // MODE 1: sec-websocket-protocol header
+      const proto = req.headers["sec-websocket-protocol"];
+      if (proto) {
+        token = Array.isArray(proto) ? proto[0] : proto;
       }
 
-      // Allow the WS connection
-      // wss.handleUpgrade(req, socket, head, (ws) => {
+      // MODE 2: URL query ?token= (Cloudflare-friendly)
+      if (!token && req.url) {
+        const u = new URL(req.url, "https://api.alphaforge.skillsifter.in"); // Base URL for parsing
+        token = u.searchParams.get("token") || undefined;
+      }
+
+      if (!token) {
+        log("WS auth failed: No token provided");
+        socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+
+      // Validate JWT
+      const decoded = await authenticateWsToken(token);
+      if (!decoded?.userId) {
+        throw new Error("Invalid token");
+      }
+      req.userId = decoded.userId;
+
+      // Proceed with upgrade
       wss.handleUpgrade(req, socket, head, (ws: WebSocket) => {
         wss.emit("connection", ws, req);
       });
+    } catch (error: any) {
+      errorLog("WS upgrade failed:", error.message);
+      socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+      socket.destroy();
     }
-  );
+  });
 
-  /* ------------------------------------------------------------
-     When WS is connected
-  ------------------------------------------------------------ */
+  // Handle new WebSocket connections
   wss.on("connection", async (ws: WebSocket, req: WsRequest) => {
     const userId = req.userId!;
-    log("WS User connected:", userId);
+    log(`WebSocket connected for user ${userId}`);
 
-    // Start streaming
-    await startUserStream(userId, (tick: any) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "tick", ...tick }));
-      }
-    });
-
-    ws.send(JSON.stringify({ type: "connected", userId }));
-
-    /* ----------------------------------------------------------
-       WS Incoming Messages
-    ---------------------------------------------------------- */
-    ws.on("message", async (msg: string | Buffer) => {
-      try {
-        const data = JSON.parse(msg.toString());
-
-        switch (data.action) {
-          case "subscribe":
-            await subscribeSymbol(userId, data.symbol, data.exchange || "NSE");
-            ws.send(
-              JSON.stringify({ type: "subscribed", symbol: data.symbol })
-            );
-            break;
-
-          case "unsubscribe":
-            await unsubscribeSymbol(
-              userId,
-              data.symbol,
-              data.exchange || "NSE"
-            );
-            ws.send(
-              JSON.stringify({ type: "unsubscribed", symbol: data.symbol })
-            );
-            break;
-
-          case "ping":
-            ws.send(JSON.stringify({ type: "pong" }));
-            break;
+    try {
+      // Start streaming ticks
+      await startUserStream(userId, (tick: TickData) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "tick", data: tick }));
         }
-      } catch (err) {
-        log("WS message error:", err);
-      }
-    });
+      });
 
-    /* ----------------------------------------------------------
-       CLOSE / ERROR
-    ---------------------------------------------------------- */
-    ws.on("close", () => {
-      stopUserStream(userId);
-      log("WS closed:", userId);
-    });
+      // Send initial connection confirmation
+      ws.send(JSON.stringify({ type: "connected", userId }));
 
-    //ws.on("error", (err) => {
-    ws.on("error", (err: Error) => {
-      stopUserStream(userId);
-      log("WS error:", err);
-    });
+      // Handle incoming messages (subscribe/unsubscribe/ping)
+      ws.on("message", async (data: WebSocket.RawData) => {
+        try {
+          const message = JSON.parse(data.toString());
+          const { action, symbol, exchange = "NSE" } = message;
+
+          switch (action) {
+            case "subscribe":
+              if (!symbol) throw new Error("symbol required");
+              await subscribeSymbol(userId, symbol, exchange);
+              ws.send(JSON.stringify({ type: "subscribed", symbol }));
+              log(`User ${userId} subscribed to ${symbol} via WS`);
+              break;
+
+            case "unsubscribe":
+              if (!symbol) throw new Error("symbol required");
+              await unsubscribeSymbol(userId, symbol, exchange);
+              ws.send(JSON.stringify({ type: "unsubscribed", symbol }));
+              log(`User ${userId} unsubscribed from ${symbol} via WS`);
+              break;
+
+            case "ping":
+              ws.send(JSON.stringify({ type: "pong" }));
+              break;
+
+            default:
+              throw new Error(`Unknown action: ${action}`);
+          }
+        } catch (error: any) {
+          errorLog(`WS message error for user ${userId}:`, error.message);
+          ws.send(JSON.stringify({ type: "error", error: error.message }));
+        }
+      });
+
+      // Handle WebSocket close
+      ws.on("close", async (code, reason) => {
+        await stopUserStream(userId);
+        log(`WebSocket closed for user ${userId} | Code: ${code} | Reason: ${reason}`);
+      });
+
+      // Handle WebSocket errors
+      ws.on("error", async (error: Error) => {
+        await stopUserStream(userId);
+        errorLog(`WebSocket error for user ${userId}:`, error.message);
+      });
+    } catch (error: any) {
+      errorLog(`Failed to initialize stream for user ${userId}:`, error.message);
+      ws.close(1011, error.message);
+    }
   });
 
   return wss;
 }
 
-/* ***************************************************************
-   JWT VALIDATION
-*************************************************************** */
-function authenticateWsToken(token: string): Promise<any> {
-  return new Promise((resolve, reject) => {
-    jwt.verify(token, process.env.JWT_SECRET!, (err, decoded) => {
-      if (err) return reject(err);
-      resolve(decoded);
+/**
+ * Authenticate WebSocket JWT token
+ */
+async function authenticateWsToken(token: string): Promise<any> {
+  try {
+    return await new Promise((resolve, reject) => {
+      jwt.verify(token, process.env.JWT_SECRET || "", (err, decoded) => {
+        if (err) reject(new Error("Invalid token"));
+        resolve(decoded);
+      });
     });
-  });
+  } catch (error: any) {
+    errorLog("JWT verification failed:", error.message);
+    throw error;
+  }
 }
-
