@@ -1,19 +1,19 @@
 // backend/src/routes/icici/stream.ts
 /**
  * ICICI Realtime Stream Router + WebSocket Upgrader
- * 
+ *
  * Responsibilities:
  * - HTTP endpoints: /status, /subscribe, /unsubscribe
  * - WebSocket server: Upgrades HTTP → WebSocket, authenticates via JWT
  * - Forwards live market ticks (Breeze R50-compliant)
  * - Handles dynamic subscribe/unsubscribe per symbol
- * 
+ *
  * Features:
  * - Cloudflare-friendly: Supports ?token= query for proxy compatibility
  * - Secure: JWT validation + SessionService integration
  * - Scalable: Leverages ICICIRealtimeService singleton
  * - Observable: Comprehensive debug logging
- * 
+ *
  * Routes:
  * - GET /api/icici/stream/status → Check WS availability
  * - POST /api/icici/stream/subscribe → Subscribe to symbol
@@ -23,7 +23,7 @@
  */
 
 import { Router } from "express";
-import { WebSocketServer, WebSocket } from "ws";
+import { WebSocketServer, WebSocket, RawData } from "ws"; // Import RawData type
 import jwt from "jsonwebtoken";
 import debug from "debug";
 import { IncomingMessage } from "http";
@@ -78,9 +78,7 @@ iciciStreamRouter.post("/subscribe", authenticateToken, async (req: AuthRequest,
       return res.status(400).json({ success: false, error: "symbol required" });
     }
 
-    // Start stream if not already running
     await startUserStream(userId, (tick: TickData) => {
-      // Optional: Log ticks for debugging
       log(`Tick for user ${userId}: ${tick.symbol} @ ${tick.ltp}`);
     });
 
@@ -140,7 +138,6 @@ iciciStreamRouter.get("/", authenticateToken, (_req, res) => {
 export function initIciciStreamServer(server: any): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
 
-  // Handle HTTP → WebSocket upgrade
   server.on("upgrade", async (req: WsRequest, socket: Socket, head: Buffer) => {
     if (!req.url?.startsWith("/api/icici/stream")) {
       socket.destroy();
@@ -150,15 +147,13 @@ export function initIciciStreamServer(server: any): WebSocketServer {
     try {
       let token: string | undefined;
 
-      // MODE 1: sec-websocket-protocol header
       const proto = req.headers["sec-websocket-protocol"];
       if (proto) {
         token = Array.isArray(proto) ? proto[0] : proto;
       }
 
-      // MODE 2: URL query ?token= (Cloudflare-friendly)
       if (!token && req.url) {
-        const u = new URL(req.url, "https://api.alphaforge.skillsifter.in"); // Base URL for parsing
+        const u = new URL(req.url, "https://api.alphaforge.skillsifter.in");
         token = u.searchParams.get("token") || undefined;
       }
 
@@ -169,14 +164,12 @@ export function initIciciStreamServer(server: any): WebSocketServer {
         return;
       }
 
-      // Validate JWT
       const decoded = await authenticateWsToken(token);
       if (!decoded?.userId) {
         throw new Error("Invalid token");
       }
       req.userId = decoded.userId;
 
-      // Proceed with upgrade
       wss.handleUpgrade(req, socket, head, (ws: WebSocket) => {
         wss.emit("connection", ws, req);
       });
@@ -187,24 +180,20 @@ export function initIciciStreamServer(server: any): WebSocketServer {
     }
   });
 
-  // Handle new WebSocket connections
   wss.on("connection", async (ws: WebSocket, req: WsRequest) => {
     const userId = req.userId!;
     log(`WebSocket connected for user ${userId}`);
 
     try {
-      // Start streaming ticks
       await startUserStream(userId, (tick: TickData) => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: "tick", data: tick }));
         }
       });
 
-      // Send initial connection confirmation
       ws.send(JSON.stringify({ type: "connected", userId }));
 
-      // Handle incoming messages (subscribe/unsubscribe/ping)
-      ws.on("message", async (data: WebSocket.RawData) => {
+      ws.on("message", async (data: RawData) => {
         try {
           const message = JSON.parse(data.toString());
           const { action, symbol, exchange = "NSE" } = message;
@@ -237,13 +226,11 @@ export function initIciciStreamServer(server: any): WebSocketServer {
         }
       });
 
-      // Handle WebSocket close
       ws.on("close", async (code, reason) => {
         await stopUserStream(userId);
         log(`WebSocket closed for user ${userId} | Code: ${code} | Reason: ${reason}`);
       });
 
-      // Handle WebSocket errors
       ws.on("error", async (error: Error) => {
         await stopUserStream(userId);
         errorLog(`WebSocket error for user ${userId}:`, error.message);
