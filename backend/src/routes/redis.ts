@@ -1,8 +1,27 @@
-// backend/src/config/redis.ts
-import Redis from "ioredis";
+// backend/src/routes/redis.ts (or .js)
+import { Router } from "express";
+import redis from "../config/redis.js"; // Redis client
 
-const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
+const router = Router();
 
-redis.on("error", (err: Error) => console.error("Redis error:", err.message));
+// Example dev endpoints
+router.get("/status", async (_req, res) => {
+  try {
+    await redis.ping();
+    res.json({ success: true, message: "Redis connected" });
+  } catch (err) {
+    res.status(500).json({ success: false, error: "Redis unreachable" });
+  }
+});
 
-export default redis;
+router.get("/keys", async (_req, res) => {
+  try {
+    const keys = await redis.keys("*");
+    res.json({ success: true, count: keys.length, sample: keys.slice(0, 20) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: "Failed to fetch keys" });
+  }
+});
+
+// Named export to match import in app.ts
+export { router };
