@@ -1,82 +1,161 @@
 // backend/src/controllers/iciciOrderController.ts
-
-import { Request, Response } from "express";
+import { Response } from "express";
 import { AuthRequest } from "../middleware/auth.js";
-import { ICICIOrderService } from "../services/iciciOrderService.js";
-import { SessionService } from '../services/sessionService.js';
+import ICICIOrderService from "../services/iciciOrderService.js"; // Default import (recommended)
+import { SessionService } from "../services/sessionService.js";
 
+/**
+ * ICICIOrderController - Handles all order-related operations via Breeze API
+ * 
+ * Integrates with:
+ * - SessionService: Redis-cached ICICI session retrieval (~5ms hits)
+ * - ICICIOrderService: Direct Breeze API calls (place/modify/cancel/get)
+ * 
+ * All methods are instance-based for proper service injection and performance
+ */
 export class ICICIOrderController {
-  private orderService = new ICICIOrderService();
+  private readonly orderService: ICICIOrderService;
+  private readonly sessionService = SessionService.getInstance();
+
+  constructor() {
+    // Singleton/shared instance - efficient for high-frequency requests
+    this.orderService = new ICICIOrderService();
+  }
 
   // ---------------- PLACE ORDER ----------------
-  static async placeOrder(req: AuthRequest, res: Response) {
+  async placeOrder(req: AuthRequest, res: Response): Promise<void> {
     try {
       const userId = req.user!.userId;
-      const session = await SessionService.getInstance().getSessionOrThrow(userId);
-      const data = await this.orderService.placeOrder(userId, req.body, session);
-      return res.json({ success: true, data });
-    } catch (err: any) {
-      return res.status(500).json({ success: false, error: err.message });
+      const session = await this.sessionService.getSessionOrThrow(userId);
+
+      const result = await this.orderService.placeOrder(userId, req.body, session);
+      res.json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || "Failed to place order" });
     }
   }
 
   // ---------------- MODIFY ORDER ----------------
-  static async modifyOrder(req: AuthRequest, res: Response) {
+  async modifyOrder(req: AuthRequest, res: Response): Promise<void> {
     try {
       const userId = req.user!.userId;
-      const session = await SessionService.getInstance().getSessionOrThrow(userId);
-      const data = await this.orderService.modifyOrder(userId, req.body, session);
-      return res.json({ success: true, data });
-    } catch (err: any) {
-      return res.status(500).json({ success: false, error: err.message });
+      const session = await this.sessionService.getSessionOrThrow(userId);
+
+      const result = await this.orderService.modifyOrder(userId, req.body, session);
+      res.json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || "Failed to modify order" });
     }
   }
 
   // ---------------- CANCEL ORDER ----------------
-  static async cancelOrder(req: AuthRequest, res: Response) {
+  async cancelOrder(req: AuthRequest, res: Response): Promise<void> {
     try {
       const userId = req.user!.userId;
-      const session = await SessionService.getInstance().getSessionOrThrow(userId);
-      const data = await this.orderService.cancelOrder(userId, req.body, session);
-      return res.json({ success: true, data });
-    } catch (err: any) {
-      return res.status(500).json({ success: false, error: err.message });
+      const session = await this.sessionService.getSessionOrThrow(userId);
+
+      const result = await this.orderService.cancelOrder(userId, req.body, session);
+      res.json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || "Failed to cancel order" });
     }
   }
 
-  // ---------------- ORDER BOOK ----------------
-  static async orderbook(req: AuthRequest, res: Response) {
+  // ---------------- ORDER BOOK (All Orders) ----------------
+  async getOrderBook(req: AuthRequest, res: Response): Promise<void> {
     try {
       const userId = req.user!.userId;
-      const session = await SessionService.getInstance().getSessionOrThrow(userId);
-      const data = await this.orderService.getOrderBook(userId, req.body, session);
-      return res.json({ success: true, data });
-    } catch (err: any) {
-      return res.status(500).json({ success: false, error: err.message });
+      const session = await this.sessionService.getSessionOrThrow(userId);
+
+      const result = await this.orderService.getOrderBook(userId, req.query, session);
+      res.json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || "Failed to fetch order book" });
     }
   }
 
   // ---------------- POSITIONS ----------------
-  static async positions(req: AuthRequest, res: Response) {
+  async getPositions(req: AuthRequest, res: Response): Promise<void> {
     try {
       const userId = req.user!.userId;
-      const session = await SessionService.getInstance().getSessionOrThrow(userId);
-      const data = await this.orderService.getPositions(userId, req.body, session);
-      return res.json({ success: true, data });
-    } catch (err: any) {
-      return res.status(500).json({ success: false, error: err.message });
+      const session = await this.sessionService.getSessionOrThrow(userId);
+
+      const result = await this.orderService.getPositions(userId, req.query, session);
+      res.json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || "Failed to fetch positions" });
     }
   }
 
   // ---------------- HOLDINGS ----------------
-  static async holdings(req: AuthRequest, res: Response) {
+  async getHoldings(req: AuthRequest, res: Response): Promise<void> {
     try {
       const userId = req.user!.userId;
-      const session = await SessionService.getInstance().getSessionOrThrow(userId);
-      const data = await this.orderService.getHoldings(userId, req.body, session);
-      return res.json({ success: true, data });
-    } catch (err: any) {
-      return res.status(500).json({ success: false, error: err.message });
+      const session = await this.sessionService.getSessionOrThrow(userId);
+
+      const result = await this.orderService.getHoldings(userId, req.query, session);
+      res.json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || "Failed to fetch holdings" });
+    }
+  }
+
+  // ---------------- ORDER HISTORY (Date Range) ----------------
+  async getOrderHistory(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user!.userId;
+      const session = await this.sessionService.getSessionOrThrow(userId);
+      const { fromDate, toDate } = req.query;
+
+      const result = await this.orderService.getOrderHistory(
+        userId,
+        fromDate as string,
+        toDate as string,
+        session
+      );
+      res.json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || "Failed to fetch order history" });
+    }
+  }
+
+  // ---------------- CURRENT ORDERS LIST ----------------
+  async getOrders(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user!.userId;
+      const session = await this.sessionService.getSessionOrThrow(userId);
+      const { exchangeCode, fromDate, toDate } = req.query;
+
+      const result = await this.orderService.getOrders(
+        userId,
+        exchangeCode as string,
+        fromDate as string,
+        toDate as string,
+        session
+      );
+      res.json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || "Failed to fetch orders" });
+    }
+  }
+
+  // ---------------- ORDER DETAIL BY ID ----------------
+  async getOrderDetail(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user!.userId;
+      const { orderId } = req.params;
+      const { exchangeCode } = req.query;
+      const session = await this.sessionService.getSessionOrThrow(userId);
+
+      const result = await this.orderService.getOrderDetail(
+        userId,
+        exchangeCode as string,
+        orderId,
+        session
+      );
+      res.json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || "Failed to fetch order detail" });
     }
   }
 }
