@@ -1,7 +1,7 @@
 // backend/src/services/breezeClient.ts
 // ICICI Breeze API Gateway - All ICICI API calls go through here
 // Features: Connection pooling, retry logic, circuit breaker, caching, rate limiting
-
+import BreezeConnect from "breezeconnect"; // Ensure you have: npm install breezeconnect
 import axios, { AxiosError } from 'axios';
 import { Agent } from 'https';
 import { calculateChecksum, getTimestamp } from '../utils/breezeChecksum';
@@ -540,4 +540,16 @@ export async function getDematHoldings(userId: string) {
  */
 export function getBreezeLoginUrl(apiKey: string): string {
   return `https://api.icicidirect.com/apiuser/login?api_key=${encodeURIComponent(apiKey)}`;
+}
+
+/**
+ * Returns a configured BreezeConnect instance using session data
+ * Used by iciciRealtime.ts for WebSocket connection
+ */
+export function getBreezeInstance(session: any): any {
+  const breeze = new BreezeConnect({
+    appKey: session.api_key,
+  });
+  breeze.setSessionToken(session.session_token);
+  return breeze;
 }
