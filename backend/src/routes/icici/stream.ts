@@ -195,7 +195,7 @@ export function initIciciStreamServer(server: any) {
     log("WS User connected:", userId);
 
     // Start streaming
-    await startUserStream(userId, (tick) => {
+    await startUserStream(userId, (tick: any) => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "tick", ...tick }));
       }
