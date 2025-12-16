@@ -1,4 +1,15 @@
 // backend/src/services/iciciOrderService.ts
+/**
+ * ICICI Order Service - Thin wrappers around BreezeClient functions
+ * 
+ * Purpose:
+ * - Centralize all order-related Breeze API calls
+ * - Provide clean, typed interface for controllers
+ * - Allow future enhancements (logging, metrics, validation) in one place
+ * 
+ * All functions are named exports → imported as namespace in controllers
+ */
+
 import {
   placeOrder as breezePlace,
   getOrders as breezeGetOrders,
@@ -8,41 +19,86 @@ import {
   getPortfolioPositions,
   getPortfolioHoldings,
   getFunds,
-  getMargins
+  getMargins,
 } from "../services/breezeClient.js";
 
-export const placeOrder = async (userId: string, orderData: any) => {
-  return breezePlace(userId, orderData);
+/**
+ * Place a new order
+ */
+export const placeOrder = async (userId: string, orderData: any): Promise<any> => {
+  return await breezePlace(userId, orderData);
 };
 
-export const getOrders = async (userId: string, exchangeCode: string, fromDate: string, toDate: string) => {
-  return breezeGetOrders(userId, exchangeCode, fromDate, toDate);
+/**
+ * Get order list (current or historical)
+ */
+export const getOrders = async (
+  userId: string,
+  exchangeCode: string,
+  fromDate: string,
+  toDate: string
+): Promise<any> => {
+  return await breezeGetOrders(userId, exchangeCode, fromDate, toDate);
 };
 
-export const getOrderDetail = async (userId: string, exchangeCode: string, orderId: string) => {
-  return breezeGetDetail(userId, exchangeCode, orderId);
+/**
+ * Get details of a specific order
+ */
+export const getOrderDetail = async (
+  userId: string,
+  exchangeCode: string,
+  orderId: string
+): Promise<any> => {
+  return await breezeGetDetail(userId, exchangeCode, orderId);
 };
 
-export const cancelOrder = async (userId: string, exchangeCode: string, orderId: string) => {
-  return breezeCancel(userId, exchangeCode, orderId);
+/**
+ * Cancel an existing order
+ */
+export const cancelOrder = async (
+  userId: string,
+  exchangeCode: string,
+  orderId: string
+): Promise<any> => {
+  return await breezeCancel(userId, exchangeCode, orderId);
 };
 
-export const modifyOrder = async (userId: string, modifyData: any) => {
-  return breezeModify(userId, modifyData);
+/**
+ * Modify an existing order
+ */
+export const modifyOrder = async (userId: string, modifyData: any): Promise<any> => {
+  return await breezeModify(userId, modifyData);
 };
 
-export const getPositions = async (userId: string) => {
-  return getPortfolioPositions(userId);
+/**
+ * Get current portfolio positions
+ */
+export const getPositions = async (userId: string): Promise<any> => {
+  return await getPortfolioPositions(userId);
 };
 
-export const getHoldings = async (userId: string, exchangeCode: string, fromDate?: string, toDate?: string) => {
-  return getPortfolioHoldings(userId, exchangeCode, fromDate, toDate);
+/**
+ * Get portfolio holdings
+ */
+export const getHoldings = async (
+  userId: string,
+  exchangeCode: string,
+  fromDate?: string,
+  toDate?: string
+): Promise<any> => {
+  return await getPortfolioHoldings(userId, exchangeCode, fromDate, toDate);
 };
 
-export const getFundsBalance = async (userId: string) => {
-  return getFunds(userId);
+/**
+ * Get available funds balance
+ */
+export const getFundsBalance = async (userId: string): Promise<any> => {
+  return await getFunds(userId);
 };
 
-export const getMargin = async (userId: string, exchangeCode: string) => {
-  return getMargins(userId, exchangeCode);
+/**
+ * Get margin information
+ */
+export const getMargin = async (userId: string, exchangeCode: string): Promise<any> => {
+  return await getMargins(userId, exchangeCode);
 };
