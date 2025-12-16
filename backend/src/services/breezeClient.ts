@@ -543,13 +543,35 @@ export function getBreezeLoginUrl(apiKey: string): string {
 }
 
 /**
- * Returns a configured BreezeConnect instance using session data
- * Used by iciciRealtime.ts for WebSocket connection
+ * Creates and configures a BreezeConnect instance for a specific user session
+ * 
+ * Used by:
+ * - iciciRealtime.ts: WebSocket streaming (requires isolated instance per user)
+ * - iciciOrderService.ts: Order placement/modification
+ * - Quote fetches and other API calls
+ * 
+ * Why per-session instance?
+ * - Security: Prevents session cross-contamination
+ * - Reliability: Independent reconnect behavior per user
+ * - Compliance: Aligns with ICICI Breeze SDK best practices
  */
-export function getBreezeInstance(session: any): any {
+
+export function getBreezeInstance(session: {
+  api_key: string;
+  session_token: string;
+  api_secret?: string; // Optional for future signed requests
+}): BreezeConnect {
+  if (!session?.api_key || !session?.session_token) {
+    throw new Error("Invalid session: missing api_key or session_token");
+  }
+
   const breeze = new BreezeConnect({
     appKey: session.api_key,
+    // secretKey: session.api_secret, // Uncomment if needed for signed endpoints
   });
+
+  // Critical: Must be called before any API/WebSocket use
   breeze.setSessionToken(session.session_token);
+
   return breeze;
 }
