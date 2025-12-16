@@ -11,17 +11,17 @@
 
 import { Response } from "express";
 import { AuthRequest } from "../middleware/auth.js";
-import * as ICICIOrderService from "../services/iciciOrderService.js"; // Namespace import
+import * as ICICIOrderService from "../services/iciciOrderService.js";
 import { SessionService } from "../services/sessionService.js";
 
 export class ICICIOrderController {
   private readonly sessionService = SessionService.getInstance();
 
   // ---------------- PLACE ORDER ----------------
-  async placeOrder(req: AuthRequest, res: Response): Promise<void> {
+  async placeOrder(req: AuthRequest, res: Response) {
     try {
       const userId = req.user!.userId;
-      await this.sessionService.getSessionOrThrow(userId); // Validate session
+      await this.sessionService.getSessionOrThrow(userId);
 
       const result = await ICICIOrderService.placeOrder(userId, req.body);
       res.json({ success: true, data: result });
@@ -31,7 +31,7 @@ export class ICICIOrderController {
   }
 
   // ---------------- MODIFY ORDER ----------------
-  async modifyOrder(req: AuthRequest, res: Response): Promise<void> {
+  async modifyOrder(req: AuthRequest, res: Response) {
     try {
       const userId = req.user!.userId;
       await this.sessionService.getSessionOrThrow(userId);
@@ -44,7 +44,7 @@ export class ICICIOrderController {
   }
 
   // ---------------- CANCEL ORDER ----------------
-  async cancelOrder(req: AuthRequest, res: Response): Promise<void> {
+  async cancelOrder(req: AuthRequest, res: Response) {
     try {
       const userId = req.user!.userId;
       await this.sessionService.getSessionOrThrow(userId);
@@ -63,7 +63,7 @@ export class ICICIOrderController {
   }
 
   // ---------------- ORDER BOOK ----------------
-  async getOrderBook(req: AuthRequest, res: Response): Promise<void> {
+  async getOrderBook(req: AuthRequest, res: Response) {
     try {
       const userId = req.user!.userId;
       await this.sessionService.getSessionOrThrow(userId);
@@ -76,7 +76,7 @@ export class ICICIOrderController {
   }
 
   // ---------------- POSITIONS ----------------
-  async getPositions(req: AuthRequest, res: Response): Promise<void> {
+  async getPositions(req: AuthRequest, res: Response) {
     try {
       const userId = req.user!.userId;
       await this.sessionService.getSessionOrThrow(userId);
@@ -89,7 +89,7 @@ export class ICICIOrderController {
   }
 
   // ---------------- HOLDINGS ----------------
-  async getHoldings(req: AuthRequest, res: Response): Promise<void> {
+  async getHoldings(req: AuthRequest, res: Response) {
     try {
       const userId = req.user!.userId;
       await this.sessionService.getSessionOrThrow(userId);
