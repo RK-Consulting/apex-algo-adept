@@ -33,7 +33,7 @@ import { strategyRouter as strategiesRouter } from "./routes/strategies.js";
 import { watchlistRouter } from "./routes/watchlist.js";
 import { credentialsRouter } from "./routes/credentials.js";
 import { aiRouter } from "./routes/ai.js";
-import redisDevRouter from "./routes/redis.js";
+import { redisDevRouter } from "./routes/redis.js";
 
 const app = express();
 
