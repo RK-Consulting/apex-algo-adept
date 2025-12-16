@@ -1,6 +1,17 @@
 // backend/src/middleware/rateLimiter.ts
 import rateLimit from "express-rate-limit";
 
+/**
+ * Rate Limiters for AlphaForge - Prevents brute-force on auth, throttles API for Breeze orders
+ */
+export const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15 minutes
+  max: 5,  // 5 attempts per IP
+  message: { error: 'Too many login attempts, try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10, // 10 requests per IP
@@ -12,7 +23,7 @@ export const apiLimiter = rateLimit({
 // For sensitive routes like auth
 export const authLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 hour
-  max: 100,
+  max: 10,
   message: { error: "Too many auth attempts — try ." },
 });
 
