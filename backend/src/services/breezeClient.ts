@@ -9,12 +9,12 @@
  * - Circuit breaker protection
  * - Redis quote caching (5s TTL)
  * - Comprehensive error mapping (401 → session invalidate)
- * - Correct BreezeConnect SDK usage (factory function, not class)
+ * - Correct BreezeConnect SDK usage (class constructor with `new`)
  * 
  * All API calls flow through breezeRequest() for consistency
  */
 
-import BreezeConnect from "breezeconnect"; // Factory function, not class
+import BreezeConnect from "breezeconnect"; // Class constructor — use with `new`
 import axios, { AxiosError } from 'axios';
 import { Agent } from 'https';
 import { calculateChecksum, getTimestamp } from '../utils/breezeChecksum';
@@ -30,7 +30,7 @@ const RATE_LIMIT_PER_MINUTE = 100;
 const RATE_LIMIT_WINDOW_MS = 60000;
 const userRateLimits = new Map<string, { count: number; resetAt: number }>();
 
-// HTTPS Agent for connection pooling (~50ms vs 200ms per request)
+// HTTPS Agent for connection pooling
 const httpsAgent = new Agent({
   keepAlive: true,
   maxSockets: 50,
@@ -61,7 +61,7 @@ function checkRateLimit(userId: string): boolean {
   return true;
 }
 
-// Main gateway function
+// Main gateway function (unchanged)
 export async function breezeRequest<T = any>(
   userId: string,
   method: 'GET' | 'POST' | 'PUT' | 'DELETE',
@@ -82,7 +82,6 @@ export async function breezeRequest<T = any>(
       throw new Error('ICICI not connected or invalid session.');
     }
 
-    // Special handling for CustomerDetails (different auth)
     if (endpoint.includes('customerdetails')) {
       const response = await iciciCircuitBreaker.execute(() =>
         retryWithBackoff(() =>
@@ -103,7 +102,6 @@ export async function breezeRequest<T = any>(
       return response.data;
     }
 
-    // Standard authenticated endpoints
     const timestamp = getTimestamp();
     const checksum = calculateChecksum(timestamp, payload, session.api_secret);
 
@@ -133,36 +131,31 @@ export async function breezeRequest<T = any>(
     console.log(`[Breeze] ${method} ${endpoint} - Success (${Date.now() - startTime}ms)`);
     return response.data;
   } catch (error: any) {
-    // Detailed error handling (same as before)
-    if (axios.isAxiosError(error)) {
-      const axiosError = error as AxiosError;
-      if (axiosError.response?.status === 401) {
-        await SessionService.getInstance().invalidateSession(userId);
-        throw new Error('ICICI session expired. Please reconnect.');
-      }
-      // ... (keep your existing detailed mapping)
+    if (axios.isAxiosError(error) && error.response?.status === 401) {
+      await SessionService.getInstance().invalidateSession(userId);
+      throw new Error('ICICI session expired. Please reconnect.');
     }
     throw error;
   }
 }
 
-// Convenience wrappers (unchanged signatures)
+// Convenience wrappers (unchanged)
 export async function getCustomerDetails(
   userId: string,
   apisession: string,
-  _apiKey?: string // Optional — apiKey comes from session
+  _apiKey?: string
 ) {
   return breezeRequest(userId, 'GET', '/api/v1/customerdetails', {
     SessionToken: apisession
   });
 }
 
-// ... (all other wrappers unchanged: placeOrder, getOrders, etc.)
+// ... (keep all other wrappers: placeOrder, getOrders, etc.)
 
 /**
  * Factory for BreezeConnect instance (used for WebSocket streaming)
  * 
- * Correct usage: BreezeConnect is a factory function, not a class
+ * Correct usage: BreezeConnect is a class — instantiate with `new`
  */
 export function getBreezeInstance(session: {
   api_key: string;
@@ -173,8 +166,8 @@ export function getBreezeInstance(session: {
     throw new Error("Invalid session for BreezeConnect instance");
   }
 
-  // Correct: Call as function, not new
-  const breeze = BreezeConnect({
+  // Correct: Use `new` constructor
+  const breeze = new BreezeConnect({
     appKey: session.api_key,
   });
 
