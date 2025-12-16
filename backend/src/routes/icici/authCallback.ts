@@ -1,26 +1,26 @@
 // backend/src/routes/icici/authCallback.ts
 /**
  * ICICI Breeze Authentication Callback Handler
- * 
+ *
  * Supports Dual Flows for Maximum Compatibility:
  * 1. GET /auth/callback: If ICICI redirects with session_token directly (custom/older setups)
- * 2. POST /auth/complete: Standard Breeze flow — exchanges temporary apisession (API_Session) 
+ * 2. POST /auth/complete: Standard Breeze flow — exchanges temporary apisession (API_Session)
  *    for permanent session_token via server-side CustomerDetails call (avoids CORS/403)
- * 
+ *
  * Security:
  * - All endpoints JWT-protected + rate-limited
  * - Session saved via SessionService (AES-256 encrypted + Redis cache)
  * - No sensitive tokens exposed in frontend redirects
- * 
+ *
  * Fixes persistent 403: CustomerDetails called server-side
  */
 
 import { Router } from "express";
 import debug from "debug";
 import { AuthRequest } from "../../middleware/auth.js";
-import { authenticateToken } from "../../middleware/auth.js"; // Consistent middleware
+import { authenticateToken } from "../../middleware/auth.js";
 import { iciciLimiter } from "../../middleware/rateLimiter.js";
-import { getCustomerDetails } from "../../services/breezeClient.js"; // Wrapper for CustomerDetails API
+import { getCustomerDetails } from "../../services/breezeClient.js";
 import { SessionService } from "../../services/sessionService.js";
 
 const router = Router();
@@ -42,10 +42,19 @@ router.get(
 
       const userId = req.user!.userId;
 
+      // Safely extract apisession as string | undefined (handles undefined or array)
+      const safeApisession = Array.isArray(apisession)
+        ? apisession[0]
+        : apisession;
+
       await SessionService.getInstance().saveSession(userId, {
         session_token: sessionToken,
-        apisession: apisession as string | undefined,
-        user_details: customerDetails ? JSON.parse(customerDetails as string) : undefined,
+        apisession: safeApisession, // Now correctly typed as string | undefined
+        user_details: customerDetails
+          ? typeof customerDetails === "string"
+            ? JSON.parse(customerDetails)
+            : customerDetails
+          : undefined,
       });
 
       log("Direct ICICI session saved (GET flow) for user %s", userId);
@@ -86,7 +95,7 @@ router.post(
       // Save permanent session
       await SessionService.getInstance().saveSession(userId, {
         session_token: sessionToken,
-        apisession, // Optional: store temporary for debugging
+        apisession, // Store temporary apisession for debugging/reference
         user_details: cdData?.Success, // Full customer details
       });
 
