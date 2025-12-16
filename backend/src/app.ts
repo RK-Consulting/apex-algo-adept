@@ -33,7 +33,7 @@ import { strategyRouter as strategiesRouter } from "./routes/strategies.js";
 import { watchlistRouter } from "./routes/watchlist.js";
 import { credentialsRouter } from "./routes/credentials.js";
 import { aiRouter } from "./routes/ai.js";
-import redisRouter from "./routes/redis.js";
+import redisDevRouter from "./routes/redis.js";
 
 const app = express();
 
@@ -79,7 +79,7 @@ app.use("/api/credentials", authenticateToken, credentialsRouter);
 app.use("/api/strategies", authenticateToken, strategiesRouter);
 app.use("/api/watchlist", authenticateToken, watchlistRouter);
 app.use("/api/ai", authenticateToken, aiRouter);
-app.use("/api/redis", redisRouter); // Dev-only
+app.use("/api/redis", redisDevRouter); // Dev-only
 
 // ICICI Breeze Protected Routes
 app.use("/api/icici/broker", authenticateToken, iciciBrokerRouter);
