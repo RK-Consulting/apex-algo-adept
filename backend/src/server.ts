@@ -35,7 +35,6 @@ try {
 // Graceful shutdown
 async function shutdown(signal: string) {
   console.log(`\n🛑 Received ${signal}. Shutting down gracefully...`);
-
   try {
     await new Promise<void>((resolve) =>
       server.close(() => {
@@ -44,21 +43,26 @@ async function shutdown(signal: string) {
       })
     );
 
+    // Stop all ICICI realtime streams
     try {
-      stopAllRealtimeStreams();
+      await stopAllRealtimeStreams();
       console.log("📡 All ICICI realtime streams stopped.");
     } catch (err) {
       console.error("⚠ Error stopping realtime streams:", err);
     }
 
+    // Close DB pool
     try {
       await pool.end();
       console.log("🗄 PostgreSQL pool closed.");
     } catch (dbErr) {
       console.error("⚠ DB close error:", dbErr);
     }
+
+    // Close Redis
     await redis.quit();
     console.log("Redis connection closed.");
+
     console.log("👋 Shutdown complete.");
     process.exit(0);
   } catch (err) {
@@ -68,9 +72,4 @@ async function shutdown(signal: string) {
 }
 
 process.on("SIGINT", () => shutdown("SIGINT"));
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  await stopAllRealtimeStreams();
-  redis.quit();
-  process.exit(0);
-});
+process.on("SIGTERM", () => shutdown("SIGTERM"));
