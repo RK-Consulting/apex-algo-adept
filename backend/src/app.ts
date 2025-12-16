@@ -1,93 +1,94 @@
 // backend/src/app.ts
+/**
+ * AlphaForge Backend - Secure & Performant Express Configuration
+ * 
+ * Key Features:
+ * - Customized Helmet for balanced security (CSP delegated to Nginx for precision)
+ * - Health check endpoint for PM2/Nginx/DigitalOcean monitoring
+ * - Rate limiting, JWT auth, Redis-cached sessions
+ * - Optimized for ICICI Breeze real-time streaming and order execution
+ * 
+ * CORS & primary CSP handled at Nginx level → no cors() middleware
+ */
+
 import dotenv from "dotenv";
 dotenv.config({ path: "/var/www/apex-algo-adept/backend/.env" });
-import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import compression from 'compression';
-import { loginLimiter, apiLimiter, authLimiter } from './middleware/rateLimiter.js';  // Consolidated
-import { authenticateToken } from './middleware/auth.js';  // Consistent naming
-import { errorHandler } from './middleware/errorHandler.js';
-import { requestLogger } from './middleware/logger.js';
-import { iciciOrderRouter } from './routes/icici/orders.js';  // Default import if named export missing
-import { iciciAuthRouter } from './routes/iciciAuth.js';
-import { iciciBrokerRouter } from './routes/iciciBroker.js';
-import { iciciStatusRouter } from './routes/iciciStatus.js';
-import { iciciStreamRouter } from './routes/icici/stream.js';
-import { strategiesRouter } from './routes/strategies.js';
-import { watchlistRouter } from './routes/watchlist.js';
-import { authRouter } from './routes/auth.js';
-import { credentialsRouter } from './routes/credentials.js';
-import { aiRouter } from './routes/ai.js';
-import { redisRouter } from './routes/redis.js';
-// (REMOVE unused authLogin/authCallback routers)
+
+import express from "express";
+import helmet from "helmet";
+import compression from "compression";
+import { loginLimiter, apiLimiter, authLimiter } from "./middleware/rateLimiter.js";
+import { authenticateToken } from "./middleware/auth.js";
+import { errorHandler } from "./middleware/errorHandler.js";
+import { requestLogger } from "./middleware/logger.js";
+
+// === Route Imports (matching actual exports) ===
+import authRouter from "./routes/auth.js";
+import iciciOrderRouter from "./routes/icici/orders.js";
+import { iciciAuthRouter } from "./routes/iciciAuth.js";
+import { iciciBrokerRouter } from "./routes/iciciBroker.js";
+import { iciciStatusRouter } from "./routes/iciciStatus.js";
+import { iciciStreamRouter } from "./routes/icici/stream.js";
+import { strategyRouter as strategiesRouter } from "./routes/strategies.js";
+import { watchlistRouter } from "./routes/watchlist.js";
+import { credentialsRouter } from "./routes/credentials.js";
+import { aiRouter } from "./routes/ai.js";
+import redisRouter from "./routes/redis.js";
 
 const app = express();
 
-// Security, compression, parsers
+// === Security Middleware ===
 app.use(
   helmet({
+    // Primary CSP is defined in Nginx (more precise control over 'unsafe-inline' for React)
     contentSecurityPolicy: false,
+    // Allows embedding in cross-origin contexts if needed (e.g., future iframe integrations)
     crossOriginEmbedderPolicy: false,
+    // Permits cross-origin resource loading (safe with JWT auth + Nginx origin restriction)
     crossOriginResourcePolicy: { policy: "cross-origin" },
+    // Keep other defaults: HSTS (reinforced by Nginx), X-Frame-Options, etc.
   })
 );
-//app.use(cors({ origin: process.env.FRONTEND_URL || 'https://alphaforge.skillsifter.in' }));
-app.use(compression());
+
+app.use(compression()); // Fallback; primary Brotli/Gzip via Nginx
 app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(requestLogger);
 
-// Health check
+// === Health Check Endpoint (Public - No Auth) ===
 app.get("/health", (_req, res) =>
   res.status(200).json({
     status: "OK",
     service: "alphaforge-api",
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
+    environment: process.env.NODE_ENV || "production",
+    version: process.env.npm_package_version || "1.0.0",
   })
 );
 
-// -----------------------------------------------------------
-// CORE API
-// -----------------------------------------------------------
+// === Rate Limiting ===
+app.use("/api/auth/login", loginLimiter);
+app.use("/api/auth/register", loginLimiter);
+app.use("/api", apiLimiter);
+app.use("/api/auth", authLimiter);
+
+// === Route Mounting ===
 app.use("/api/auth", authRouter);
-app.use('/api/credentials', authenticateToken, credentialsRoutes);
-app.use('/api/strategies', authenticateToken, strategiesRoutes);
-app.use('/api/watchlist', authenticateToken, watchlistRoutes);
-app.use('/api/ai', authenticateToken, aiRoutes);
-app.use('/api/redis', redisRoutes);  // Dev-only
-app.use('/api/icici/broker', authenticateToken, iciciBrokerRoutes);
-app.use('/api/icici/status', authenticateToken, iciciStatusRoutes);
-app.use('/api/icici/stream', authenticateToken, iciciStreamRoutes);
 
-/* check below
-// Apply globally or selectively
-app.use("/api/", apiLimiter);                           // 100 req/min for all API
-app.use("/api/icici/auth/complete", loginLimiter);      // 10 attempts per 15 min for ICICI login
-app.use("/api/auth/login", loginLimiter);               // also protect your own login
-// Auth routes with stricter limiter
-app.use("/api/auth", authLimiter, authRouter);
-*/
+app.use("/api/credentials", authenticateToken, credentialsRouter);
+app.use("/api/strategies", authenticateToken, strategiesRouter);
+app.use("/api/watchlist", authenticateToken, watchlistRouter);
+app.use("/api/ai", authenticateToken, aiRouter);
+app.use("/api/redis", redisRouter); // Dev-only
 
-// -----------------------------------------------------------
-// ICICI DIRECT API STACK (FINAL + CORRECT)
-// -----------------------------------------------------------
+// ICICI Breeze Protected Routes
+app.use("/api/icici/broker", authenticateToken, iciciBrokerRouter);
+app.use("/api/icici/status", authenticateToken, iciciStatusRouter);
+app.use("/api/icici/stream", authenticateToken, iciciStreamRouter);
+app.use("/api/icici", authenticateToken, iciciAuthRouter);
+app.use("/api/icici", authenticateToken, iciciOrderRouter);
 
-// 🔥 This router contains:
-// GET /api/icici/auth/login         → opens ICICI login page
-// POST /api/icici/auth/callback     → receives apisession
-app.use('/api/icici', authenticateToken, iciciAuthRoutes);
-// Orders engine
-app.use('/api/icici', authenticateToken, iciciOrderRoutes);
-
-// Backtesting
-app.use("/api/icici/backtest", iciciBacktestRouter);
-
-// -----------------------------------------------------------
-// GLOBAL ERROR HANDLER
-// -----------------------------------------------------------
+// === Global Error Handler ===
 app.use(errorHandler);
-//app.post("/api/icici/auth/complete", loginLimiter, iciciAuthCallbackRouter);
 
 export default app;
