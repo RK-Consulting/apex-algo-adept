@@ -5,18 +5,31 @@ import debug from "debug";
 
 const log = debug("apex:auth");
 
+/**
+ * Extended Request with authenticated user
+ * Normalized to userId (string) for consistency across AlphaForge backend
+ */
 export interface AuthRequest extends Request {
   user?: {
-    userId: string;   // ✅ CHANGED (was id)
+    userId: string; // Normalized from userId / id / sub
     email: string;
   };
 }
 
+/**
+ * JWT Authentication Middleware
+ * 
+ * - Supports Bearer token in Authorization header
+ * - Flexible payload parsing (userId / id / sub)
+ * - Normalizes to req.user.userId
+ * - Secure secret handling (trims quotes from .env)
+ * - Comprehensive logging for debugging in PM2
+ */
 export const authenticateToken = (
   req: AuthRequest,
   res: Response,
   next: NextFunction
-) => {
+): void => {
   const authHeader =
     (req.headers["authorization"] as string) ||
     (req.headers["Authorization"] as string);
@@ -45,7 +58,7 @@ export const authenticateToken = (
     const decoded = jwt.verify(token, jwtSecret) as JwtPayload;
     const anyDecoded = decoded as any;
 
-    // Accept multiple possible keys
+    // Flexible key support for future compatibility
     const userId =
       anyDecoded.userId ||
       anyDecoded.id ||
@@ -57,14 +70,14 @@ export const authenticateToken = (
       "";
 
     if (!userId) {
-      log("❌ JWT payload missing userId:", decoded);
+      log("❌ JWT payload missing user identifier:", decoded);
       return res.status(403).json({ error: "Invalid token payload" });
     }
 
-    // ✅ NORMALIZE TO userId (NOT id!)
+    // Normalize for consistent usage across all routes/services
     req.user = {
       userId: String(userId),
-      email: String(email || ""),
+      email: String(email),
     };
 
     return next();
