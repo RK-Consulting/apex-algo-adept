@@ -4,21 +4,22 @@ dotenv.config({ path: "/var/www/apex-algo-adept/backend/.env" });
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import compression from 'compression';
 import { loginLimiter, apiLimiter, authLimiter } from './middleware/rateLimiter.js';  // Consolidated
 import { authenticateToken } from './middleware/auth.js';  // Consistent naming
 import { errorHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/logger.js';
-import { iciciOrderRoutes } from './routes/icici/orders.js';  // Default import if named export missing
-import { iciciAuthRoutes } from './routes/iciciAuth.js';
-import { iciciBrokerRoutes } from './routes/iciciBroker.js';
-import { iciciStatusRoutes } from './routes/iciciStatus.js';
-import { iciciStreamRoutes } from './routes/icici/stream.js';
-import { strategiesRoutes } from './routes/strategies.js';
-import { watchlistRoutes } from './routes/watchlist.js';
-import { authRoutes } from './routes/auth.js';
-import { credentialsRoutes } from './routes/credentials.js';
-import { aiRoutes } from './routes/ai.js';
-import { redisRoutes } from './routes/redis.js';
+import { iciciOrderRouter } from './routes/icici/orders.js';  // Default import if named export missing
+import { iciciAuthRouter } from './routes/iciciAuth.js';
+import { iciciBrokerRouter } from './routes/iciciBroker.js';
+import { iciciStatusRouter } from './routes/iciciStatus.js';
+import { iciciStreamRouter } from './routes/icici/stream.js';
+import { strategiesRouter } from './routes/strategies.js';
+import { watchlistRouter } from './routes/watchlist.js';
+import { authRouter } from './routes/auth.js';
+import { credentialsRouter } from './routes/credentials.js';
+import { aiRouter } from './routes/ai.js';
+import { redisRouter } from './routes/redis.js';
 // (REMOVE unused authLogin/authCallback routers)
 
 const app = express();
