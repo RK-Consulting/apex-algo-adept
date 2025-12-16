@@ -37,6 +37,32 @@ export const fetchQuote = async (userId: string, params: {
   }
 };
 
+
+// backend/src/services/iciciRealtime.ts (add to class/end)
+export class ICICIRealtimeService {
+  // ... existing
+
+  static async startUserStream(userId: string, callback: (tick: { symbol: string; ltp: number }) => void) {
+    // Breeze WebSocket init logic
+  }
+
+  static async stopUserStream(userId: string) {
+    // Cleanup
+  }
+
+  static async subscribeSymbol(userId: string, symbol: string) {
+    // Subscribe
+  }
+
+  static async unsubscribeSymbol(userId: string, symbol: string) {
+    // Unsubscribe
+  }
+
+  static async stopAllRealtimeStreams() {
+    // Global cleanup for server shutdown
+  }
+}
+
 // In your WS onMessage/handler:
  // const quote = await fetchQuote(userId, parsedParams);
 // ws.send(JSON.stringify(quote));
