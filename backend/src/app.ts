@@ -1,31 +1,24 @@
 // backend/src/app.ts
 import dotenv from "dotenv";
 dotenv.config({ path: "/var/www/apex-algo-adept/backend/.env" });
-
-import express from "express";
-import helmet from "helmet";
-import compression from "compression";
-
-import { requestLogger } from "./middleware/logger.js";
-import { errorHandler } from "./middleware/errorHandler.js";
-
-// Core Routers
-import authRouter from "./routes/auth.js";
-import { strategyRouter } from "./routes/strategies.js";
-import { credentialsRouter } from "./routes/credentials.js";
-import { watchlistRouter } from "./routes/watchlist.js";
-import { loginLimiter, apiLimiter } from "./middleware/rateLimiter.js";
-import { apiLimiter, authLimiter } from "./middleware/rateLimiter.js";
-
-// -----------------------------------------------------------
-// ICICI ROUTERS (CLEANED + CORRECT)
-// -----------------------------------------------------------
-import { iciciAuthRouter } from "./routes/iciciAuth.js";               // /api/icici/auth/*
-import { iciciOrderRoutes } from "./routes/icici/orders.js";          // /api/icici/orders/*
-import { iciciStreamRouter } from "./routes/icici/stream.js";         // /api/icici/stream/*
-import { iciciStatusRouter } from "./routes/iciciStatus.js";          // /api/icici/status
-import { iciciBrokerRouter } from "./routes/iciciBroker.js";          // /api/icici/broker
-import { iciciBacktestRouter } from "./routes/iciciBacktest.js";      // /api/icici/backtest
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import { loginLimiter, apiLimiter, authLimiter } from './middleware/rateLimiter.js';  // Consolidated
+import { authenticateToken } from './middleware/auth.js';  // Consistent naming
+import { errorHandler } from './middleware/errorHandler.js';
+import { requestLogger } from './middleware/logger.js';
+import { iciciOrderRoutes } from './routes/icici/orders.js';  // Default import if named export missing
+import { iciciAuthRoutes } from './routes/iciciAuth.js';
+import { iciciBrokerRoutes } from './routes/iciciBroker.js';
+import { iciciStatusRoutes } from './routes/iciciStatus.js';
+import { iciciStreamRoutes } from './routes/icici/stream.js';
+import { strategiesRoutes } from './routes/strategies.js';
+import { watchlistRoutes } from './routes/watchlist.js';
+import { authRoutes } from './routes/auth.js';
+import { credentialsRoutes } from './routes/credentials.js';
+import { aiRoutes } from './routes/ai.js';
+import { redisRoutes } from './routes/redis.js';
 // (REMOVE unused authLogin/authCallback routers)
 
 const app = express();
@@ -38,7 +31,7 @@ app.use(
     crossOriginResourcePolicy: { policy: "cross-origin" },
   })
 );
-
+//app.use(cors({ origin: process.env.FRONTEND_URL || 'https://alphaforge.skillsifter.in' }));
 app.use(compression());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
@@ -58,16 +51,23 @@ app.get("/health", (_req, res) =>
 // CORE API
 // -----------------------------------------------------------
 app.use("/api/auth", authRouter);
-app.use("/api/strategies", strategyRouter);
-app.use("/api/credentials", credentialsRouter);
-app.use("/api/watchlist", watchlistRouter);
+app.use('/api/credentials', authenticateToken, credentialsRoutes);
+app.use('/api/strategies', authenticateToken, strategiesRoutes);
+app.use('/api/watchlist', authenticateToken, watchlistRoutes);
+app.use('/api/ai', authenticateToken, aiRoutes);
+app.use('/api/redis', redisRoutes);  // Dev-only
+app.use('/api/icici/broker', authenticateToken, iciciBrokerRoutes);
+app.use('/api/icici/status', authenticateToken, iciciStatusRoutes);
+app.use('/api/icici/stream', authenticateToken, iciciStreamRoutes);
 
+/* check below
 // Apply globally or selectively
 app.use("/api/", apiLimiter);                           // 100 req/min for all API
 app.use("/api/icici/auth/complete", loginLimiter);      // 10 attempts per 15 min for ICICI login
 app.use("/api/auth/login", loginLimiter);               // also protect your own login
 // Auth routes with stricter limiter
 app.use("/api/auth", authLimiter, authRouter);
+*/
 
 // -----------------------------------------------------------
 // ICICI DIRECT API STACK (FINAL + CORRECT)
@@ -76,22 +76,12 @@ app.use("/api/auth", authLimiter, authRouter);
 // 🔥 This router contains:
 // GET /api/icici/auth/login         → opens ICICI login page
 // POST /api/icici/auth/callback     → receives apisession
-app.use("/api/icici", iciciAuthRouter);
-
-// Save API key/secret + apisession (optional storage)
-app.use("/api/icici/broker", iciciBrokerRouter);
-
-// Status checking
-app.use("/api/icici/status", iciciStatusRouter);
+app.use('/api/icici', authenticateToken, iciciAuthRoutes);
+// Orders engine
+app.use('/api/icici', authenticateToken, iciciOrderRoutes);
 
 // Backtesting
 app.use("/api/icici/backtest", iciciBacktestRouter);
-
-// WebSocket streaming (Breeze WS wrap)
-app.use("/api/icici/stream", iciciStreamRouter);
-
-// Orders engine
-app.use("/api/icici", iciciOrderRoutes);
 
 // -----------------------------------------------------------
 // GLOBAL ERROR HANDLER
