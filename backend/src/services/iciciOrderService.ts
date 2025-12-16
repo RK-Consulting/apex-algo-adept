@@ -23,9 +23,9 @@ export const placeOrder = async (userId: string, orderData: any): Promise<any> =
  */
 export const getOrders = async (
   userId: string,
-  exchangeCode: string,
-  fromDate: string,
-  toDate: string
+  exchangeCode: string = "NSE",
+  fromDate: string = "",
+  toDate: string = ""
 ): Promise<any> => {
   return await breezeRequest(userId, "GET", "/api/v1/order", {
     exchange_code: exchangeCode,
@@ -36,10 +36,11 @@ export const getOrders = async (
 
 /**
  * Get details of a specific order
+ * exchangeCode defaults to "NSE" for retail users
  */
 export const getOrderDetail = async (
   userId: string,
-  exchangeCode: string,
+  exchangeCode: string = "NSE",
   orderId: string
 ): Promise<any> => {
   return await breezeRequest(userId, "GET", "/api/v1/order", {
@@ -53,7 +54,7 @@ export const getOrderDetail = async (
  */
 export const cancelOrder = async (
   userId: string,
-  exchangeCode: string,
+  exchangeCode: string = "NSE",
   orderId: string
 ): Promise<any> => {
   return await breezeRequest(userId, "DELETE", "/api/v1/order", {
@@ -81,7 +82,7 @@ export const getPositions = async (userId: string): Promise<any> => {
  */
 export const getHoldings = async (
   userId: string,
-  exchangeCode: string,
+  exchangeCode: string = "NSE",
   fromDate?: string,
   toDate?: string
 ): Promise<any> => {
@@ -102,7 +103,7 @@ export const getFundsBalance = async (userId: string): Promise<any> => {
 /**
  * Get margin information
  */
-export const getMargin = async (userId: string, exchangeCode: string): Promise<any> => {
+export const getMargin = async (userId: string, exchangeCode: string = "NSE"): Promise<any> => {
   return await breezeRequest(userId, "GET", "/api/v1/margin", {
     exchange_code: exchangeCode,
   });
