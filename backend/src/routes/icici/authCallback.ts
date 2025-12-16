@@ -1,72 +1,108 @@
 // backend/src/routes/icici/authCallback.ts
+/**
+ * ICICI Breeze Authentication Callback Handler
+ * 
+ * Supports Dual Flows for Maximum Compatibility:
+ * 1. GET /auth/callback: If ICICI redirects with session_token directly (custom/older setups)
+ * 2. POST /auth/complete: Standard Breeze flow — exchanges temporary apisession (API_Session) 
+ *    for permanent session_token via server-side CustomerDetails call (avoids CORS/403)
+ * 
+ * Security:
+ * - All endpoints JWT-protected + rate-limited
+ * - Session saved via SessionService (AES-256 encrypted + Redis cache)
+ * - No sensitive tokens exposed in frontend redirects
+ * 
+ * Fixes persistent 403: CustomerDetails called server-side
+ */
+
 import { Router } from "express";
 import debug from "debug";
-import { AuthRequest } from '../../middleware/auth.js';
-import { authenticateJWT } from "../../middleware/auth.js"; // your JWT middleware
-import { iciciLimiter } from "../../middleware/rateLimiter.js"; // optional but recommended
-import { breezeRequest, getCustomerDetails } from "../../services/breezeClient.js";
-import { SessionService } from "../../services/sessionService.js"; // adjust if name differs
-import { authenticateToken } from '../../middleware/auth.js';  // Correct name
+import { AuthRequest } from "../../middleware/auth.js";
+import { authenticateToken } from "../../middleware/auth.js"; // Consistent middleware
+import { iciciLimiter } from "../../middleware/rateLimiter.js";
+import { getCustomerDetails } from "../../services/breezeClient.js"; // Wrapper for CustomerDetails API
+import { SessionService } from "../../services/sessionService.js";
 
 const router = Router();
 const log = debug("alphaforge:icici:callback");
 
-// STEP 1: ICICI GET redirect (no auth)
-//router.get("/api/icici/auth/callback", async (req, res) => {
-  // ICICI Breeze OAuth Callback - Saves session post-auth
-router.get('/api/icici/auth/callback', authenticateToken, async (req: AuthRequest, res) => {
-  try {
-    const { session_token: sessionToken, apisession, customer_details: customerDetails } = req.query;
-    if (!sessionToken || typeof sessionToken !== 'string') {
-      return res.status(400).json({ error: 'Invalid session token from ICICI' });
-    }
-
-    const userId = req.user!.userId;
-    await SessionService.getInstance().saveSession(userId, {  // saveSession, not storeSession
-      session_token: sessionToken as string,
-      apisession: apisession as string,
-      user_details: customerDetails,  // JSON from Breeze
-    });
-
-    // Redirect to frontend dashboard with success
-    const redirectUrl = `${process.env.FRONTEND_URL || 'https://alphaforge.skillsifter.in'}/dashboard?connected=true`;
-    res.redirect(redirectUrl);
-  } catch (error: any) {
-    console.error('[ICICI Callback] Error:', error.message);
-    res.status(500).json({ error: 'Authentication failed' });
-  }
-});
-// STEP 2: Complete auth (POST from frontend)
-router.post(
-  "/api/icici/auth/complete",
-  iciciLimiter, // rate limit brute force
-  authenticateJWT,
-  async (req: any, res) => {
-    const { apisession } = req.body;
-    const userId = req.user.userId;
-
-    if (!apisession) {
-      return res.status(400).json({ error: "apisession required" });
-    }
-
+// GET: Direct callback with session_token (fallback/compatibility)
+router.get(
+  "/auth/callback",
+  iciciLimiter,
+  authenticateToken,
+  async (req: AuthRequest, res) => {
     try {
-      // Use breezeClient's special CustomerDetails wrapper
-      const cdData = await getCustomerDetails(userId, apisession, ""); // apiKey fetched internally via session
+      const { session_token: sessionToken, apisession, customer_details: customerDetails } = req.query;
+
+      if (!sessionToken || typeof sessionToken !== "string") {
+        log("Missing or invalid session_token in GET callback for user %s", req.user?.userId);
+        return res.status(400).json({ success: false, error: "Invalid session token from ICICI" });
+      }
+
+      const userId = req.user!.userId;
+
+      await SessionService.getInstance().saveSession(userId, {
+        session_token: sessionToken,
+        apisession: apisession as string | undefined,
+        user_details: customerDetails ? JSON.parse(customerDetails as string) : undefined,
+      });
+
+      log("Direct ICICI session saved (GET flow) for user %s", userId);
+
+      const frontendUrl = process.env.FRONTEND_URL || "https://alphaforge.skillsifter.in";
+      const redirectUrl = `${frontendUrl}/dashboard?icici_connected=true&flow=direct`;
+
+      return res.redirect(redirectUrl);
+    } catch (error: any) {
+      log("GET callback error for user %s: %s", req.user?.userId, error.message);
+      return res.status(500).json({ success: false, error: "Failed to process ICICI callback" });
+    }
+  }
+);
+
+// POST: Standard Breeze flow — exchange temporary apisession for permanent session_token
+router.post(
+  "/auth/complete",
+  iciciLimiter,
+  authenticateToken,
+  async (req: AuthRequest, res) => {
+    try {
+      const { apisession } = req.body;
+      const userId = req.user!.userId;
+
+      if (!apisession || typeof apisession !== "string") {
+        return res.status(400).json({ success: false, error: "apisession required" });
+      }
+
+      // Server-side call to CustomerDetails — avoids CORS/403 preflight issues
+      const cdData = await getCustomerDetails(userId, apisession);
 
       const sessionToken = cdData?.Success?.session_token;
       if (!sessionToken) {
         throw new Error("Failed to retrieve session_token from CustomerDetails");
       }
 
-      // Store/update session (your SessionService handles this)
-      await SessionService.getInstance().storeSession(userId, { session_token: sessionToken });
+      // Save permanent session
+      await SessionService.getInstance().saveSession(userId, {
+        session_token: sessionToken,
+        apisession, // Optional: store temporary for debugging
+        user_details: cdData?.Success, // Full customer details
+      });
 
-      log("ICICI connection successful for user %s", userId);
+      log("ICICI Breeze connection completed (POST flow) for user %s", userId);
 
-      return res.json({ success: true, message: "ICICI Breeze connected!" });
+      return res.json({
+        success: true,
+        message: "ICICI Breeze connected successfully!",
+        flow: "complete",
+      });
     } catch (error: any) {
-      log("Auth complete error:", error.message);
-      return res.status(500).json({ error: error.message || "ICICI connection failed" });
+      log("POST complete error for user %s: %s", req.user?.userId, error.message);
+      return res.status(500).json({
+        success: false,
+        error: error.message || "ICICI connection failed",
+      });
     }
   }
 );
