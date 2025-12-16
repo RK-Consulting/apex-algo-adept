@@ -18,18 +18,20 @@ export interface AuthRequest extends Request {
 
 /**
  * JWT Authentication Middleware
- * 
+ *
  * - Supports Bearer token in Authorization header
  * - Flexible payload parsing (userId / id / sub)
  * - Normalizes to req.user.userId
  * - Secure secret handling (trims quotes from .env)
  * - Comprehensive logging for debugging in PM2
+ *
+ * Note: Return type intentionally omitted — Express middleware allows early res.send()
  */
 export const authenticateToken = (
   req: AuthRequest,
   res: Response,
   next: NextFunction
-): void => {
+) => {
   const authHeader =
     (req.headers["authorization"] as string) ||
     (req.headers["Authorization"] as string);
