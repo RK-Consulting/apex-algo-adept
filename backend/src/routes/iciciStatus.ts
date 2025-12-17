@@ -35,7 +35,7 @@ iciciStatusRouter.get("/", authenticateToken, async (req: AuthRequest, res) => {
       [userId]
     );
 
-    const hasCredentials = credResult.rowCount > 0;
+    const hasCredentials = (credResult.rowCount ?? 0) > 0;
 
     // Check active Breeze session (server-side only)
     const session = await SessionService.getInstance().getSession(userId);
