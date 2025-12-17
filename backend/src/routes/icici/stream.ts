@@ -82,7 +82,7 @@ iciciStreamRouter.post("/subscribe", authenticateToken, async (req: AuthRequest,
       log(`Tick for user ${userId}: ${tick.symbol} @ ${tick.ltp}`);
     });
 
-    await subscribeSymbol(userId, symbol, exchange);
+    await subscribe(userId, symbol, exchange);
     log(`User ${userId} subscribed to ${symbol} (${exchange})`);
 
     res.json({ success: true, subscribed: symbol });
@@ -105,7 +105,7 @@ iciciStreamRouter.post("/unsubscribe", authenticateToken, async (req: AuthReques
       return res.status(400).json({ success: false, error: "symbol required" });
     }
 
-    await unsubscribeSymbol(userId, symbol, exchange);
+    await unsubscribe(userId, symbol, exchange);
     log(`User ${userId} unsubscribed from ${symbol} (${exchange})`);
 
     res.json({ success: true, unsubscribed: symbol });
