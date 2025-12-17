@@ -62,7 +62,8 @@ export async function breezeRequest<T = any>(
       const response = await iciciCircuitBreaker.execute(() =>
         retryWithBackoff(() =>
           breezeAxios.post(endpoint, {
-            SessionToken: payload.SessionToken || session.apisession,
+            //SessionToken: payload.SessionToken || session.apisession,
+            SessionToken: payload.SessionToken,
             AppKey: session.api_key
           })
         )
