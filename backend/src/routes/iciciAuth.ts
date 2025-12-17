@@ -104,7 +104,7 @@ router.post(
       }
 
       // 1️⃣ Call ICICI CustomerDetails to get Breeze session_token
-      const customer = await getCustomerDetails(apisession);
+      const customer = await getCustomerDetails(userId, apisession);
 
       if (!customer?.session_token) {
         throw new Error("Failed to obtain Breeze session_token");
