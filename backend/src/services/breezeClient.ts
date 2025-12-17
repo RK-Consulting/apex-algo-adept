@@ -167,9 +167,7 @@ export function getBreezeInstance(session: {
   }
 
   // Correct: Use `new` constructor
-  const breeze = new BreezeConnect({
-    appKey: session.api_key,
-  });
+  const breeze = new BreezeConnect(session.api_key);
 
   breeze.setSessionToken(session.session_token);
   return breeze;
