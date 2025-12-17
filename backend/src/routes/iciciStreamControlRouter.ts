@@ -15,7 +15,7 @@
 
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
-import { iciciRealtimeService } from "../../services/iciciRealtime.js";
+import { iciciRealtimeService } from "../services/iciciRealtime.js";
 import debug from "debug";
 
 const router = Router();
@@ -43,7 +43,7 @@ router.post("/subscribe", authenticateToken, async (req: AuthRequest, res) => {
   // Lazily ensure stream exists
   await iciciRealtimeService.startUserStream(userId, () => {});
 
-  subscribe(userId, symbol, exchange);
+  iciciRealtimeService.subscribe(userId, symbol, exchange);
 
   log("Subscribed %s (%s) for user %s", symbol, exchange, userId);
 
