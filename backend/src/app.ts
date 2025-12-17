@@ -68,6 +68,8 @@ app.get("/health", (_req, res) =>
   })
 );
 
+app.use("/api/auth", authRouter);
+app.use("/api/icici", iciciAuthRouter);
 // === Rate Limiting ===
 app.use("/api/auth/login", loginLimiter);
 app.use("/api/auth/register", loginLimiter);
@@ -75,7 +77,7 @@ app.use("/api", apiLimiter);
 
 
 // === Route Mounting ===
-app.use("/api/auth", authRouter);
+
 
 app.use("/api/credentials", authenticateToken, credentialsRouter);
 app.use("/api/strategies", authenticateToken, strategiesRouter);
@@ -87,7 +89,6 @@ app.use("/api/redis", redisDevRouter); // Dev-only
 app.use("/api/icici/broker", authenticateToken, iciciBrokerRouter);
 app.use("/api/icici/status", authenticateToken, iciciStatusRouter);
 app.use("/api/icici/stream", authenticateToken, iciciStreamRouter);
-app.use("/api/icici", iciciAuthRouter);
 app.use("/api/icici", authenticateToken, iciciOrderRouter);
 
 // === Global Error Handler ===
