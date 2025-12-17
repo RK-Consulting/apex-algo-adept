@@ -30,6 +30,7 @@ import { IncomingMessage } from "http";
 import { Socket } from "net";
 import { iciciRealtimeService } from "../../services/iciciRealtime.js";
 import { authenticateToken, AuthRequest } from "../../middleware/auth.js";
+import type { MarketTick } from "../../types/marketTick.js";
 
 const log = debug("apex:icici:stream");
 const errorLog = debug("apex:icici:stream:error");
@@ -72,7 +73,7 @@ iciciStreamRouter.post("/subscribe", authenticateToken, async (req: AuthRequest,
       return res.status(400).json({ success: false, error: "symbol required" });
     }
 
-    await iciciRealtimeService.startUserStream(userId, (tick: TickData) => {
+    await iciciRealtimeService.startUserStream(userId, (tick: MarketTick) => {
       log(`Tick for user ${userId}: ${tick.symbol} @ ${tick.ltp}`);
     });
 
@@ -179,7 +180,7 @@ export function initIciciStreamServer(server: any): WebSocketServer {
     log(`WebSocket connected for user ${userId}`);
 
     try {
-      await iciciRealtimeService.startUserStream(userId, (tick: TickData) => {
+      await iciciRealtimeService.startUserStream(userId, (tick: MarketTick) => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: "tick", data: tick }));
         }
