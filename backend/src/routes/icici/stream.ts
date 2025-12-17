@@ -77,7 +77,7 @@ iciciStreamRouter.post("/subscribe", authenticateToken, async (req: AuthRequest,
       log(`Tick for user ${userId}: ${tick.symbol} @ ${tick.ltp}`);
     });
 
-    await iciciRealtimeService.subscribe(userId, symbol, exchange);
+    iciciRealtimeService.subscribe(userId, symbol, exchange);
     log(`User ${userId} subscribed to ${symbol} (${exchange})`);
 
     res.json({ success: true, subscribed: symbol });
@@ -100,7 +100,7 @@ iciciStreamRouter.post("/unsubscribe", authenticateToken, async (req: AuthReques
       return res.status(400).json({ success: false, error: "symbol required" });
     }
 
-    await iciciRealtimeService.unsubscribe(userId, symbol, exchange);
+    iciciRealtimeService.unsubscribe(userId, symbol, exchange);
     log(`User ${userId} unsubscribed from ${symbol} (${exchange})`);
 
     res.json({ success: true, unsubscribed: symbol });
@@ -196,14 +196,14 @@ export function initIciciStreamServer(server: any): WebSocketServer {
           switch (action) {
             case "subscribe":
               if (!symbol) throw new Error("symbol required");
-              await iciciRealtimeService.subscribe(userId, symbol, exchange);
+              iciciRealtimeService.subscribe(userId, symbol, exchange);
               ws.send(JSON.stringify({ type: "subscribed", symbol }));
               log(`User ${userId} subscribed to ${symbol} via WS`);
               break;
 
             case "unsubscribe":
               if (!symbol) throw new Error("symbol required");
-              await iciciRealtimeService.unsubscribe(userId, symbol, exchange);
+              iciciRealtimeService.unsubscribe(userId, symbol, exchange);
               ws.send(JSON.stringify({ type: "unsubscribed", symbol }));
               log(`User ${userId} unsubscribed from ${symbol} via WS`);
               break;
@@ -222,12 +222,12 @@ export function initIciciStreamServer(server: any): WebSocketServer {
       });
 
       ws.on("close", async (code, reason) => {
-        await iciciRealtimeService.stopUserStream(userId);
+        iciciRealtimeService.stopUserStream(userId);
         log(`WebSocket closed for user ${userId} | Code: ${code} | Reason: ${reason}`);
       });
 
       ws.on("error", async (error: Error) => {
-        await iciciRealtimeService.stopUserStream(userId);
+        iciciRealtimeService.stopUserStream(userId);
         errorLog(`WebSocket error for user ${userId}:`, error.message);
       });
     } catch (error: any) {
