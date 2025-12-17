@@ -1,6 +1,60 @@
 import { useEffect } from "react";
 import { ICICI } from "@/lib/api";
 
+const FRONTEND_ORIGIN = window.location.origin;
+
+export default function ICICICallback() {
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const apisession = url.searchParams.get("apisession");
+
+    if (!apisession) {
+      notifyParent("ICICI_LOGIN_ERROR", "Missing apisession in callback");
+      return;
+    }
+
+    // Exchange apisession → session_token (server-side only)
+    ICICI.callback({ apisession })
+      .then(() => {
+        notifyParent("ICICI_LOGIN_SUCCESS");
+      })
+      .catch((err: any) => {
+        notifyParent(
+          "ICICI_LOGIN_ERROR",
+          err?.message || "ICICI login failed"
+        );
+      });
+  }, []);
+
+  function notifyParent(type: string, error?: string) {
+    if (window.opener && !window.opener.closed) {
+      window.opener.postMessage(
+        { type, error },
+        FRONTEND_ORIGIN // 🔐 strict origin
+      );
+      window.close();
+    } else {
+      // Fallback: same-tab flow
+      if (type === "ICICI_LOGIN_SUCCESS") {
+        window.location.href = "/dashboard?icici_connected=true";
+      } else {
+        window.location.href =
+          "/dashboard?icici_connected=false&error=" +
+          encodeURIComponent(error || "Login failed");
+      }
+    }
+  }
+
+  return (
+    <div style={{ padding: "2rem", fontSize: "1.1rem" }}>
+      <h2>Connecting to ICICI…</h2>
+      <p>Please wait. You will be redirected automatically.</p>
+    </div>
+  );
+}
+import { useEffect } from "react";
+import { ICICI } from "@/lib/api";
+
 export default function ICICICallback() {
   useEffect(() => {
     const url = new URL(window.location.href);
