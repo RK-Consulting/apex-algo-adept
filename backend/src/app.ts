@@ -72,7 +72,7 @@ app.get("/health", (_req, res) =>
 app.use("/api/auth/login", loginLimiter);
 app.use("/api/auth/register", loginLimiter);
 app.use("/api", apiLimiter);
-app.use("/api/auth", authLimiter);
+
 
 // === Route Mounting ===
 app.use("/api/auth", authRouter);
