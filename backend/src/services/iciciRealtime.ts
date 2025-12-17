@@ -12,7 +12,7 @@
 
 import WebSocket from "ws";
 import debug from "debug";
-import { SessionService } from "./sessionService";
+import { SessionService } from "./sessionService.js";
 
 const log = debug("alphaforge:icici:realtime");
 const errLog = debug("alphaforge:icici:realtime:error");
