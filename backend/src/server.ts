@@ -45,7 +45,7 @@ async function shutdown(signal: string) {
 
     // Stop all ICICI realtime streams
     try {
-      await stopAll();
+      await iciciRealtimeService.stopAll()
       console.log("📡 All ICICI realtime streams stopped.");
     } catch (err) {
       console.error("⚠ Error stopping realtime streams:", err);
