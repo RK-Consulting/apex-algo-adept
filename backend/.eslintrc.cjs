@@ -1,3 +1,5 @@
+//backend/.eslintrc.cjs
+
 module.exports = {
   env: {
     node: true,
