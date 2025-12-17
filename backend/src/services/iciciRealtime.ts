@@ -145,9 +145,16 @@ export class ICICIRealtimeService {
   }
 
   stopAll(): void {
-    for (const userId of this.streams.keys()) {
-      this.stopUserStream(userId);
+    if (!state || !state.streams) {
+    return;
     }
+
+    for (const ws of state.streams.values()) {
+      try {
+        ws.close();
+      } catch {}
+    }
+    state.streams.clear();
   }
 
   private startHeartbeat(stream: UserStream): void {
