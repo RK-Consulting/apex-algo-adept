@@ -14,7 +14,7 @@
 
 import pool from '../config/database.js';
 import debug from 'debug';
-import { getCachedSession, cacheSession, invalidateSessionCache } from './cache';
+import { getCachedSession, cacheSession, invalidateSessionCache } from './cache.js';
 
 const log = debug('alphaforge:session');
 
