@@ -12,6 +12,7 @@
  * - No session_token or apisession handled here
  * - No Breeze JWT / SDK usage
  */
+// backend/src/routes/iciciBroker.ts
 
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
@@ -27,7 +28,7 @@ const router = Router();
 const log = debug("alphaforge:icici:broker");
 
 /* -------------------------------------------------------
- * 1) STORE ICICI API CREDENTIALS (Encrypted)
+ * 1) STORE ICICI API CREDENTIALS (Encrypted as ONE blob)
  * -----------------------------------------------------*/
 router.post("/store", authenticateToken, async (req: AuthRequest, res) => {
   const userId = req.user!.userId;
@@ -40,35 +41,28 @@ router.post("/store", authenticateToken, async (req: AuthRequest, res) => {
     });
   }
 
-  const payload = {
-    api_key,
-    api_secret,
-    username: username || null,
-    password: password || null,
-  };
-
-  const encrypted = encryptDataRaw(payload, getEncryptionKey());
+  // Encrypt full payload as ONE unit
+  const encrypted = encryptDataRaw(
+    JSON.stringify({
+      api_key,
+      api_secret,
+      username: username || null,
+      password: password || null,
+    }),
+    getEncryptionKey()
+  );
 
   await query(
     `
-    INSERT INTO icici_credentials (user_id, api_key, api_secret, extra, created_at, updated_at)
-    VALUES ($1, $2, $3, $4, NOW(), NOW())
+    INSERT INTO icici_credentials (user_id, encrypted_blob, iv, created_at, updated_at)
+    VALUES ($1, $2, $3, NOW(), NOW())
     ON CONFLICT (user_id)
     DO UPDATE SET
-      api_key = EXCLUDED.api_key,
-      api_secret = EXCLUDED.api_secret,
-      extra = EXCLUDED.extra,
+      encrypted_blob = EXCLUDED.encrypted_blob,
+      iv = EXCLUDED.iv,
       updated_at = NOW()
     `,
-    [
-      userId,
-      encrypted.api_key,
-      encrypted.api_secret,
-      JSON.stringify({
-        username: encrypted.username,
-        password: encrypted.password,
-      }),
-    ]
+    [userId, encrypted.encrypted, encrypted.iv]
   );
 
   log("Stored ICICI credentials for user %s", userId);
@@ -77,14 +71,14 @@ router.post("/store", authenticateToken, async (req: AuthRequest, res) => {
 });
 
 /* -------------------------------------------------------
- * 2) RETRIEVE DECRYPTED CREDENTIALS (User-facing)
+ * 2) RETRIEVE DECRYPTED CREDENTIALS
  * -----------------------------------------------------*/
 router.post("/retrieve", authenticateToken, async (req: AuthRequest, res) => {
   const userId = req.user!.userId;
 
   const result = await query(
     `
-    SELECT api_key, api_secret, extra
+    SELECT encrypted_blob, iv
     FROM icici_credentials
     WHERE user_id = $1
     `,
@@ -100,15 +94,18 @@ router.post("/retrieve", authenticateToken, async (req: AuthRequest, res) => {
 
   const row = result.rows[0];
 
-  const decrypted = {
-    api_key: decryptDataRaw(row.api_key, getEncryptionKey()),
-    api_secret: decryptDataRaw(row.api_secret, getEncryptionKey()),
-    ...(row.extra ? JSON.parse(decryptDataRaw(row.extra, getEncryptionKey())) : {}),
-  };
+  // Convert Buffer → string before decrypt
+  const decryptedJson = decryptDataRaw(
+    row.encrypted_blob.toString(),
+    row.iv.toString(),
+    getEncryptionKey()
+  );
+
+  const credentials = JSON.parse(decryptedJson);
 
   res.json({
     success: true,
-    credentials: decrypted,
+    credentials,
   });
 });
 
@@ -123,3 +120,4 @@ router.post("/connect", authenticateToken, async (_req, res) => {
 });
 
 export { router as iciciBrokerRouter };
+
