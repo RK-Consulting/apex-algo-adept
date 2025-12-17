@@ -152,7 +152,7 @@ router.get("/auth/callback", (req, res) => {
  *   { success: true, session_token: "<breeze-jwt>" }
  * ========================================================================
  */
-router.post(
+/* router.post(
   "/auth/callback",
   authenticateToken,
   async (req: AuthRequest, res) => {
@@ -165,7 +165,7 @@ router.post(
           error:
             "Missing parameters: apisession, api_key, api_secret required",
         });
-      }
+      } */
 
       /* const session = await createBreezeLoginSession(
         userId,
@@ -173,7 +173,7 @@ router.post(
         api_secret,
         apisession
       ); */
-      const session = await SessionService.getInstance().getSession(userId);
+/*      const session = await SessionService.getInstance().getSession(userId);
 
       return res.json({
         success: true,
@@ -186,7 +186,7 @@ router.post(
         .json({ error: err.message || "Callback processing failed" });
     }
   }
-);
+); */
 
 export const iciciAuthRouter = router;
 export default router;
