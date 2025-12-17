@@ -1,236 +1,197 @@
 // backend/src/services/iciciRealtime.ts
 /**
- * ICICI Realtime Service - High-Performance Market Data Streaming
+ * ICICI Realtime Service — Refactored for New Architecture
  *
- * Features:
- * - One isolated Breeze WebSocket per authenticated user
- * - Auto-reconnect with exponential backoff
- * - Per-symbol subscribe/unsubscribe
- * - Heartbeat monitoring and malformed message handling
- * - Graceful shutdown support
- * - Integrates with SessionService (Redis-cached sessions)
- *
- * Production-ready for AlphaForge's live trading dashboard
+ * Design:
+ * - WebSocket streaming ONLY (no REST, no checksum)
+ * - No Breeze SDK usage
+ * - Stateless per-user stream management
+ * - Session fetched via SessionService (Redis + DB)
+ * - Clean reconnect, heartbeat, subscribe/unsubscribe
  */
 
 import WebSocket from "ws";
 import debug from "debug";
-import { SessionService } from "./sessionService.js";
-import { getBreezeInstance } from "./breezeClient.js";
+import { SessionService } from "./sessionService";
 
 const log = debug("alphaforge:icici:realtime");
-const errorLog = debug("alphaforge:icici:realtime:error");
+const errLog = debug("alphaforge:icici:realtime:error");
 
-// Exported interface (directly, no redeclaration conflict)
 export interface TickData {
   symbol: string;
   ltp: number;
-  open?: number;
-  high?: number;
-  low?: number;
-  close?: number;
-  volume?: number;
-  oi?: number;
   timestamp?: string;
   [key: string]: any;
 }
 
 interface UserStream {
-  ws: WebSocket;
   userId: string;
-  subscribedSymbols: Set<string>;
-  heartbeatTimer?: NodeJS.Timeout;
+  ws: WebSocket;
+  symbols: Set<string>;
+  heartbeat?: NodeJS.Timeout;
   reconnectAttempts: number;
-  maxReconnectAttempts: number;
-  reconnectDelay: number;
 }
 
 export class ICICIRealtimeService {
   private static instance: ICICIRealtimeService;
-  private userStreams: Map<string, UserStream> = new Map();
-  private readonly sessionService = SessionService.getInstance();
-  private readonly HEARTBEAT_INTERVAL = 30_000;
-  private readonly MAX_RECONNECT_ATTEMPTS = 10;
-  private readonly BASE_RECONNECT_DELAY = 1000;
+  private streams = new Map<string, UserStream>();
 
-  private constructor() {
-    log("[ICICIRealtimeService] Initialized");
-  }
+  private readonly WS_URL = "wss://stream.icicidirect.com/breezeapi/realtime";
+  private readonly HEARTBEAT_MS = 30_000;
+  private readonly MAX_RETRIES = 10;
+  private readonly BASE_DELAY = 1000;
+
+  private constructor() {}
 
   static getInstance(): ICICIRealtimeService {
-    if (!ICICIRealtimeService.instance) {
-      ICICIRealtimeService.instance = new ICICIRealtimeService();
+    if (!this.instance) {
+      this.instance = new ICICIRealtimeService();
     }
-    return ICICIRealtimeService.instance;
+    return this.instance;
   }
 
   async startUserStream(
     userId: string,
-    onTick: (tick: TickData) => void,
-    onError?: (error: Error) => void
+    onTick: (tick: TickData) => void
   ): Promise<void> {
-    if (this.userStreams.has(userId)) {
-      log(`Stream already active for user ${userId}`);
-      return;
-    }
+    if (this.streams.has(userId)) return;
 
-    try {
-      const session = await this.sessionService.getSessionOrThrow(userId);
-      const breeze = getBreezeInstance(session);
-      const wsUrl = "wss://stream.icicidirect.com/breezeapi/realtime";
-      const ws = new WebSocket(wsUrl);
+    const session = await SessionService.getInstance().getSessionOrThrow(userId);
 
-      const stream: UserStream = {
-        ws,
-        userId,
-        subscribedSymbols: new Set(),
-        reconnectAttempts: 0,
-        maxReconnectAttempts: this.MAX_RECONNECT_ATTEMPTS,
-        reconnectDelay: this.BASE_RECONNECT_DELAY,
-      };
+    const ws = new WebSocket(this.WS_URL, {
+      headers: {
+        "X-AppKey": session.api_key,
+        "X-SessionToken": session.session_token,
+      },
+    });
 
-      ws.on("open", () => {
-        log(`WebSocket opened for user ${userId}`);
-        stream.reconnectAttempts = 0;
-        stream.reconnectDelay = this.BASE_RECONNECT_DELAY;
-        this.startHeartbeat(stream);
-      });
+    const stream: UserStream = {
+      userId,
+      ws,
+      symbols: new Set(),
+      reconnectAttempts: 0,
+    };
 
-      ws.on("message", (data: WebSocket.Data) => {
-        try {
-          const message = data.toString();
-          if (message === "pong" || message === "heartbeat") return;
+    ws.on("open", () => {
+      log("WS open for user %s", userId);
+      stream.reconnectAttempts = 0;
+      this.startHeartbeat(stream);
+    });
 
-          const tick: TickData = JSON.parse(message);
-          if (tick.symbol && typeof tick.ltp === "number") {
-            onTick(tick);
-          } else {
-            errorLog(`Malformed tick from user ${userId}:`, tick);
-          }
-        } catch (parseError) {
-          errorLog(`Failed to parse message for user ${userId}:`, data);
+    ws.on("message", (data) => {
+      try {
+        const msg = data.toString();
+        if (msg === "pong") return;
+
+        const tick = JSON.parse(msg);
+        if (tick?.symbol && typeof tick.ltp === "number") {
+          onTick(tick);
         }
-      });
-
-      ws.on("close", (code, reason) => {
-        log(`WebSocket closed for user ${userId} | Code: ${code} | Reason: ${reason}`);
-        this.clearHeartbeat(stream);
-        this.attemptReconnect(userId, onTick, onError);
-      });
-
-      ws.on("error", (err) => {
-        errorLog(`WebSocket error for user ${userId}:`, err.message);
-        onError?.(err);
-      });
-
-      this.userStreams.set(userId, stream);
-    } catch (error: any) {
-      errorLog(`Failed to start stream for user ${userId}:`, error.message);
-      throw error;
-    }
-  }
-
-  async subscribeSymbol(userId: string, symbol: string, exchange: string = "NSE"): Promise<void> {
-    const stream = this.userStreams.get(userId);
-    if (!stream || stream.ws.readyState !== WebSocket.OPEN) {
-      throw new Error("Stream not active");
-    }
-    if (stream.subscribedSymbols.has(symbol)) {
-      log(`Already subscribed to ${symbol} for user ${userId}`);
-      return;
-    }
-    const msg = JSON.stringify({
-      channel: "feed",
-      action: "subscribe",
-      symbol: `${exchange}|${symbol}`,
-    });
-    stream.ws.send(msg);
-    stream.subscribedSymbols.add(symbol);
-    log(`Subscribed ${symbol} (${exchange}) for user ${userId}`);
-  }
-
-  async unsubscribeSymbol(userId: string, symbol: string, exchange: string = "NSE"): Promise<void> {
-    const stream = this.userStreams.get(userId);
-    if (!stream || stream.ws.readyState !== WebSocket.OPEN) return;
-    if (!stream.subscribedSymbols.has(symbol)) return;
-    const msg = JSON.stringify({
-      channel: "feed",
-      action: "unsubscribe",
-      symbol: `${exchange}|${symbol}`,
-    });
-    stream.ws.send(msg);
-    stream.subscribedSymbols.delete(symbol);
-    log(`Unsubscribed ${symbol} for user ${userId}`);
-  }
-
-  async stopUserStream(userId: string): Promise<void> {
-    const stream = this.userStreams.get(userId);
-    if (!stream) return;
-    this.clearHeartbeat(stream);
-    if (stream.ws.readyState === WebSocket.OPEN) {
-      stream.ws.close(1000, "User logout");
-    }
-    this.userStreams.delete(userId);
-    log(`Stream stopped for user ${userId}`);
-  }
-
-  async stopAllRealtimeStreams(): Promise<void> {
-    log("Stopping all ICICI realtime streams...");
-    for (const [userId, stream] of this.userStreams.entries()) {
-      this.clearHeartbeat(stream);
-      if (stream.ws.readyState === WebSocket.OPEN) {
-        stream.ws.close(1012, "Server shutdown");
+      } catch {
+        errLog("Malformed WS message for user %s", userId);
       }
+    });
+
+    ws.on("close", () => {
+      log("WS closed for user %s", userId);
+      this.clearHeartbeat(stream);
+      this.reconnect(userId, onTick);
+    });
+
+    ws.on("error", () => {
+      errLog("WS error for user %s", userId);
+    });
+
+    this.streams.set(userId, stream);
+  }
+
+  subscribe(userId: string, symbol: string, exchange = "NSE"): void {
+    const stream = this.streams.get(userId);
+    if (!stream || stream.ws.readyState !== WebSocket.OPEN) return;
+    if (stream.symbols.has(symbol)) return;
+
+    stream.ws.send(
+      JSON.stringify({
+        action: "subscribe",
+        symbol: `${exchange}|${symbol}`,
+      })
+    );
+
+    stream.symbols.add(symbol);
+  }
+
+  unsubscribe(userId: string, symbol: string, exchange = "NSE"): void {
+    const stream = this.streams.get(userId);
+    if (!stream || stream.ws.readyState !== WebSocket.OPEN) return;
+    if (!stream.symbols.has(symbol)) return;
+
+    stream.ws.send(
+      JSON.stringify({
+        action: "unsubscribe",
+        symbol: `${exchange}|${symbol}`,
+      })
+    );
+
+    stream.symbols.delete(symbol);
+  }
+
+  stopUserStream(userId: string): void {
+    const stream = this.streams.get(userId);
+    if (!stream) return;
+
+    this.clearHeartbeat(stream);
+    stream.ws.close();
+    this.streams.delete(userId);
+  }
+
+  stopAll(): void {
+    for (const userId of this.streams.keys()) {
+      this.stopUserStream(userId);
     }
-    this.userStreams.clear();
-    log("All realtime streams terminated");
   }
 
   private startHeartbeat(stream: UserStream): void {
     this.clearHeartbeat(stream);
-    stream.heartbeatTimer = setInterval(() => {
+    stream.heartbeat = setInterval(() => {
       if (stream.ws.readyState === WebSocket.OPEN) {
         stream.ws.ping();
       }
-    }, this.HEARTBEAT_INTERVAL);
+    }, this.HEARTBEAT_MS);
   }
 
   private clearHeartbeat(stream: UserStream): void {
-    if (stream.heartbeatTimer) {
-      clearInterval(stream.heartbeatTimer);
-      stream.heartbeatTimer = undefined;
+    if (stream.heartbeat) {
+      clearInterval(stream.heartbeat);
+      stream.heartbeat = undefined;
     }
   }
 
-  private async attemptReconnect(
-    userId: string,
-    onTick: (tick: TickData) => void,
-    onError?: (error: Error) => void
-  ): Promise<void> {
-    const stream = this.userStreams.get(userId);
-    if (!stream || stream.reconnectAttempts >= stream.maxReconnectAttempts) {
-      this.userStreams.delete(userId);
-      errorLog(`Max reconnect attempts reached for user ${userId}`);
+  private reconnect(userId: string, onTick: (tick: TickData) => void): void {
+    const stream = this.streams.get(userId);
+    if (!stream) return;
+
+    if (stream.reconnectAttempts >= this.MAX_RETRIES) {
+      errLog("Max WS retries reached for user %s", userId);
+      this.streams.delete(userId);
       return;
     }
+
+    const delay = this.BASE_DELAY * 2 ** stream.reconnectAttempts;
     stream.reconnectAttempts++;
-    const delay = stream.reconnectDelay * Math.pow(2, stream.reconnectAttempts - 1);
-    log(`Reconnecting stream for user ${userId} in ${delay}ms (attempt ${stream.reconnectAttempts})`);
+
     setTimeout(() => {
-      this.startUserStream(userId, onTick, onError).catch(() => {
-        this.attemptReconnect(userId, onTick, onError);
-      });
+      this.streams.delete(userId);
+      this.startUserStream(userId, onTick).catch(() => {});
     }, delay);
   }
 }
 
-// === EXPORTS ===
+// singleton exports
+export const iciciRealtimeService = ICICIRealtimeService.getInstance();
 export const {
   startUserStream,
   stopUserStream,
-  subscribeSymbol,
-  unsubscribeSymbol,
-  stopAllRealtimeStreams,
-} = ICICIRealtimeService.getInstance();
-
-export const iciciRealtimeService = ICICIRealtimeService.getInstance();
+  subscribe,
+  unsubscribe,
+  stopAll,
+} = iciciRealtimeService;
