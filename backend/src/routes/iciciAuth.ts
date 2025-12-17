@@ -4,7 +4,7 @@ import { Router } from "express";
 import debug from "debug";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 import { SessionService } from "../services/sessionService.js";
-import { breezeCustomerDetails } from "../services/breezeClient.js";
+import { getCustomerDetails } from "../services/breezeClient.js";
 
 const log = debug("apex:icici:auth");
 const router = Router();
@@ -104,7 +104,7 @@ router.post(
       }
 
       // 1️⃣ Call ICICI CustomerDetails to get Breeze session_token
-      const customer = await breezeCustomerDetails(apisession);
+      const customer = await getCustomerDetails(apisession);
 
       if (!customer?.session_token) {
         throw new Error("Failed to obtain Breeze session_token");
