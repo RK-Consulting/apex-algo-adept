@@ -145,17 +145,17 @@ export class ICICIRealtimeService {
   }
 
   stopAll(): void {
-    if (!state || !state.streams) {
-    return;
-    }
+  if (this.streams.size === 0) return;
 
-    for (const ws of state.streams.values()) {
-      try {
-        ws.close();
-      } catch {}
-    }
-    state.streams.clear();
+  for (const stream of this.streams.values()) {
+    try {
+      this.clearHeartbeat(stream);
+      stream.ws.close();
+    } catch {}
   }
+
+  this.streams.clear();
+}
 
   private startHeartbeat(stream: UserStream): void {
     this.clearHeartbeat(stream);
