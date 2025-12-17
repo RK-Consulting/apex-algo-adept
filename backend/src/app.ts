@@ -36,6 +36,8 @@ import { aiRouter } from "./routes/ai.js";
 import redisDevRouter from "./routes/redis.js"; // Default export from redis.js
 
 const app = express();
+app.set("trust proxy", 1);
+
 
 // === Security Middleware ===
 app.use(
