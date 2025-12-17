@@ -139,3 +139,13 @@ export async function breezeRequest<T = any>(
 export function getBreezeLoginUrl(apiKey: string): string {
   return `https://api.icicidirect.com/apiuser/login?api_key=${encodeURIComponent(apiKey)}`;
 }
+
+// CustomerDetails helper (used only during auth flow)
+export async function getCustomerDetails(
+  userId: string,
+  apisession: string
+) {
+  return breezeRequest(userId, "POST", "/api/v1/customerdetails", {
+    SessionToken: apisession,
+  });
+}
