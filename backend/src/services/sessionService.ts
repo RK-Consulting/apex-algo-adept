@@ -12,7 +12,7 @@
  * Production deployment: Ubuntu/DigitalOcean + Nginx + PM2
  */
 
-import pool from '../config/database';
+import pool from '../config/database.js';
 import debug from 'debug';
 import { getCachedSession, cacheSession, invalidateSessionCache } from './cache';
 
