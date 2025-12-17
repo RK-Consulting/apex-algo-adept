@@ -11,7 +11,7 @@ import redis from "./config/redis.js";
 // Correct ICICI WS initializer import
 import { initIciciStreamServer } from "./routes/icici/stream.js";
 
-import { stopAllRealtimeStreams } from "./services/iciciRealtime.js";
+import { stopAll } from "./services/iciciRealtime.js";
 
 const log = debug("apex:server");
 const PORT = Number(process.env.PORT || 3000);
@@ -45,7 +45,7 @@ async function shutdown(signal: string) {
 
     // Stop all ICICI realtime streams
     try {
-      await stopAllRealtimeStreams();
+      await stopAll();
       console.log("📡 All ICICI realtime streams stopped.");
     } catch (err) {
       console.error("⚠ Error stopping realtime streams:", err);
