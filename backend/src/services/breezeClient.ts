@@ -14,10 +14,10 @@
 import axios, { AxiosError } from 'axios';
 import { Agent } from 'https';
 import crypto from 'crypto';
-import { calculateChecksum, getTimestamp } from '../utils/breezeChecksum';
-import { SessionService } from './sessionService';
-import { retryWithBackoff } from '../utils/retry';
-import { iciciCircuitBreaker } from '../utils/circuitBreaker';
+import { calculateChecksum, getTimestamp } from '../utils/breezeChecksum.js';
+import { SessionService } from './sessionService.js';
+import { retryWithBackoff } from '../utils/retry.js';
+import { iciciCircuitBreaker } from '../utils/circuitBreaker.js';
 
 const ICICI_BASE_URL = 'https://api.icicidirect.com/breezeapi';
 
