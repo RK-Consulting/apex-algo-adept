@@ -29,117 +29,70 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
     "https://api.alphaforge.skillsifter.in";
 
   /* -------------------------------------------------------
-   * START ICICI LOGIN (JWT-PROTECTED)
+   * START ICICI LOGIN (PUBLIC POPUP – BACKEND OWNS FLOW)
    * -----------------------------------------------------*/
-  const startICICILogin = async () => {
+  const startICICILogin = () => {
     setStatus("loading");
 
-    const token = localStorage.getItem("token");
-    if (!token) {
+    const apiKey = import.meta.env.VITE_ICICI_API_KEY;
+    if (!apiKey) {
       setStatus("error");
-      setMessage("User not authenticated");
+      setMessage("ICICI API key missing");
       toast({
-        title: "Authentication Required",
-        description: "Please log in before connecting ICICI.",
+        title: "ICICI Configuration Error",
+        description: "VITE_ICICI_API_KEY is not set",
         variant: "destructive",
       });
       return;
     }
 
-    try {
-      const res = await fetch(`${backend}/api/icici/auth/login`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+    const popup = window.open(
+      `${backend}/api/icici/auth/login?api_key=${encodeURIComponent(apiKey)}`,
+      "iciciLogin",
+      "width=500,height=700"
+    );
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Failed to initiate ICICI login");
-      }
-
-      const { redirectUrl } = await res.json();
-      if (!redirectUrl) {
-        throw new Error("Missing ICICI redirect URL");
-      }
-
-      const popup = window.open(
-        redirectUrl,
-        "iciciLogin",
-        "width=500,height=700,noopener,noreferrer"
-      );
-
-      if (!popup) {
-        throw new Error("Popup blocked. Please enable popups.");
-      }
-    } catch (err: any) {
+    if (!popup) {
       setStatus("error");
-      setMessage(err.message || "ICICI login failed");
+      setMessage("Popup blocked");
       toast({
-        title: "ICICI Login Error",
-        description: err.message,
+        title: "Popup Blocked",
+        description: "Please enable popups for ICICI login",
         variant: "destructive",
       });
     }
   };
 
   /* -------------------------------------------------------
-   * RECEIVE RESULT FROM ICICI POPUP
+   * RECEIVE RESULT FROM POPUP
    * -----------------------------------------------------*/
   const handleMessage = useCallback(
-    async (event: MessageEvent) => {
+    (event: MessageEvent) => {
       if (!event.data || typeof event.data !== "object") return;
 
-      // SUCCESS
+      // SUCCESS — apisession received (temporary)
       if (event.data.type === "ICICI_LOGIN") {
         const apisession = event.data.apisession;
         if (!apisession) {
-          toast({
-            title: "ICICI Error",
-            description: "Missing apisession",
-            variant: "destructive",
-          });
+          setStatus("error");
+          setMessage("Missing apisession from ICICI");
           return;
         }
 
-        setStatus("loading");
+        // Store ONLY for next authenticated step
+        localStorage.setItem("icici_apisession", apisession);
+        localStorage.setItem("icici_connected", "true");
 
-        try {
-          const token = localStorage.getItem("token");
-          if (!token) throw new Error("User not authenticated");
+        setStatus("success");
+        setMessage("ICICI login successful. Finalizing connection…");
 
-          const resp = await fetch(`${backend}/api/icici/auth/complete`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ apisession }),
-          });
+        toast({
+          title: "ICICI Login Successful",
+          description: "Completing broker connection",
+        });
 
-          const json = await resp.json();
-          if (!resp.ok) {
-            throw new Error(json.error || "ICICI authentication failed");
-          }
-
-          setStatus("success");
-          setMessage("ICICI Direct account connected successfully.");
-
-          toast({
-            title: "ICICI Connected",
-            description: "Your ICICI Direct account is now linked.",
-          });
-
-          setTimeout(() => onOpenChange(false), 1200);
-        } catch (err: any) {
-          setStatus("error");
-          setMessage(err.message || "ICICI connection failed");
-          toast({
-            title: "ICICI Error",
-            description: err.message,
-            variant: "destructive",
-          });
-        }
+        setForcedReconnect(false);
+        setTimeout(() => onOpenChange(false), 1200);
       }
 
       // ERROR
@@ -153,7 +106,7 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
         });
       }
     },
-    [backend, onOpenChange, toast]
+    [onOpenChange, toast]
   );
 
   useEffect(() => {
