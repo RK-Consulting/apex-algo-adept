@@ -1,4 +1,3 @@
-// src/lib/api.ts
 const API_ROOT = (import.meta.env.VITE_API_URL as string) || "/api";
 
 /**
@@ -37,20 +36,29 @@ export async function request(
     body = text;
   }
 
-  // Error Handler
+  // ---------- Error handling ----------
   if (!res.ok) {
-    const err = new Error(
-      body?.error || body?.message || res.statusText || "Request failed"
-    ) as any;
+    const message =
+      body?.error ||
+      body?.message ||
+      res.statusText ||
+      "Request failed";
 
+    const err = new Error(message) as any;
     err.status = res.status;
 
-    // 🔥 Detect ICICI expiry
-    if (body?.error === "ICICI_SESSION_EXPIRED") {
+    // 🔔 ICICI-specific global events (defensive, backend-agnostic)
+    if (
+      typeof message === "string" &&
+      message.toLowerCase().includes("icici session expired")
+    ) {
       window.dispatchEvent(new CustomEvent("ICICI_SESSION_EXPIRED"));
     }
 
-    if (body?.error === "ICICI_SESSION_MISSING") {
+    if (
+      typeof message === "string" &&
+      message.toLowerCase().includes("icici not connected")
+    ) {
       window.dispatchEvent(new CustomEvent("ICICI_SESSION_MISSING"));
     }
 
@@ -68,31 +76,55 @@ export const api = {
   post: (path: string, body?: any) =>
     request(path, {
       method: "POST",
-      body: JSON.stringify(body),
+      body: body !== undefined ? JSON.stringify(body) : undefined,
     }),
 };
 
 // -----------------------------------------------------------
-// ICICI WRAPPER
+// ICICI WRAPPER (ALIGNED WITH FINAL BACKEND)
 // -----------------------------------------------------------
 export const ICICI = {
+  /**
+   * Returns connection status + metadata
+   * (frontend derives state from this)
+   */
   status: () => api.get("/icici/status"),
-  callback: (payload: any) => api.post("/icici/auth/callback", payload),
+
+  /**
+   * Completes ICICI OAuth
+   * Server exchanges apisession → session_token
+   * Frontend receives only success/failure
+   */
+  complete: (payload: { apisession: string }) =>
+    api.post("/icici/auth/complete", payload),
+
+  /**
+   * Initiates ICICI login (redirect handled server-side)
+   */
   connect: () => api.post("/icici/connect"),
+
+  /**
+   * Current ICICI user/session info (sanitized)
+   */
   me: () => api.get("/icici/me"),
 
-  // Orders
+  // -----------------------------
+  // Orders & Portfolio
+  // -----------------------------
   orders: () => api.get("/icici/orders"),
   holdings: () => api.get("/icici/portfolio/holdings"),
   positions: () => api.get("/icici/portfolio/positions"),
   funds: () => api.get("/icici/portfolio/funds"),
   summary: () => api.get("/icici/portfolio/summary"),
 
+  // -----------------------------
   // Market Data
+  // -----------------------------
   quote: (symbol: string, exchange = "NSE") =>
     api.get(`/icici/market/quote?symbol=${symbol}&exchange=${exchange}`),
 
-  ohlc: (payload: any) => api.post("/icici/market/ohlc", payload),
+  ohlc: (payload: any) =>
+    api.post("/icici/market/ohlc", payload),
 
   ltp: (symbol: string, exchange = "NSE") =>
     api.get(`/icici/market/ltp?symbol=${symbol}&exchange=${exchange}`),
