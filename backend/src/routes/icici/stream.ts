@@ -28,13 +28,7 @@ import jwt from "jsonwebtoken";
 import debug from "debug";
 import { IncomingMessage } from "http";
 import { Socket } from "net";
-import {
-  startUserStream,
-  stopUserStream,
-  subscribe,
-  unsubscribe,
-  TickData,
-} from "../../services/iciciRealtime.js";
+import { iciciRealtimeService } from "../../services/iciciRealtime.js";
 import { authenticateToken, AuthRequest } from "../../middleware/auth.js";
 
 const log = debug("apex:icici:stream");
@@ -78,11 +72,11 @@ iciciStreamRouter.post("/subscribe", authenticateToken, async (req: AuthRequest,
       return res.status(400).json({ success: false, error: "symbol required" });
     }
 
-    await startUserStream(userId, (tick: TickData) => {
+    await iciciRealtimeService.startUserStream(userId, (tick: TickData) => {
       log(`Tick for user ${userId}: ${tick.symbol} @ ${tick.ltp}`);
     });
 
-    await subscribe(userId, symbol, exchange);
+    await iciciRealtimeService.subscribe(userId, symbol, exchange);
     log(`User ${userId} subscribed to ${symbol} (${exchange})`);
 
     res.json({ success: true, subscribed: symbol });
@@ -105,7 +99,7 @@ iciciStreamRouter.post("/unsubscribe", authenticateToken, async (req: AuthReques
       return res.status(400).json({ success: false, error: "symbol required" });
     }
 
-    await unsubscribe(userId, symbol, exchange);
+    await iciciRealtimeService.unsubscribe(userId, symbol, exchange);
     log(`User ${userId} unsubscribed from ${symbol} (${exchange})`);
 
     res.json({ success: true, unsubscribed: symbol });
@@ -185,7 +179,7 @@ export function initIciciStreamServer(server: any): WebSocketServer {
     log(`WebSocket connected for user ${userId}`);
 
     try {
-      await startUserStream(userId, (tick: TickData) => {
+      await iciciRealtimeService.startUserStream(userId, (tick: TickData) => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: "tick", data: tick }));
         }
@@ -201,14 +195,14 @@ export function initIciciStreamServer(server: any): WebSocketServer {
           switch (action) {
             case "subscribe":
               if (!symbol) throw new Error("symbol required");
-              await subscribe(userId, symbol, exchange);
+              await iciciRealtimeService.subscribe(userId, symbol, exchange);
               ws.send(JSON.stringify({ type: "subscribed", symbol }));
               log(`User ${userId} subscribed to ${symbol} via WS`);
               break;
 
             case "unsubscribe":
               if (!symbol) throw new Error("symbol required");
-              await unsubscribe(userId, symbol, exchange);
+              await iciciRealtimeService.unsubscribe(userId, symbol, exchange);
               ws.send(JSON.stringify({ type: "unsubscribed", symbol }));
               log(`User ${userId} unsubscribed from ${symbol} via WS`);
               break;
@@ -227,7 +221,7 @@ export function initIciciStreamServer(server: any): WebSocketServer {
       });
 
       ws.on("close", async (code, reason) => {
-        await stopUserStream(userId);
+        await iciciRealtimeService.stopUserStream(userId);
         log(`WebSocket closed for user ${userId} | Code: ${code} | Reason: ${reason}`);
       });
 
