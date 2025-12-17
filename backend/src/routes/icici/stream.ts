@@ -226,7 +226,7 @@ export function initIciciStreamServer(server: any): WebSocketServer {
       });
 
       ws.on("error", async (error: Error) => {
-        await stopUserStream(userId);
+        await iciciRealtimeService.stopUserStream(userId);
         errorLog(`WebSocket error for user ${userId}:`, error.message);
       });
     } catch (error: any) {
