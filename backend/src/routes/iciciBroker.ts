@@ -1,13 +1,16 @@
 // backend/src/routes/iciciBroker.ts
-
 /**
- * ICICI broker routes:
- *  - POST /api/icici/broker/store     -> store encrypted api-key/secret
- *  - POST /api/icici/broker/retrieve  -> retrieve decrypted values
- *  - POST /api/icici/broker/connect   -> start ICICI login flow
- *  - POST /api/icici/broker/complete  -> finalize after callback containing apisession
+ * ICICI Broker Routes — Refactored for New Architecture
  *
- * Mounted at: app.use('/api/icici/broker', iciciBrokerRouter)
+ * Responsibilities:
+ * - Store encrypted ICICI API credentials
+ * - Retrieve decrypted credentials (user-facing only)
+ * - Initiate ICICI OAuth login
+ *
+ * Notes:
+ * - Session creation is handled ONLY via authCallback (/api/icici/auth/*)
+ * - No session_token or apisession handled here
+ * - No Breeze JWT / SDK usage
  */
 
 import { Router } from "express";
@@ -16,146 +19,107 @@ import { query } from "../config/database.js";
 import {
   getEncryptionKey,
   encryptDataRaw,
-  decryptDataRaw
+  decryptDataRaw,
 } from "../utils/credentialEncryptor.js";
-/*import {
-  createBreezeLoginSession,
-  getSessionForUser
-} from "../utils/breezeSession.js"; */
-import { SessionService } from '../services/sessionService';
 import debug from "debug";
 
-const log = debug("apex:icici:broker");
-const router = Router(); 
+const router = Router();
+const log = debug("alphaforge:icici:broker");
 
 /* -------------------------------------------------------
- * 1) STORE CREDENTIALS
+ * 1) STORE ICICI API CREDENTIALS (Encrypted)
  * -----------------------------------------------------*/
-router.post("/store", authenticateToken, async (req: AuthRequest, res, next) => {
-  try {
-    const userId = req.user!.userId;
-    const { broker_name = "icici", api_key, api_secret, username, password } =
-      req.body;
+router.post("/store", authenticateToken, async (req: AuthRequest, res) => {
+  const userId = req.user!.userId;
+  const { api_key, api_secret, username, password } = req.body;
 
-    if (!api_key || !api_secret) {
-      return res
-        .status(400)
-        .json({ error: "api_key and api_secret required" });
-    }
-
-    const payload = {
-      api_key,
-      api_secret,
-      username: username || null,
-      password: password || null
-    };
-
-    const encrypted = encryptDataRaw(payload, getEncryptionKey());
-
-    await query(
-      `
-        INSERT INTO user_credentials (user_id, broker_name, icici_credentials, created_at, updated_at)
-        VALUES ($1, $2, $3, NOW(), NOW())
-        ON CONFLICT (user_id, broker_name)
-        DO UPDATE SET icici_credentials = $3, updated_at = NOW()
-      `,
-      [userId, broker_name, JSON.stringify(encrypted)]
-    );
-
-    return res.json({ success: true });
-  } catch (err) {
-    next(err);
+  if (!api_key || !api_secret) {
+    return res.status(400).json({
+      success: false,
+      error: "api_key and api_secret required",
+    });
   }
+
+  const payload = {
+    api_key,
+    api_secret,
+    username: username || null,
+    password: password || null,
+  };
+
+  const encrypted = encryptDataRaw(payload, getEncryptionKey());
+
+  await query(
+    `
+    INSERT INTO icici_credentials (user_id, api_key, api_secret, extra, created_at, updated_at)
+    VALUES ($1, $2, $3, $4, NOW(), NOW())
+    ON CONFLICT (user_id)
+    DO UPDATE SET
+      api_key = EXCLUDED.api_key,
+      api_secret = EXCLUDED.api_secret,
+      extra = EXCLUDED.extra,
+      updated_at = NOW()
+    `,
+    [
+      userId,
+      encrypted.api_key,
+      encrypted.api_secret,
+      JSON.stringify({
+        username: encrypted.username,
+        password: encrypted.password,
+      }),
+    ]
+  );
+
+  log("Stored ICICI credentials for user %s", userId);
+
+  res.json({ success: true });
 });
 
 /* -------------------------------------------------------
- * 2) RETRIEVE DECRYPTED CREDENTIALS
+ * 2) RETRIEVE DECRYPTED CREDENTIALS (User-facing)
  * -----------------------------------------------------*/
 router.post("/retrieve", authenticateToken, async (req: AuthRequest, res) => {
-  try {
-    const userId = req.user!.userId;
-    const { broker_name = "icici" } = req.body;
+  const userId = req.user!.userId;
 
-    const r = await query(
-      `SELECT icici_credentials FROM user_credentials WHERE user_id = $1 AND broker_name = $2`,
-      [userId, broker_name]
-    );
+  const result = await query(
+    `
+    SELECT api_key, api_secret, extra
+    FROM icici_credentials
+    WHERE user_id = $1
+    `,
+    [userId]
+  );
 
-    if (!r.rows.length || !r.rows[0].icici_credentials) {
-      return res.status(404).json({ error: "credentials not found" });
-    }
-
-    const enc = JSON.parse(r.rows[0].icici_credentials);
-    const decrypted = JSON.parse(
-      decryptDataRaw(enc.encrypted, enc.iv, getEncryptionKey())
-    );
-
-    return res.json({ success: true, credentials: decrypted });
-  } catch (err) {
-    res.status(500).json({ error: "Failed to decrypt" });
+  if (result.rowCount === 0) {
+    return res.status(404).json({
+      success: false,
+      error: "credentials not found",
+    });
   }
-});
 
-/* -------------------------------------------------------
- * 3) CONNECT (Frontend opens ICICI login URL)
- * -----------------------------------------------------*/
-router.post("/connect", authenticateToken, async (req, res) => {
-  return res.json({
+  const row = result.rows[0];
+
+  const decrypted = {
+    api_key: decryptDataRaw(row.api_key, getEncryptionKey()),
+    api_secret: decryptDataRaw(row.api_secret, getEncryptionKey()),
+    ...(row.extra ? JSON.parse(decryptDataRaw(row.extra, getEncryptionKey())) : {}),
+  };
+
+  res.json({
     success: true,
-    message:
-      "Proceed to ICICI login. After callback (which sends apisession), submit it to /complete."
+    credentials: decrypted,
   });
 });
 
 /* -------------------------------------------------------
- * 4) COMPLETE — after ICICI returns ?apisession=xxxx
+ * 3) CONNECT — frontend initiates OAuth login
  * -----------------------------------------------------*/
-router.post("/complete", authenticateToken, async (req: AuthRequest, res) => {
-  try {
-    const userId = req.user!.userId;
-    // const { api_key, api_secret, apisession } = req.body;
-    let { api_key, api_secret, session_token } = req.body;
-
-    // accept apisession as alias
-    if (!session_token && req.body.apisession)
-      session_token = req.body.apisession;
-
-    if (!api_key || !api_secret || !session_token) {
-      return res.status(400).json({
-        error: "api_key, api_secret, apisession required"
-      });
-    }
-
-    // Prevent re-login if already authenticated
-    //const existing = await getSessionForUser(userId);
-    const existing = await SessionService.getInstance().getSession(userId);
-    if (existing?.jwtToken) {
-      log("User %s already has Breeze JWT — skipping login", userId);
-      return res.json({ success: true, jwtToken: existing.jwtToken });
-    }
-
-    log("Finalizing Breeze R50 login for user %s", userId);
-
-    // Server-side JWT generation
-    /*const session = await createBreezeLoginSession(
-      userId,
-      api_key,
-      api_secret,
-      session_token
-    ); */
-    const session = await SessionService.getInstance().getSession(userId);
-
-    return res.json({
-      success: true,
-      jwtToken: session.jwtToken
-    });
-  } catch (err: any) {
-    log("ICICI /complete error:", err);
-    return res.status(500).json({
-      success: false,
-      error: err.message || "ICICI Breeze login failed"
-    });
-  }
+router.post("/connect", authenticateToken, async (_req, res) => {
+  res.json({
+    success: true,
+    message: "Proceed to ICICI login via /api/icici/auth/login",
+  });
 });
 
 export { router as iciciBrokerRouter };
