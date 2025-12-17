@@ -31,8 +31,8 @@ import { Socket } from "net";
 import {
   startUserStream,
   stopUserStream,
-  subscribeSymbol,
-  unsubscribeSymbol,
+  subscribe,
+  unsubscribe,
   TickData,
 } from "../../services/iciciRealtime.js";
 import { authenticateToken, AuthRequest } from "../../middleware/auth.js";
@@ -201,14 +201,14 @@ export function initIciciStreamServer(server: any): WebSocketServer {
           switch (action) {
             case "subscribe":
               if (!symbol) throw new Error("symbol required");
-              await subscribeSymbol(userId, symbol, exchange);
+              await subscribe(userId, symbol, exchange);
               ws.send(JSON.stringify({ type: "subscribed", symbol }));
               log(`User ${userId} subscribed to ${symbol} via WS`);
               break;
 
             case "unsubscribe":
               if (!symbol) throw new Error("symbol required");
-              await unsubscribeSymbol(userId, symbol, exchange);
+              await unsubscribe(userId, symbol, exchange);
               ws.send(JSON.stringify({ type: "unsubscribed", symbol }));
               log(`User ${userId} unsubscribed from ${symbol} via WS`);
               break;
