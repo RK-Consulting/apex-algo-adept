@@ -13,16 +13,16 @@ module.exports = {
     {
       name: "alphaforge-api",
 
-      // Load .env BEFORE loading server.js
-      script: "load-env.cjs",
+      // Run the compiled ESM server directly
+      script: "dist/server.js",
       cwd: "/var/www/apex-algo-adept/backend",
 
-      exec_mode: "fork",   // Breeze WS requires non-cluster mode
+      exec_mode: "fork",
       instances: 1,
 
-      node_args: "--require dotenv/config",
+      // NO load-env, NO double dotenv
+      node_args: "",
 
-      // What environment to load
       env: {
         NODE_ENV: "development",
         PORT: 3000,
@@ -38,8 +38,6 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: "300M",
-
-      log_date_format: "YYYY-MM-DD HH:mm:ss",
 
       error_file: "./logs/error.log",
       out_file: "./logs/out.log",
