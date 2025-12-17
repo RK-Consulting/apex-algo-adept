@@ -1,57 +1,82 @@
 // backend/src/routes/iciciStreamControlRouter.ts
 /**
- * Stream control HTTP endpoints (subscribe/unsubscribe) for frontend to call.
+ * ICICI Stream Control Router — Refactored for New Realtime Architecture
  *
- * Mount path: app.use('/api/icici/stream', iciciStreamControlRouter);
+ * Responsibilities:
+ * - HTTP control plane for WebSocket streams
+ * - Start stream lazily per user
+ * - Subscribe / unsubscribe symbols
  *
- * Endpoints:
- * POST /subscribe { symbol, exchange }
- * POST /unsubscribe { symbol, exchange }
- * GET / simple JSON to confirm route presence
+ * Notes:
+ * - JWT protected
+ * - No Breeze SDK usage
+ * - Delegates all logic to ICICIRealtimeService
  */
 
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
-import * as Realtime from "../services/iciciRealtime.js"; // Namespace import to bypass missing named exports
+import {
+  startUserStream,
+  subscribe,
+  unsubscribe,
+} from "../services/iciciRealtime.js";
 import debug from "debug";
 
 const router = Router();
-const log = debug("apex:icici:stream:control");
+const log = debug("alphaforge:icici:stream:control");
 
+/**
+ * Health check
+ */
 router.get("/", authenticateToken, (_req: AuthRequest, res) => {
   res.json({ success: true, message: "ICICI stream control ready" });
 });
 
-router.post("/subscribe", authenticateToken, async (req: AuthRequest, res, next) => {
-  try {
-    const userId = req.user!.userId;
-    const { symbol, exchange = "NSE" } = req.body;
+/**
+ * POST /subscribe
+ * Body: { symbol, exchange? }
+ */
+router.post("/subscribe", authenticateToken, async (req: AuthRequest, res) => {
+  const userId = req.user!.userId;
+  const { symbol, exchange = "NSE" } = req.body;
 
-    if (!symbol) return res.status(400).json({ error: "symbol required" });
-
-    // Ensure a breeze stream exists for user (start if needed)
-    await Realtime.startUserStream(userId, () => {});
-    await Realtime.subscribeSymbol(userId, symbol, exchange);
-
-    res.json({ success: true, subscribed: symbol });
-  } catch (err) {
-    next(err);
+  if (!symbol) {
+    return res.status(400).json({ error: "symbol required" });
   }
+
+  // Lazily ensure stream exists
+  await startUserStream(userId, () => {});
+
+  subscribe(userId, symbol, exchange);
+
+  log("Subscribed %s (%s) for user %s", symbol, exchange, userId);
+
+  res.json({
+    success: true,
+    subscribed: { symbol, exchange },
+  });
 });
 
-router.post("/unsubscribe", authenticateToken, async (req: AuthRequest, res, next) => {
-  try {
-    const userId = req.user!.userId;
-    const { symbol, exchange = "NSE" } = req.body;
+/**
+ * POST /unsubscribe
+ * Body: { symbol, exchange? }
+ */
+router.post("/unsubscribe", authenticateToken, async (req: AuthRequest, res) => {
+  const userId = req.user!.userId;
+  const { symbol, exchange = "NSE" } = req.body;
 
-    if (!symbol) return res.status(400).json({ error: "symbol required" });
-
-    await Realtime.unsubscribeSymbol(userId, symbol, exchange);
-
-    res.json({ success: true, unsubscribed: symbol });
-  } catch (err) {
-    next(err);
+  if (!symbol) {
+    return res.status(400).json({ error: "symbol required" });
   }
+
+  unsubscribe(userId, symbol, exchange);
+
+  log("Unsubscribed %s (%s) for user %s", symbol, exchange, userId);
+
+  res.json({
+    success: true,
+    unsubscribed: { symbol, exchange },
+  });
 });
 
 export { router as iciciStreamControlRouter };
