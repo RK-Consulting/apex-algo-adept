@@ -193,19 +193,4 @@ export class ICICIRealtimeService {
   }
 }
 
-export const startUserStream =
-  iciciRealtimeService.startUserStream.bind(iciciRealtimeService);
-
-export const stopUserStream =
-  iciciRealtimeService.stopUserStream.bind(iciciRealtimeService);
-
-export const subscribe =
-  iciciRealtimeService.subscribe.bind(iciciRealtimeService);
-
-export const unsubscribe =
-  iciciRealtimeService.unsubscribe.bind(iciciRealtimeService);
-
-export const stopAll =
-  iciciRealtimeService.stopAll.bind(iciciRealtimeService);
-
 export const iciciRealtimeService = ICICIRealtimeService.getInstance();
