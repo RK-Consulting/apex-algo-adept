@@ -11,7 +11,7 @@ import redis from "./config/redis.js";
 // Correct ICICI WS initializer import
 import { initIciciStreamServer } from "./routes/icici/stream.js";
 
-import { stopAll } from "./services/iciciRealtime.js";
+import { iciciRealtimeService } from "./services/iciciRealtime.js";
 
 const log = debug("apex:server");
 const PORT = Number(process.env.PORT || 3000);
