@@ -1,4 +1,16 @@
 // backend/src/services/sessionService.ts
+/**
+ * SessionService - Secure ICICI Breeze Session Management
+ *
+ * Architecture:
+ * - Singleton for consistent access
+ * - Redis caching (explicit TTL) for low-latency retrieval
+ * - PostgreSQL persistent storage
+ * - No temporary apisession stored
+ * - Strict typing for safety in trading context
+ *
+ * Production deployment: Ubuntu/DigitalOcean + Nginx + PM2
+ */
 
 import pool from '../config/database';
 import debug from 'debug';
