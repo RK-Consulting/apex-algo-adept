@@ -1,70 +1,94 @@
 // backend/src/services/cache.ts
-import Redis from 'ioredis';
+import Redis from "ioredis";
+import debug from "debug";
+import type { IciciSession } from "./sessionService";
 
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+const log = debug("alphaforge:cache");
 
-redis.on('error', (err: Error) => {
-  console.error('[Redis] Connection error:', err.message);
+const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
+  maxRetriesPerRequest: null,
+  enableReadyCheck: true,
 });
 
-redis.on('connect', () => {
-  console.log('[Redis] Connected successfully');
+redis.on("connect", () => {
+  log("Redis connected");
 });
 
-/**
- * Cache user's ICICI session (1 hour)
- */
-export async function getCachedSession(userId: string) {
+redis.on("error", (err: Error) => {
+  log("Redis error: %s", err.message);
+});
+
+// -----------------------------
+// ICICI SESSION CACHE
+// -----------------------------
+
+export async function getCachedSession(
+  userId: string
+): Promise<IciciSession | null> {
   try {
-    const cached = await redis.get(`session:${userId}`);
-    return cached ? JSON.parse(cached) : null;
-  } catch (error) {
-    console.error('[Cache] Error getting session:', error);
+    const cached = await redis.get(`icici:session:${userId}`);
+    return cached ? (JSON.parse(cached) as IciciSession) : null;
+  } catch (err) {
+    log("Error getting cached session for user %s", userId);
     return null;
   }
 }
 
-export async function cacheSession(userId: string, session: any) {
+export async function cacheSession(
+  userId: string,
+  session: IciciSession,
+  ttlSeconds: number
+): Promise<void> {
   try {
-    await redis.setex(
-      `session:${userId}`,
-      3600, // 1 hour
-      JSON.stringify(session)
+    await redis.set(
+      `icici:session:${userId}`,
+      JSON.stringify(session),
+      "EX",
+      ttlSeconds
     );
-  } catch (error) {
-    console.error('[Cache] Error caching session:', error);
+  } catch (err) {
+    log("Error caching session for user %s", userId);
   }
 }
 
-export async function invalidateSessionCache(userId: string) {
+export async function invalidateSessionCache(userId: string): Promise<void> {
   try {
-    await redis.del(`session:${userId}`);
-  } catch (error) {
-    console.error('[Cache] Error invalidating session:', error);
+    await redis.del(`icici:session:${userId}`);
+  } catch (err) {
+    log("Error invalidating session cache for user %s", userId);
   }
 }
 
-/**
- * Cache stock quotes (5 seconds)
- */
-export async function getCachedQuote(stockCode: string) {
+// -----------------------------
+// MARKET DATA CACHE (SHORT TTL)
+// -----------------------------
+
+export async function getCachedQuote(
+  symbol: string,
+  exchange: string
+): Promise<any | null> {
   try {
-    const cached = await redis.get(`quote:${stockCode}`);
+    const cached = await redis.get(`quote:${exchange}:${symbol}`);
     return cached ? JSON.parse(cached) : null;
-  } catch (error) {
-    console.error('[Cache] Error getting quote:', error);
+  } catch {
     return null;
   }
 }
 
-export async function cacheQuote(stockCode: string, quote: any) {
+export async function cacheQuote(
+  symbol: string,
+  exchange: string,
+  quote: any,
+  ttlSeconds = 5
+): Promise<void> {
   try {
-    await redis.setex(
-      `quote:${stockCode}`,
-      5, // 5 seconds
-      JSON.stringify(quote)
+    await redis.set(
+      `quote:${exchange}:${symbol}`,
+      JSON.stringify(quote),
+      "EX",
+      ttlSeconds
     );
-  } catch (error) {
-    console.error('[Cache] Error caching quote:', error);
+  } catch {
+    /* silent */
   }
 }
