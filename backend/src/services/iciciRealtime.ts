@@ -18,13 +18,6 @@ import type { MarketTick } from "../types/marketTick.js";
 const log = debug("alphaforge:icici:realtime");
 const errLog = debug("alphaforge:icici:realtime:error");
 
-export interface TickData {
-  symbol: string;
-  ltp: number;
-  timestamp?: string;
-  [key: string]: any;
-}
-
 interface UserStream {
   userId: string;
   ws: WebSocket;
