@@ -46,7 +46,7 @@ export class ICICIRealtimeService {
 
   async startUserStream(
     userId: string,
-    onTick: (tick: TickData) => void
+    onTick: (tick: MarketTick) => void
   ): Promise<void> {
     if (this.streams.has(userId)) return;
 
@@ -167,7 +167,7 @@ export class ICICIRealtimeService {
     }
   }
 
-  private reconnect(userId: string, onTick: (tick: TickData) => void): void {
+  private reconnect(userId: string, onTick: (tick: MarketTick) => void): void {
     const stream = this.streams.get(userId);
     if (!stream) return;
 
