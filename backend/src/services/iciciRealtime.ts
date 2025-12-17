@@ -207,3 +207,5 @@ export const unsubscribe =
 
 export const stopAll =
   iciciRealtimeService.stopAll.bind(iciciRealtimeService);
+
+export const iciciRealtimeService = ICICIRealtimeService.getInstance();
