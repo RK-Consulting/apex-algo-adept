@@ -193,12 +193,17 @@ export class ICICIRealtimeService {
   }
 }
 
-// singleton exports
-export const iciciRealtimeService = ICICIRealtimeService.getInstance();
-export const {
-  startUserStream,
-  stopUserStream,
-  subscribe,
-  unsubscribe,
-  stopAll,
-} = iciciRealtimeService;
+export const startUserStream =
+  iciciRealtimeService.startUserStream.bind(iciciRealtimeService);
+
+export const stopUserStream =
+  iciciRealtimeService.stopUserStream.bind(iciciRealtimeService);
+
+export const subscribe =
+  iciciRealtimeService.subscribe.bind(iciciRealtimeService);
+
+export const unsubscribe =
+  iciciRealtimeService.unsubscribe.bind(iciciRealtimeService);
+
+export const stopAll =
+  iciciRealtimeService.stopAll.bind(iciciRealtimeService);
