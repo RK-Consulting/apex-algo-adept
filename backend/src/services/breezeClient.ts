@@ -14,7 +14,7 @@
  * All API calls flow through breezeRequest() for consistency
  */
 
-import BreezeConnect from "breezeconnect"; // Class — use with `new`
+import { BreezeConnect } from "breezeconnect"; // Named import — official SDK pattern
 import axios, { AxiosError } from 'axios';
 import { Agent } from 'https';
 import { calculateChecksum, getTimestamp } from '../utils/breezeChecksum';
