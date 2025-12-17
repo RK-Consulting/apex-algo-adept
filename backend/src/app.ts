@@ -87,7 +87,7 @@ app.use("/api/redis", redisDevRouter); // Dev-only
 app.use("/api/icici/broker", authenticateToken, iciciBrokerRouter);
 app.use("/api/icici/status", authenticateToken, iciciStatusRouter);
 app.use("/api/icici/stream", authenticateToken, iciciStreamRouter);
-app.use("/api/icici", authenticateToken, iciciAuthRouter);
+app.use("/api/icici", iciciAuthRouter);
 app.use("/api/icici", authenticateToken, iciciOrderRouter);
 
 // === Global Error Handler ===
