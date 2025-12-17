@@ -1,65 +1,52 @@
 // apex-algo-adept/backend/src/routes/iciciStatus.ts
 /**
- * ************************************************************
- *  ICICI STATUS ROUTER
- *  -----------------------------------------------------------
- *  Provides:
- *    • Current ICICI connection status (Connected / Not Connected)
- *    • Whether JWT token exists for the user
- *    • Basic session metadata (expiry)
- *    • Whether encrypted credentials exist
+ * ICICI STATUS ROUTER — Refactored for New Architecture
  *
- *  Routes:
- *    GET /api/icici/status
- * ************************************************************
+ * Provides:
+ * - Whether ICICI credentials exist
+ * - Whether a valid Breeze session is active (server-side only)
+ *
+ * Notes:
+ * - No JWT/session token is ever exposed
+ * - Status derived purely from SessionService + credentials table
  */
 
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 import { query } from "../config/database.js";
-//import { getSessionForUser } from "../utils/breezeSession.js";
-import { SessionService } from '../services/sessionService';
-
+import { SessionService } from "../services/sessionService.js";
 
 export const iciciStatusRouter = Router();
 
 /**
  * GET /api/icici/status
- * (Notice: route is "/" because app.ts already sets /api/icici/status)
  */
 iciciStatusRouter.get("/", authenticateToken, async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.userId;
 
-    const result = await query(
-      `SELECT icici_credentials
-       FROM user_credentials
-       WHERE user_id = $1 AND broker_name = 'icici'`,
+    // Check if ICICI credentials exist
+    const credResult = await query(
+      `
+      SELECT 1
+      FROM icici_credentials
+      WHERE user_id = $1
+      `,
       [userId]
     );
 
-    const hasCredentials =
-      result.rows.length > 0 && result.rows[0].icici_credentials !== null;
+    const hasCredentials = credResult.rowCount > 0;
 
-    //const session = await getSessionForUser(userId);
+    // Check active Breeze session (server-side only)
     const session = await SessionService.getInstance().getSession(userId);
-    const isConnected = !!session?.jwtToken;
+    const connected = !!session?.session_token;
 
     return res.json({
       success: true,
-      connected: isConnected,
+      connected,
       hasCredentials,
-      session: session
-        ? {
-            tokenPresent: true,
-            expiresAt: session.expires_at || null,
-          }
-        : {
-            tokenPresent: false,
-          },
     });
   } catch (err: any) {
-    console.error("ICICI Status Error:", err);
     return res.status(500).json({
       success: false,
       error: err.message || "Failed to fetch ICICI status",
