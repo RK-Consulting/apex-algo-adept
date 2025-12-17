@@ -4,7 +4,7 @@ import { Router } from "express";
 import debug from "debug";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 //import { createBreezeLoginSession } from "../utils/breezeSession.js";
-import { SessionService } from '../services/sessionService';
+import { SessionService } from '../services/sessionService.js';
 const log = debug("apex:icici:auth");
 const router = Router();
 
