@@ -14,7 +14,8 @@
 import pool from "../config/database.js";
 import debug from "debug";
 import axios from "axios";
-import { decryptJson } from "../utils/crypto.js";
+import { decryptJSON } from "../utils/credentialEncryptor.js";
+
 import {
   getCachedSession,
   cacheSession,
@@ -194,7 +195,7 @@ export class SessionService {
 
     if (result.rowCount === 0) return null;
 
-    const creds = decryptJson(result.rows[0].icici_credentials);
+    const creds = decryptJSON(result.rows[0].icici_credentials);
 
     const session: IciciSession = {
       api_key: creds.api_key,
