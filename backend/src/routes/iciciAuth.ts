@@ -4,92 +4,72 @@ import { Router } from "express";
 import debug from "debug";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 import { SessionService } from "../services/sessionService.js";
-import { getCustomerDetails } from "../services/breezeClient.js";
+import { decryptJson } from "../utils/crypto.js"; // MUST already exist
 
 const log = debug("apex:icici:auth");
 const router = Router();
 
 /**
- * ============================================================================
- * GET /api/icici/auth/login
- * ----------------------------------------------------------------------------
- * PUBLIC endpoint
- * Redirects browser popup to ICICI Direct login page
- * ============================================================================
+ * ==========================================================
+ * GET /api/icici/auth/login  (PUBLIC)
+ * ==========================================================
  */
-router.get("/auth/login", (req, res) => {
+router.get("/auth/login", async (req, res) => {
   try {
     const apiKey = String(
       req.query.api_key || process.env.DEFAULT_ICICI_APPKEY || ""
     ).trim();
 
     if (!apiKey) {
-      log("Missing api_key in /auth/login");
       return res.status(400).send("Missing api_key");
     }
 
     const loginUrl =
-      `https://api.icicidirect.com/apiuser/login?api_key=` +
+      "https://api.icicidirect.com/apiuser/login?api_key=" +
       encodeURIComponent(apiKey);
 
-    log("Redirecting to ICICI login");
     return res.redirect(loginUrl);
   } catch (err) {
-    log("Error in /auth/login", err);
-    return res.status(500).send("ICICI Login Redirect Failed");
+    log("Login redirect failed", err);
+    return res.status(500).send("ICICI login failed");
   }
 });
 
 /**
- * ============================================================================
- * GET /api/icici/auth/callback
- * ----------------------------------------------------------------------------
- * PUBLIC popup callback
- * Sends apisession to opener via postMessage
- * ============================================================================
+ * ==========================================================
+ * GET /api/icici/auth/callback  (PUBLIC)
+ * ==========================================================
  */
 router.get("/auth/callback", (req, res) => {
   const apisession = String(req.query.apisession || "").trim();
 
   if (!apisession) {
     return res.send(`
-      <html><body>
-        <script>
-          if (window.opener) {
-            window.opener.postMessage(
-              { type: "ICICI_LOGIN_ERROR", error: "Missing apisession" },
-              "*"
-            );
-            window.close();
-          }
-        </script>
-      </body></html>
+      <script>
+        window.opener?.postMessage(
+          { type: "ICICI_LOGIN_ERROR", error: "Missing apisession" },
+          "*"
+        );
+        window.close();
+      </script>
     `);
   }
 
   return res.send(`
-    <html><body>
-      <script>
-        if (window.opener) {
-          window.opener.postMessage(
-            { type: "ICICI_LOGIN", apisession: "${apisession}" },
-            "*"
-          );
-          window.close();
-        }
-      </script>
-    </body></html>
+    <script>
+      window.opener?.postMessage(
+        { type: "ICICI_LOGIN", apisession: "${apisession}" },
+        "*"
+      );
+      window.close();
+    </script>
   `);
 });
 
 /**
- * ============================================================================
- * POST /api/icici/auth/callback
- * ----------------------------------------------------------------------------
- * AUTHENTICATED
- * Exchanges apisession → Breeze session_token
- * Persists session via SessionService
- * ============================================================================
+ * ==========================================================
+ * POST /api/icici/auth/callback  (AUTHENTICATED)
+ * ==========================================================
  */
 router.post(
   "/auth/callback",
@@ -103,29 +83,40 @@ router.post(
         return res.status(400).json({ error: "Missing apisession" });
       }
 
-      // 1️⃣ Call ICICI CustomerDetails to get Breeze session_token
-      const customer = await getCustomerDetails(userId, apisession);
+      /**
+       * 🔐 Fetch encrypted credentials from DB
+       */
+      const creds =
+        await SessionService.getInstance().getUserICICICredentials(userId);
 
-      if (!customer?.session_token) {
-        throw new Error("Failed to obtain Breeze session_token");
+      if (!creds) {
+        return res.status(400).json({
+          error: "ICICI credentials not configured for user",
+        });
       }
 
-      // 2️⃣ Persist session (WRITE — not READ)
-      await SessionService.getInstance().saveSession(userId, {
-        session_token: customer.session_token,
-        user_details: customer,
-      });
+      const { api_key, api_secret } = decryptJson(creds);
 
-      log("ICICI session established for user %s", userId);
+      /**
+       * 🔁 Exchange session with ICICI
+       */
+      const session =
+        await SessionService.getInstance().createICICISession(
+          userId,
+          api_key,
+          api_secret,
+          apisession
+        );
 
       return res.json({
         success: true,
+        session_token: session.session_token,
       });
     } catch (err: any) {
-      log("POST /auth/callback failed", err);
-      return res.status(500).json({
-        error: err.message || "ICICI callback processing failed",
-      });
+      log("POST callback failed", err);
+      return res
+        .status(500)
+        .json({ error: err.message || "ICICI auth failed" });
     }
   }
 );
