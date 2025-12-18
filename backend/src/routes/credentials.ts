@@ -116,14 +116,14 @@ router.post("/store", authenticateToken, async (req: AuthRequest, res, next) => 
 
     // Upsert logic: check existing
     const existing = await query(
-      `SELECT id FROM user_credentials WHERE user_id = $1 AND broker_name = $2`,
+      `SELECT id FROM broker_credentials WHERE user_id = $1 AND broker_name = $2`,
       [userId, broker_name]
     );
 
     let result;
     if (existing.rows.length > 0) {
       result = await query(
-        `UPDATE user_credentials
+        `UPDATE broker_credentials
          SET api_key = $1, api_secret = $2, updated_at = NOW()
          WHERE user_id = $3 AND broker_name = $4
          RETURNING id`,
@@ -136,7 +136,7 @@ router.post("/store", authenticateToken, async (req: AuthRequest, res, next) => 
       );
     } else {
       result = await query(
-        `INSERT INTO user_credentials (user_id, broker_name, api_key, api_secret)
+        `INSERT INTO broker_credentials (user_id, broker_name, api_key, api_secret)
          VALUES ($1, $2, $3, $4)
          RETURNING id`,
         [
@@ -174,7 +174,7 @@ router.post("/retrieve", authenticateToken, async (req: AuthRequest, res, next) 
 
     const result = await query(
       `SELECT api_key, api_secret, broker_name
-       FROM user_credentials
+       FROM broker_credentials
        WHERE user_id = $1 AND broker_name = $2`,
       [userId, broker_name]
     );
