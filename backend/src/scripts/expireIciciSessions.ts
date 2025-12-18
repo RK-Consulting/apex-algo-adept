@@ -9,7 +9,7 @@ async function expireIciciSessions() {
 
   const rows = await query(`
     SELECT user_id, icici_credentials
-    FROM user_credentials
+    FROM broker_credentials
     WHERE broker_name = 'icici'
       AND icici_credentials IS NOT NULL
   `);
@@ -36,7 +36,7 @@ async function expireIciciSessions() {
         console.log(`❌ Session expired for user ${r.user_id} — clearing`);
 
         await query(
-          `UPDATE user_credentials
+          `UPDATE broker_credentials
            SET icici_credentials = NULL, updated_at = NOW()
            WHERE user_id = $1 AND broker_name = 'icici'`,
           [r.user_id]
