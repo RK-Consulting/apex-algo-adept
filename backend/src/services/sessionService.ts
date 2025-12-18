@@ -67,7 +67,7 @@ export class SessionService {
       return null;
     }
 
-    return decryptJson(result.rows[0].icici_credentials);
+    return decryptJSON(result.rows[0].icici_credentials);
   }
 
   /**
