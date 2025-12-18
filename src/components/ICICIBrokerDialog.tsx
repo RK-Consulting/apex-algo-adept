@@ -29,25 +29,14 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
     "https://api.alphaforge.skillsifter.in";
 
   /* -------------------------------------------------------
-   * START ICICI LOGIN (PUBLIC POPUP – BACKEND OWNS FLOW)
+   * START ICICI LOGIN
+   * BACKEND FETCHES api_key FROM DB
    * -----------------------------------------------------*/
   const startICICILogin = () => {
     setStatus("loading");
 
-    const apiKey = import.meta.env.VITE_ICICI_API_KEY;
-    if (!apiKey) {
-      setStatus("error");
-      setMessage("ICICI API key missing");
-      toast({
-        title: "ICICI Configuration Error",
-        description: "VITE_ICICI_API_KEY is not set",
-        variant: "destructive",
-      });
-      return;
-    }
-
     const popup = window.open(
-      `${backend}/api/icici/auth/login?api_key=${encodeURIComponent(apiKey)}`,
+      `${backend}/api/icici/auth/login`,
       "iciciLogin",
       "width=500,height=700"
     );
@@ -70,7 +59,6 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
     (event: MessageEvent) => {
       if (!event.data || typeof event.data !== "object") return;
 
-      // SUCCESS — apisession received (temporary)
       if (event.data.type === "ICICI_LOGIN") {
         const apisession = event.data.apisession;
         if (!apisession) {
@@ -79,9 +67,8 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
           return;
         }
 
-        // Store ONLY for next authenticated step
+        // temporary storage for authenticated POST callback
         localStorage.setItem("icici_apisession", apisession);
-        localStorage.setItem("icici_connected", "true");
 
         setStatus("success");
         setMessage("ICICI login successful. Finalizing connection…");
@@ -95,7 +82,6 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
         setTimeout(() => onOpenChange(false), 1200);
       }
 
-      // ERROR
       if (event.data.type === "ICICI_LOGIN_ERROR") {
         setStatus("error");
         setMessage(event.data.error || "ICICI login failed");
@@ -137,9 +123,6 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
       );
   }, [onOpenChange]);
 
-  /* -------------------------------------------------------
-   * UI
-   * -----------------------------------------------------*/
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="space-y-4 max-w-md">
