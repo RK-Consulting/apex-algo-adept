@@ -139,6 +139,38 @@ export class SessionService {
     return session;
   }
 
+    /**
+   * ==========================================================
+   * Persist ICICI session (called from authCallback route)
+   * ==========================================================
+   */
+  async saveSession(
+    userId: string,
+    sessionData: {
+      session_token: string;
+      user_details?: any;
+    }
+  ): Promise<void> {
+    await pool.query(
+      `
+      INSERT INTO icici_sessions (idirect_userid, session_token, username)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (idirect_userid)
+      DO UPDATE SET
+        session_token = EXCLUDED.session_token,
+        created_at = now()
+      `,
+      [
+        userId,
+        sessionData.session_token,
+        sessionData.user_details?.idirect_userid || null,
+      ]
+    );
+
+    await invalidateSessionCache(userId);
+    log("ICICI session saved for user %s", userId);
+  }
+
   /**
    * ==========================================================
    * Cached session fetch
