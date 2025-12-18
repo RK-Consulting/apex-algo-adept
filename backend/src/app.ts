@@ -71,7 +71,7 @@ app.get("/health", (_req, res) =>
 app.use("/api/auth", authRouter);
 app.use("/api/icici", iciciAuthRouter);
 // === Rate Limiting ===
-app.use("/api/auth/login", loginLimiter);
+//app.use("/api/auth/login", loginLimiter);
 app.use("/api/auth/register", loginLimiter);
 app.use("/api", apiLimiter);
 
