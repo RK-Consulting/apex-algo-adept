@@ -6,15 +6,13 @@
  * - Singleton for consistent access
  * - Redis caching (explicit TTL)
  * - PostgreSQL persistent storage
- * - Credentials stored encrypted in DB
+ * - Credentials stored in broker_credentials
  * - No apisession persistence
  */
-// backend/src/services/sessionService.ts
 
 import pool from "../config/database.js";
 import debug from "debug";
 import axios from "axios";
-import { decryptJSON } from "../utils/credentialEncryptor.js";
 
 import {
   getCachedSession,
@@ -47,7 +45,7 @@ export class SessionService {
 
   /**
    * ==========================================================
-   * Fetch + decrypt ICICI credentials from DB
+   * Fetch ICICI credentials from broker_credentials
    * ==========================================================
    */
   async getUserICICICredentials(userId: string): Promise<{
@@ -56,18 +54,23 @@ export class SessionService {
   } | null> {
     const result = await pool.query(
       `
-      SELECT icici_credentials
+      SELECT app_key, app_secret
       FROM broker_credentials
-      WHERE user_id = $1 AND broker_name = 'icici'
+      WHERE user_id = $1
+        AND broker_name = 'ICICI'
+        AND is_active = true
       `,
       [userId]
     );
 
-    if (result.rowCount === 0 || !result.rows[0].icici_credentials) {
+    if (result.rowCount === 0) {
       return null;
     }
 
-    return decryptJSON(result.rows[0].icici_credentials);
+    return {
+      api_key: result.rows[0].app_key,
+      api_secret: result.rows[0].app_secret,
+    };
   }
 
   /**
@@ -87,10 +90,6 @@ export class SessionService {
 
     const { api_key, api_secret } = creds;
 
-    /**
-     * Breeze CustomerDetails API
-     * (this exchanges apisession → session_token)
-     */
     const response = await axios.post(
       "https://api.icicidirect.com/breezeapi/api/v1/customerdetails",
       {},
@@ -98,7 +97,6 @@ export class SessionService {
         headers: {
           "X-AppKey": api_key,
           "X-SessionToken": apisession,
-          "X-Checksum": "",
           "Content-Type": "application/json",
         },
       }
@@ -111,9 +109,6 @@ export class SessionService {
     const session_token = response.data.Success.session_token;
     const user_details = response.data.Success;
 
-    /**
-     * Persist session
-     */
     await pool.query(
       `
       INSERT INTO icici_sessions (idirect_userid, session_token, username)
@@ -140,9 +135,9 @@ export class SessionService {
     return session;
   }
 
-    /**
+  /**
    * ==========================================================
-   * Persist ICICI session (called from authCallback route)
+   * Persist ICICI session (used by authCallback)
    * ==========================================================
    */
   async saveSession(
@@ -185,21 +180,23 @@ export class SessionService {
       `
       SELECT
         s.session_token,
-        c.icici_credentials
+        c.app_key,
+        c.app_secret
       FROM icici_sessions s
-      JOIN broker_credentials c ON c.user_id = s.idirect_userid
+      JOIN broker_credentials c
+        ON c.user_id = s.idirect_userid
       WHERE s.idirect_userid = $1
+        AND c.broker_name = 'ICICI'
+        AND c.is_active = true
       `,
       [userId]
     );
 
     if (result.rowCount === 0) return null;
 
-    const creds = decryptJSON(result.rows[0].icici_credentials);
-
     const session: IciciSession = {
-      api_key: creds.api_key,
-      api_secret: creds.api_secret,
+      api_key: result.rows[0].app_key,
+      api_secret: result.rows[0].app_secret,
       session_token: result.rows[0].session_token,
     };
 
@@ -224,4 +221,3 @@ export class SessionService {
     return session;
   }
 }
-
