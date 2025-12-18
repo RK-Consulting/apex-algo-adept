@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,8 +23,11 @@ export function BrokerConnectionDialog({ open, onOpenChange, brokerName }: Props
   const [apiSecret, setApiSecret] = useState("");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
-  
-  const backendUrl = import.meta.env.VITE_BACKEND_URL;
+
+  const backendUrl =
+    import.meta.env.VITE_BACKEND_URL ||
+    import.meta.env.VITE_API_URL ||
+    "https://api.alphaforge.skillsifter.in";
 
   const handleConnect = async () => {
     if (!apiKey.trim()) {
@@ -26,7 +35,12 @@ export function BrokerConnectionDialog({ open, onOpenChange, brokerName }: Props
       return;
     }
 
-    const token = localStorage.getItem("authToken");
+    if (!apiSecret.trim()) {
+      toast({ title: "Error", description: "API Secret is required", variant: "destructive" });
+      return;
+    }
+
+    const token = localStorage.getItem("token");
     if (!token) {
       toast({ title: "Session expired", description: "Please login again", variant: "destructive" });
       return;
@@ -36,17 +50,21 @@ export function BrokerConnectionDialog({ open, onOpenChange, brokerName }: Props
     try {
       const res = await fetch(`${backendUrl}/api/credentials/store`, {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}` 
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ broker_name: brokerName, api_key: apiKey, api_secret: apiSecret }),
+        body: JSON.stringify({
+          broker_name: brokerName,
+          api_key: apiKey,
+          api_secret: apiSecret,
+        }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      toast({ title: "Success", description: `${brokerName} connected` });
+      toast({ title: "Success", description: `${brokerName} credentials saved` });
 
       setApiKey("");
       setApiSecret("");
@@ -69,18 +87,25 @@ export function BrokerConnectionDialog({ open, onOpenChange, brokerName }: Props
         <div className="space-y-4 py-4">
           <div>
             <Label>API Key *</Label>
-            <Input value={apiKey} onChange={e => setApiKey(e.target.value)} disabled={loading}/>
+            <Input value={apiKey} onChange={e => setApiKey(e.target.value)} disabled={loading} />
           </div>
           <div>
-            <Label>API Secret (optional)</Label>
-            <Input type="password" value={apiSecret} onChange={e => setApiSecret(e.target.value)} disabled={loading}/>
+            <Label>API Secret *</Label>
+            <Input
+              type="password"
+              value={apiSecret}
+              onChange={e => setApiSecret(e.target.value)}
+              disabled={loading}
+            />
           </div>
         </div>
 
         <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>Cancel</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+            Cancel
+          </Button>
           <Button onClick={handleConnect} disabled={loading}>
-            {loading && <Loader2 className="animate-spin mr-2 h-4 w-4"/>}
+            {loading && <Loader2 className="animate-spin mr-2 h-4 w-4" />}
             Connect
           </Button>
         </div>
