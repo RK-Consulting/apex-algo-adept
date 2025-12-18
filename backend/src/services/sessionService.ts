@@ -57,7 +57,7 @@ export class SessionService {
     const result = await pool.query(
       `
       SELECT icici_credentials
-      FROM user_credentials
+      FROM broker_credentials
       WHERE user_id = $1 AND broker_name = 'icici'
       `,
       [userId]
@@ -187,7 +187,7 @@ export class SessionService {
         s.session_token,
         c.icici_credentials
       FROM icici_sessions s
-      JOIN user_credentials c ON c.user_id = s.idirect_userid
+      JOIN broker_credentials c ON c.user_id = s.idirect_userid
       WHERE s.idirect_userid = $1
       `,
       [userId]
