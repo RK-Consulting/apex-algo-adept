@@ -18,8 +18,8 @@ type EncryptedPayload = {
 
 type StoreRequestBody = {
   broker_name?: string;
-  api_key?: string;
-  api_secret?: string;
+  app_key?: string;
+  app_secret?: string;
 };
 
 /* ======================================================
@@ -113,9 +113,9 @@ router.get("/:broker", authenticateToken, async (req: AuthRequest, res) => {
 router.post("/store", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const userId = req.user!.userId;
-    const { broker_name, api_key, api_secret } = req.body as StoreRequestBody;
+    const { broker_name, app_key, app_secret } = req.body as StoreRequestBody;
 
-    if (!broker_name || !api_key || !api_secret) {
+    if (!broker_name || !app_key || !app_secret) {
       return res.status(400).json({
         error: "broker_name, api_key and api_secret are required",
       });
@@ -123,8 +123,8 @@ router.post("/store", authenticateToken, async (req: AuthRequest, res, next) => 
 
     const key = getEncryptionKey();
 
-    const encryptedApiKey = await encryptData(api_key, key);
-    const encryptedApiSecret = await encryptData(api_secret, key);
+    const encryptedApiKey = await encryptData(app_key, key);
+    const encryptedApiSecret = await encryptData(app_secret, key);
 
     const existing = await query(
       `SELECT id FROM broker_credentials WHERE user_id = $1 AND broker_name = $2`,
@@ -151,7 +151,7 @@ router.post("/store", authenticateToken, async (req: AuthRequest, res, next) => 
       await query(
         `
         INSERT INTO broker_credentials
-          (user_id, broker_name, api_key, api_secret, is_active)
+          (user_id, broker_name, app_key, app_secret, is_active)
         VALUES ($1, $2, $3, $4, true)
         `,
         [
@@ -186,7 +186,7 @@ router.post("/retrieve", authenticateToken, async (req: AuthRequest, res, next) 
 
     const result = await query(
       `
-      SELECT api_key, api_secret
+      SELECT app_key, app_secret
       FROM broker_credentials
       WHERE user_id = $1 AND broker_name = $2
       `,
@@ -204,8 +204,8 @@ router.post("/retrieve", authenticateToken, async (req: AuthRequest, res, next) 
 
     return res.json({
       broker_name,
-      api_key: await decryptData(apiKeyPayload, key),
-      api_secret: await decryptData(apiSecretPayload, key),
+      app_key: await decryptData(apiKeyPayload, key),
+      app_secret: await decryptData(apiSecretPayload, key),
     });
   } catch (err) {
     next(err);
