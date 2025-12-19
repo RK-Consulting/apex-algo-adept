@@ -1,4 +1,4 @@
-// frontend/src/pages/Setting.tsx
+// /src/pages/Settings.tsx
 
 import { useState } from "react";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -40,12 +40,16 @@ const Settings = () => {
     import.meta.env.VITE_API_URL ||
     "https://api.alphaforge.skillsifter.in";
 
-  // Broker dialogs
+  /* --------------------------------------------------
+   * Broker dialogs
+   * -------------------------------------------------- */
   const [brokerDialogOpen, setBrokerDialogOpen] = useState(false);
   const [iciciBrokerDialogOpen, setIciciBrokerDialogOpen] = useState(false);
   const [selectedBroker, setSelectedBroker] = useState("");
 
-  // API KEY TAB state
+  /* --------------------------------------------------
+   * API Keys tab state
+   * -------------------------------------------------- */
   const [apiBroker, setApiBroker] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
@@ -138,7 +142,7 @@ const Settings = () => {
                 <TabsTrigger value="api">API Keys</TabsTrigger>
               </TabsList>
 
-              {/* PROFILE — UNCHANGED */}
+              {/* ================= PROFILE ================= */}
               <TabsContent value="profile">
                 <Card>
                   <CardHeader>
@@ -168,7 +172,7 @@ const Settings = () => {
                 </Card>
               </TabsContent>
 
-              {/* BROKER — UNCHANGED */}
+              {/* ================= BROKER ================= */}
               <TabsContent value="broker">
                 <Card>
                   <CardHeader>
@@ -200,7 +204,7 @@ const Settings = () => {
                 </Card>
               </TabsContent>
 
-              {/* NOTIFICATIONS — UNCHANGED */}
+              {/* ================= NOTIFICATIONS ================= */}
               <TabsContent value="notifications">
                 <Card>
                   <CardHeader>
@@ -221,7 +225,7 @@ const Settings = () => {
                 </Card>
               </TabsContent>
 
-              {/* SECURITY — UNCHANGED */}
+              {/* ================= SECURITY ================= */}
               <TabsContent value="security">
                 <Card>
                   <CardHeader>
@@ -238,7 +242,7 @@ const Settings = () => {
                 </Card>
               </TabsContent>
 
-              {/* API KEYS — FIXED */}
+              {/* ================= API KEYS ================= */}
               <TabsContent value="api">
                 <Card>
                   <CardHeader>
@@ -254,7 +258,18 @@ const Settings = () => {
                     <div>
                       <Label>Broker</Label>
                       <select
-                        className="w-full border rounded-md p-2"
+                        className="
+                          w-full
+                          p-2
+                          rounded-md
+                          border
+                          border-border
+                          bg-background
+                          text-foreground
+                          focus:outline-none
+                          focus:ring-2
+                          focus:ring-primary
+                        "
                         value={apiBroker}
                         onChange={(e) => setApiBroker(e.target.value)}
                       >
