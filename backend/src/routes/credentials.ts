@@ -217,4 +217,47 @@ router.post("/retrieve", authenticateToken, async (req: AuthRequest, res, next) 
   }
 });
 
+/**
+ * POST /api/credentials/store
+ * Stores broker API credentials securely
+ */
+router.post(
+  "/store",
+  authenticateToken,
+  async (req: AuthRequest, res) => {
+    const userId = req.user!.userId;
+    const { broker_name, api_key, api_secret } = req.body;
+
+    if (!broker_name || !api_key) {
+      return res.status(400).json({ error: "broker_name and api_key required" });
+    }
+
+    const encrypted = encryptJSON({
+      api_key,
+      api_secret: api_secret || "",
+    });
+
+    await pool.query(
+      `
+      INSERT INTO broker_credentials
+        (user_id, broker_name, app_key, app_secret, is_active)
+      VALUES ($1, $2, $3, $4, true)
+      ON CONFLICT (user_id, broker_name)
+      DO UPDATE SET
+        app_key = EXCLUDED.app_key,
+        app_secret = EXCLUDED.app_secret,
+        updated_at = NOW()
+      `,
+      [
+        userId,
+        broker_name.toUpperCase(),
+        encrypted.encrypted,
+        encrypted.iv,
+      ]
+    );
+
+    return res.json({ success: true });
+  }
+);
+
 export { router as credentialsRouter };
