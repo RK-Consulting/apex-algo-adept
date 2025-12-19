@@ -131,7 +131,7 @@ router.post("/store", authenticateToken, async (req: AuthRequest, res, next) => 
       [userId, broker_name.toUpperCase()]
     );
 
-    if (existing.rowCount > 0) {
+    if ((existing.rowCount ?? 0) > 0) {
       await query(
         `
         UPDATE broker_credentials
