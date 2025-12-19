@@ -304,4 +304,8 @@ const Settings = () => {
         open={iciciBrokerDialogOpen}
         onOpenChange={setIciciBrokerDialogOpen}
       />
-    </
+    </SidebarProvider>
+  );
+};
+
+export default Settings;
