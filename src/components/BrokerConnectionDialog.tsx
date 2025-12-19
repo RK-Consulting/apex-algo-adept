@@ -18,7 +18,11 @@ interface Props {
   brokerName: string;
 }
 
-export function BrokerConnectionDialog({ open, onOpenChange, brokerName }: Props) {
+export function BrokerConnectionDialog({
+  open,
+  onOpenChange,
+  brokerName,
+}: Props) {
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
   const [loading, setLoading] = useState(false);
@@ -30,19 +34,33 @@ export function BrokerConnectionDialog({ open, onOpenChange, brokerName }: Props
     "https://api.alphaforge.skillsifter.in";
 
   const handleConnect = async () => {
+    if (loading) return; // ✅ prevent double submit
+
     if (!apiKey.trim()) {
-      toast({ title: "Error", description: "API Key is required", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "API Key is required",
+        variant: "destructive",
+      });
       return;
     }
 
     if (!apiSecret.trim()) {
-      toast({ title: "Error", description: "API Secret is required", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "API Secret is required",
+        variant: "destructive",
+      });
       return;
     }
 
     const token = localStorage.getItem("token");
     if (!token) {
-      toast({ title: "Session expired", description: "Please login again", variant: "destructive" });
+      toast({
+        title: "Session expired",
+        description: "Please login again",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -55,22 +73,31 @@ export function BrokerConnectionDialog({ open, onOpenChange, brokerName }: Props
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          broker_name: brokerName,
+          broker_name: brokerName.toUpperCase(), // ✅ normalization
           api_key: apiKey,
           api_secret: apiSecret,
         }),
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) throw new Error(data.error || "Failed to save credentials");
 
-      toast({ title: "Success", description: `${brokerName} credentials saved` });
+      toast({
+        title: "Success",
+        description: `${brokerName} credentials saved`,
+      });
 
       setApiKey("");
       setApiSecret("");
       onOpenChange(false);
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      setApiKey("");      // ✅ clear sensitive data
+      setApiSecret("");
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -81,31 +108,45 @@ export function BrokerConnectionDialog({ open, onOpenChange, brokerName }: Props
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Connect to {brokerName}</DialogTitle>
-          <DialogDescription>Credentials stored securely on server.</DialogDescription>
+          <DialogDescription>
+            Credentials stored securely on server.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <div>
             <Label>API Key *</Label>
-            <Input value={apiKey} onChange={e => setApiKey(e.target.value)} disabled={loading} />
+            <Input
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              disabled={loading}
+            />
           </div>
+
           <div>
             <Label>API Secret *</Label>
             <Input
               type="password"
               value={apiSecret}
-              onChange={e => setApiSecret(e.target.value)}
+              onChange={(e) => setApiSecret(e.target.value)}
               disabled={loading}
             />
           </div>
         </div>
 
         <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={loading}
+          >
             Cancel
           </Button>
+
           <Button onClick={handleConnect} disabled={loading}>
-            {loading && <Loader2 className="animate-spin mr-2 h-4 w-4" />}
+            {loading && (
+              <Loader2 className="animate-spin mr-2 h-4 w-4" />
+            )}
             Connect
           </Button>
         </div>
