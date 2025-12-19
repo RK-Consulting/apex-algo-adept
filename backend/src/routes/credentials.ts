@@ -1,4 +1,5 @@
 // backend/src/routes/credentials.ts
+
 import { Router } from "express";
 import crypto from "crypto";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
@@ -6,43 +7,30 @@ import { query } from "../config/database.js";
 
 const router = Router();
 
-/**
- * Encryption format stored in DB (json string):
- * {
- *   "encrypted": "<base64 ciphertext>",
- *   "iv": "<base64 iv>",
- *   "tag": "<base64 auth tag>"
- * }
- *
- * AES-256-GCM with PBKDF2-derived 32-byte key.
- */
-
-// ---------------------------
-// Types
-// ---------------------------
+/* ======================================================
+   ENCRYPTION TYPES
+====================================================== */
 type EncryptedPayload = {
-  encrypted: string; // base64
-  iv: string;        // base64
-  tag: string;       // base64
+  encrypted: string;
+  iv: string;
+  tag: string;
 };
 
 type StoreRequestBody = {
   broker_name?: string;
   api_key?: string;
-  api_secret?: string | null;
+  api_secret?: string;
 };
 
-// ---------------------------
-// Key derivation
-// ---------------------------
+/* ======================================================
+   KEY DERIVATION
+====================================================== */
 function getEncryptionKey(): Buffer {
   const masterSecret = process.env.CREDENTIALS_ENCRYPTION_KEY;
   if (!masterSecret) {
     throw new Error("CREDENTIALS_ENCRYPTION_KEY not configured");
   }
 
-  // Derive a 32-byte key using PBKDF2 with a fixed salt (app-specific).
-  // Note: salt is constant here by design for reproducible key across instances.
   return crypto.pbkdf2Sync(
     masterSecret,
     "alphaforge-credentials-v1",
@@ -52,246 +40,176 @@ function getEncryptionKey(): Buffer {
   );
 }
 
-// ---------------------------
-// Encrypt / Decrypt helpers
-// ---------------------------
-async function encryptData(plain: string, key: Buffer): Promise<EncryptedPayload> {
-  const iv = crypto.randomBytes(12); // 96-bit recommended for GCM
+/* ======================================================
+   ENCRYPT / DECRYPT HELPERS
+====================================================== */
+async function encryptData(
+  plain: string,
+  key: Buffer
+): Promise<EncryptedPayload> {
+  const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
 
-  const encryptedBuffers: Buffer[] = [];
-  encryptedBuffers.push(cipher.update(Buffer.from(plain, "utf8")));
-  encryptedBuffers.push(cipher.final());
-
-  const encrypted = Buffer.concat(encryptedBuffers);
-  const authTag = cipher.getAuthTag();
+  const encrypted = Buffer.concat([
+    cipher.update(Buffer.from(plain, "utf8")),
+    cipher.final(),
+  ]);
 
   return {
     encrypted: encrypted.toString("base64"),
     iv: iv.toString("base64"),
-    tag: authTag.toString("base64"),
+    tag: cipher.getAuthTag().toString("base64"),
   };
 }
 
-async function decryptData(payload: EncryptedPayload, key: Buffer): Promise<string> {
-  const iv = Buffer.from(payload.iv, "base64");
-  const encrypted = Buffer.from(payload.encrypted, "base64");
-  const tag = Buffer.from(payload.tag, "base64");
+async function decryptData(
+  payload: EncryptedPayload,
+  key: Buffer
+): Promise<string> {
+  const decipher = crypto.createDecipheriv(
+    "aes-256-gcm",
+    key,
+    Buffer.from(payload.iv, "base64")
+  );
+  decipher.setAuthTag(Buffer.from(payload.tag, "base64"));
 
-  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
-  decipher.setAuthTag(tag);
+  const decrypted = Buffer.concat([
+    decipher.update(Buffer.from(payload.encrypted, "base64")),
+    decipher.final(),
+  ]);
 
-  const outBuffers: Buffer[] = [];
-  outBuffers.push(decipher.update(encrypted));
-  outBuffers.push(decipher.final());
-
-  const decrypted = Buffer.concat(outBuffers).toString("utf8");
-  return decrypted;
+  return decrypted.toString("utf8");
 }
 
-// ---------------------------
-// Routes
-// ---------------------------
-/**
- * GET /api/credentials/:broker
- * Fetch stored credentials metadata (NOT secrets)
- */
-router.get(
-  "/:broker",
-  authenticateToken,
-  async (req: AuthRequest, res) => {
-    const userId = req.user!.userId;
-    const broker = req.params.broker.toUpperCase();
+/* ======================================================
+   GET METADATA (NO SECRETS)
+====================================================== */
+router.get("/:broker", authenticateToken, async (req: AuthRequest, res) => {
+  const userId = req.user!.userId;
+  const broker = req.params.broker.toUpperCase();
 
-    const result = await pool.query(
-      `
-      SELECT
-        broker_name,
-        is_active,
-        last_connected,
-        created_at
-      FROM broker_credentials
-      WHERE user_id = $1 AND broker_name = $2
-      `,
-      [userId, broker]
-    );
+  const result = await query(
+    `
+    SELECT broker_name, is_active, last_connected, created_at
+    FROM broker_credentials
+    WHERE user_id = $1 AND broker_name = $2
+    `,
+    [userId, broker]
+  );
 
-    if (result.rowCount === 0) {
-      return res.json({ connected: false });
-    }
-
-    return res.json({
-      connected: true,
-      ...result.rows[0],
-    });
+  if (result.rowCount === 0) {
+    return res.json({ connected: false });
   }
-);
 
-/**
- * POST /api/credentials/store
- * Body: { broker_name, api_key, api_secret? }
- * Requires: authenticateToken (provides req.user.userId)
- */
+  return res.json({
+    connected: true,
+    ...result.rows[0],
+  });
+});
+
+/* ======================================================
+   STORE API CREDENTIALS (ENCRYPTED)
+====================================================== */
 router.post("/store", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const userId = req.user!.userId;
     const { broker_name, api_key, api_secret } = req.body as StoreRequestBody;
 
-    if (!broker_name || typeof broker_name !== "string" || !api_key || typeof api_key !== "string") {
+    if (!broker_name || !api_key || !api_secret) {
       return res.status(400).json({
-        error: "Missing required fields: broker_name (string) and api_key (string) are required",
+        error: "broker_name, api_key and api_secret are required",
       });
     }
 
     const key = getEncryptionKey();
 
     const encryptedApiKey = await encryptData(api_key, key);
-    const encryptedApiSecret = api_secret ? await encryptData(api_secret, key) : null;
+    const encryptedApiSecret = await encryptData(api_secret, key);
 
-    // Upsert logic: check existing
     const existing = await query(
       `SELECT id FROM broker_credentials WHERE user_id = $1 AND broker_name = $2`,
-      [userId, broker_name]
+      [userId, broker_name.toUpperCase()]
     );
 
-    let result;
-    if (existing.rows.length > 0) {
-      result = await query(
-        `UPDATE broker_credentials
-         SET api_key = $1, api_secret = $2, updated_at = NOW()
-         WHERE user_id = $3 AND broker_name = $4
-         RETURNING id`,
+    if (existing.rowCount > 0) {
+      await query(
+        `
+        UPDATE broker_credentials
+        SET api_key = $1,
+            api_secret = $2,
+            updated_at = NOW()
+        WHERE user_id = $3 AND broker_name = $4
+        `,
         [
           JSON.stringify(encryptedApiKey),
-          encryptedApiSecret ? JSON.stringify(encryptedApiSecret) : null,
+          JSON.stringify(encryptedApiSecret),
           userId,
-          broker_name,
+          broker_name.toUpperCase(),
         ]
       );
     } else {
-      result = await query(
-        `INSERT INTO broker_credentials (user_id, broker_name, api_key, api_secret)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id`,
+      await query(
+        `
+        INSERT INTO broker_credentials
+          (user_id, broker_name, api_key, api_secret, is_active)
+        VALUES ($1, $2, $3, $4, true)
+        `,
         [
           userId,
-          broker_name,
+          broker_name.toUpperCase(),
           JSON.stringify(encryptedApiKey),
-          encryptedApiSecret ? JSON.stringify(encryptedApiSecret) : null,
+          JSON.stringify(encryptedApiSecret),
         ]
       );
     }
 
     return res.json({
       success: true,
-      message: "Credentials securely stored",
-      credential_id: result.rows[0].id,
+      message: "Broker credentials stored securely",
     });
   } catch (err) {
     next(err);
   }
 });
 
-/**
- * POST /api/credentials/retrieve
- * Body: { broker_name }
- * Returns decrypted api_key and api_secret (if present)
- */
+/* ======================================================
+   RETRIEVE (DECRYPTED – AUTH ONLY)
+====================================================== */
 router.post("/retrieve", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const userId = req.user!.userId;
-    const { broker_name } = req.body as { broker_name?: string };
+    const { broker_name } = req.body;
 
-    if (!broker_name || typeof broker_name !== "string") {
-      return res.status(400).json({ error: "Missing required field: broker_name" });
+    if (!broker_name) {
+      return res.status(400).json({ error: "broker_name required" });
     }
 
     const result = await query(
-      `SELECT api_key, api_secret, broker_name
-       FROM broker_credentials
-       WHERE user_id = $1 AND broker_name = $2`,
-      [userId, broker_name]
+      `
+      SELECT api_key, api_secret
+      FROM broker_credentials
+      WHERE user_id = $1 AND broker_name = $2
+      `,
+      [userId, broker_name.toUpperCase()]
     );
 
-    if (result.rows.length === 0) {
+    if (result.rowCount === 0) {
       return res.status(404).json({ error: "Credentials not found" });
     }
 
-    const credentials = result.rows[0];
     const key = getEncryptionKey();
 
-    // Parse stored JSON (encrypted payload)
-    let apiKeyPayload: EncryptedPayload;
-    try {
-      apiKeyPayload = JSON.parse(credentials.api_key) as EncryptedPayload;
-    } catch (err) {
-      return res.status(500).json({ error: "Stored api_key is corrupted" });
-    }
-
-    const decryptedApiKey = await decryptData(apiKeyPayload, key);
-
-    let decryptedApiSecret: string | null = null;
-    if (credentials.api_secret) {
-      let apiSecretPayload: EncryptedPayload;
-      try {
-        apiSecretPayload = JSON.parse(credentials.api_secret) as EncryptedPayload;
-      } catch (err) {
-        return res.status(500).json({ error: "Stored api_secret is corrupted" });
-      }
-      decryptedApiSecret = await decryptData(apiSecretPayload, key);
-    }
+    const apiKeyPayload = JSON.parse(result.rows[0].api_key);
+    const apiSecretPayload = JSON.parse(result.rows[0].api_secret);
 
     return res.json({
-      broker_name: credentials.broker_name,
-      api_key: decryptedApiKey,
-      api_secret: decryptedApiSecret,
+      broker_name,
+      api_key: await decryptData(apiKeyPayload, key),
+      api_secret: await decryptData(apiSecretPayload, key),
     });
   } catch (err) {
     next(err);
   }
 });
-
-/**
- * POST /api/credentials/store
- * Stores broker API credentials securely
- */
-router.post(
-  "/store",
-  authenticateToken,
-  async (req: AuthRequest, res) => {
-    const userId = req.user!.userId;
-    const { broker_name, api_key, api_secret } = req.body;
-
-    if (!broker_name || !api_key) {
-      return res.status(400).json({ error: "broker_name and api_key required" });
-    }
-
-    const encrypted = encryptJSON({
-      api_key,
-      api_secret: api_secret || "",
-    });
-
-    await pool.query(
-      `
-      INSERT INTO broker_credentials
-        (user_id, broker_name, app_key, app_secret, is_active)
-      VALUES ($1, $2, $3, $4, true)
-      ON CONFLICT (user_id, broker_name)
-      DO UPDATE SET
-        app_key = EXCLUDED.app_key,
-        app_secret = EXCLUDED.app_secret,
-        updated_at = NOW()
-      `,
-      [
-        userId,
-        broker_name.toUpperCase(),
-        encrypted.encrypted,
-        encrypted.iv,
-      ]
-    );
-
-    return res.json({ success: true });
-  }
-);
 
 export { router as credentialsRouter };
