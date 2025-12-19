@@ -2,34 +2,65 @@ import { Router } from "express";
 import debug from "debug";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 import { SessionService } from "../services/sessionService.js";
+import pool from "../config/database.js";
 
 const log = debug("apex:icici:auth");
 const router = Router();
 
 /**
  * ==========================================================
- * GET /api/icici/auth/login  (PUBLIC)
+ * GET /api/icici/auth/login
+ * ----------------------------------------------------------
+ * Popup entrypoint.
+ * - Uses JWT from HttpOnly cookie
+ * - Fetches ICICI api_key from broker_credentials
+ * - Redirects to ICICI Direct login page
  * ==========================================================
  */
-router.get("/auth/login", (req, res) => {
-  const apiKey = String(
-    req.query.api_key || process.env.DEFAULT_ICICI_APPKEY || ""
-  ).trim();
+router.get(
+  "/auth/login",
+  authenticateToken,
+  async (req: AuthRequest, res) => {
+    try {
+      const userId = req.user!.userId;
 
-  if (!apiKey) {
-    return res.status(400).send("Missing api_key");
+      const result = await pool.query(
+        `
+        SELECT app_key
+        FROM broker_credentials
+        WHERE user_id = $1
+          AND broker_name = 'ICICI'
+          AND is_active = true
+        `,
+        [userId]
+      );
+
+      if (result.rowCount === 0) {
+        return res
+          .status(400)
+          .send("ICICI API key not configured for user");
+      }
+
+      const apiKey = result.rows[0].app_key;
+
+      const loginUrl =
+        "https://api.icicidirect.com/apiuser/login?api_key=" +
+        encodeURIComponent(apiKey);
+
+      return res.redirect(loginUrl);
+    } catch (err) {
+      log("ICICI login redirect failed", err);
+      return res.status(500).send("ICICI login failed");
+    }
   }
-
-  const loginUrl =
-    "https://api.icicidirect.com/apiuser/login?api_key=" +
-    encodeURIComponent(apiKey);
-
-  return res.redirect(loginUrl);
-});
+);
 
 /**
  * ==========================================================
  * GET /api/icici/auth/callback  (PUBLIC, POPUP)
+ * ----------------------------------------------------------
+ * ICICI redirects browser here with ?apisession=XXXX
+ * Sends apisession back to opener window
  * ==========================================================
  */
 router.get("/auth/callback", (req, res) => {
@@ -61,8 +92,9 @@ router.get("/auth/callback", (req, res) => {
 /**
  * ==========================================================
  * POST /api/icici/auth/callback  (AUTHENTICATED)
- * ==========================================================
+ * ----------------------------------------------------------
  * Exchanges apisession → Breeze session_token
+ * ==========================================================
  */
 router.post(
   "/auth/callback",
@@ -77,10 +109,10 @@ router.post(
       }
 
       /**
-       * SessionService must:
-       * - read encrypted ICICI creds from user_credentials
-       * - call Breeze CustomerDetails API
-       * - store session_token
+       * SessionService:
+       * - reads encrypted creds from broker_credentials
+       * - exchanges apisession with ICICI
+       * - stores session_token (DB + Redis)
        */
       const session =
         await SessionService.getInstance().createICICISession(
