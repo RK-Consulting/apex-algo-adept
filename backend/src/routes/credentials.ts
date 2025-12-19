@@ -92,6 +92,40 @@ async function decryptData(payload: EncryptedPayload, key: Buffer): Promise<stri
 // ---------------------------
 // Routes
 // ---------------------------
+/**
+ * GET /api/credentials/:broker
+ * Fetch stored credentials metadata (NOT secrets)
+ */
+router.get(
+  "/:broker",
+  authenticateToken,
+  async (req: AuthRequest, res) => {
+    const userId = req.user!.userId;
+    const broker = req.params.broker.toUpperCase();
+
+    const result = await pool.query(
+      `
+      SELECT
+        broker_name,
+        is_active,
+        last_connected,
+        created_at
+      FROM broker_credentials
+      WHERE user_id = $1 AND broker_name = $2
+      `,
+      [userId, broker]
+    );
+
+    if (result.rowCount === 0) {
+      return res.json({ connected: false });
+    }
+
+    return res.json({
+      connected: true,
+      ...result.rows[0],
+    });
+  }
+);
 
 /**
  * POST /api/credentials/store
