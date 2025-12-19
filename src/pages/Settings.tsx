@@ -94,8 +94,8 @@ const Settings = () => {
         },
         body: JSON.stringify({
           broker_name: apiBroker,
-          api_key: apiKey,
-          api_secret: apiSecret,
+          app_key: apiKey,
+          app_secret: apiSecret,
         }),
       });
 
