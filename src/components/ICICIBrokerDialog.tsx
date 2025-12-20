@@ -1,4 +1,5 @@
 // src/components/ICICIBrokerDialog.tsx
+
 import { useState, useEffect, useCallback } from "react";
 import {
   Dialog,
@@ -23,27 +24,28 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
   const [message, setMessage] = useState("");
   const { toast } = useToast();
 
-  const backend =
+  const backendUrl =
     import.meta.env.VITE_BACKEND_URL ||
     import.meta.env.VITE_API_URL ||
     "https://api.alphaforge.skillsifter.in";
 
-  /* -------------------------------------------------------
-   * START ICICI LOGIN
-   * BACKEND FETCHES api_key FROM DB
-   * -----------------------------------------------------*/
+  /* =======================================================
+     START ICICI LOGIN (POPUP)
+     BACKEND FETCHES app_key FROM DB
+  ======================================================= */
   const startICICILogin = () => {
     setStatus("loading");
 
-    const popup = window.open(
-      `${backend}/api/icici/auth/login`,
+    const popupWindow = window.open(
+      `${backendUrl}/api/icici/auth/login`,
       "iciciLogin",
       "width=500,height=700"
     );
 
-    if (!popup) {
+    if (!popupWindow) {
       setStatus("error");
       setMessage("Popup blocked");
+
       toast({
         title: "Popup Blocked",
         description: "Please enable popups for ICICI login",
@@ -52,23 +54,32 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
     }
   };
 
-  /* -------------------------------------------------------
-   * RECEIVE RESULT FROM POPUP
-   * -----------------------------------------------------*/
+  /* =======================================================
+     RECEIVE RESULT FROM POPUP (RUNTIME ONLY)
+  ======================================================= */
   const handleMessage = useCallback(
     (event: MessageEvent) => {
       if (!event.data || typeof event.data !== "object") return;
 
+      /* ------------------------------
+         SUCCESS PATH
+      ------------------------------ */
       if (event.data.type === "ICICI_LOGIN") {
-        const apisession = event.data.apisession;
-        if (!apisession) {
+        const popupApiSession: string | undefined = event.data.apisession;
+
+        if (!popupApiSession) {
           setStatus("error");
           setMessage("Missing apisession from ICICI");
           return;
         }
 
-        // temporary storage for authenticated POST callback
-        localStorage.setItem("icici_apisession", apisession);
+        /* ------------------------------
+           RUNTIME STORAGE (TEMPORARY)
+           - Not a credential
+           - Not persisted DB state
+        ------------------------------ */
+        const runtimeApiSession = popupApiSession;
+        localStorage.setItem("icici_runtime_apisession", runtimeApiSession);
 
         setStatus("success");
         setMessage("ICICI login successful. Finalizing connection…");
@@ -82,9 +93,13 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
         setTimeout(() => onOpenChange(false), 1200);
       }
 
+      /* ------------------------------
+         ERROR PATH
+      ------------------------------ */
       if (event.data.type === "ICICI_LOGIN_ERROR") {
         setStatus("error");
         setMessage(event.data.error || "ICICI login failed");
+
         toast({
           title: "ICICI Login Error",
           description: event.data.error,
@@ -100,9 +115,9 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
     return () => window.removeEventListener("message", handleMessage);
   }, [handleMessage]);
 
-  /* -------------------------------------------------------
-   * GLOBAL SESSION EXPIRY HANDLER
-   * -----------------------------------------------------*/
+  /* =======================================================
+     GLOBAL SESSION EXPIRY HANDLER
+  ======================================================= */
   useEffect(() => {
     function handleReconnectEvent() {
       setForcedReconnect(true);
