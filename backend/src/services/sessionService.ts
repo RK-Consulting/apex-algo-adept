@@ -1,4 +1,3 @@
-// backend/src/services/sessionService.ts
 /**
  * SessionService - Secure ICICI Breeze Session Management
  *
@@ -22,6 +21,9 @@ import {
 
 const log = debug("alphaforge:session");
 
+/* ======================================================
+   SESSION CONTRACT
+====================================================== */
 export interface IciciSession {
   api_key: string;
   api_secret: string;
@@ -44,15 +46,22 @@ export class SessionService {
   }
 
   /**
-   * ==========================================================
+   * ======================================================
    * Fetch ICICI credentials from broker_credentials
-   * ==========================================================
+   * ======================================================
    */
-  async getUserICICICredentials(userId: string): Promise<{
-    api_key: string;
-    api_secret: string;
-  } | null> {
-    const result = await pool.query(
+  async getUserICICICredentials(
+    userId: string
+  ): Promise<{ app_key: string; app_secret: string } | null> {
+    /* ------------------------------
+       SERVER CONTEXT
+    ------------------------------ */
+    const serverUserId = userId;
+
+    /* ------------------------------
+       DB QUERY
+    ------------------------------ */
+    const dbResult = await pool.query(
       `
       SELECT app_key, app_secret
       FROM broker_credentials
@@ -60,43 +69,61 @@ export class SessionService {
         AND broker_name = 'ICICI'
         AND is_active = true
       `,
-      [userId]
+      [serverUserId]
     );
 
-    if (result.rowCount === 0) {
+    if ((dbResult.rowCount ?? 0) === 0) {
       return null;
     }
 
+    /* ------------------------------
+       DB → SERVER PAYLOAD
+    ------------------------------ */
+    const serverAppKey = dbResult.rows[0].app_key;
+    const serverAppSecret = dbResult.rows[0].app_secret;
+
     return {
-      api_key: result.rows[0].app_key,
-      api_secret: result.rows[0].app_secret,
+      app_key: serverAppKey,
+      app_secret: serverAppSecret,
     };
   }
 
   /**
-   * ==========================================================
+   * ======================================================
    * Exchange apisession → Breeze session_token
-   * ==========================================================
+   * ======================================================
    */
   async createICICISession(
     userId: string,
     apisession: string
   ): Promise<IciciSession> {
-    const creds = await this.getUserICICICredentials(userId);
+    /* ------------------------------
+       SERVER CONTEXT
+    ------------------------------ */
+    const serverUserId = userId;
+    const reqApiSession = apisession;
 
-    if (!creds) {
+    const credentials = await this.getUserICICICredentials(serverUserId);
+    if (!credentials) {
       throw new Error("ICICI credentials not configured");
     }
 
-    const { api_key, api_secret } = creds;
+    /* ------------------------------
+       RUNTIME CREDENTIALS
+    ------------------------------ */
+    const runtimeAppKey = credentials.app_key;
+    const runtimeAppSecret = credentials.app_secret;
 
+    /* ------------------------------
+       ICICI API CALL
+    ------------------------------ */
     const response = await axios.post(
       "https://api.icicidirect.com/breezeapi/api/v1/customerdetails",
       {},
       {
         headers: {
-          "X-AppKey": api_key,
-          "X-SessionToken": apisession,
+          "X-AppKey": runtimeAppKey,
+          "X-SessionToken": reqApiSession,
           "Content-Type": "application/json",
         },
       }
@@ -106,9 +133,15 @@ export class SessionService {
       throw new Error("Failed to obtain Breeze session_token");
     }
 
-    const session_token = response.data.Success.session_token;
-    const user_details = response.data.Success;
+    /* ------------------------------
+       SESSION EXTRACTION
+    ------------------------------ */
+    const sessionToken = response.data.Success.session_token;
+    const userDetails = response.data.Success;
 
+    /* ------------------------------
+       DB PERSISTENCE
+    ------------------------------ */
     await pool.query(
       `
       INSERT INTO icici_sessions (idirect_userid, session_token, username)
@@ -118,27 +151,27 @@ export class SessionService {
         session_token = EXCLUDED.session_token,
         created_at = now()
       `,
-      [userId, session_token, user_details?.idirect_userid || null]
+      [serverUserId, sessionToken, userDetails?.idirect_userid || null]
     );
 
     const session: IciciSession = {
-      api_key,
-      api_secret,
-      session_token,
-      user_details,
+      api_key: runtimeAppKey,
+      api_secret: runtimeAppSecret,
+      session_token: sessionToken,
+      user_details: userDetails,
       connected_at: new Date(),
     };
 
-    await cacheSession(userId, session, 3600);
-    log("ICICI session created for user %s", userId);
+    await cacheSession(serverUserId, session, 3600);
+    log("ICICI session created for user %s", serverUserId);
 
     return session;
   }
 
   /**
-   * ==========================================================
+   * ======================================================
    * Persist ICICI session (used by authCallback)
-   * ==========================================================
+   * ======================================================
    */
   async saveSession(
     userId: string,
@@ -147,6 +180,9 @@ export class SessionService {
       user_details?: any;
     }
   ): Promise<void> {
+    const serverUserId = userId;
+    const runtimeSessionToken = sessionData.session_token;
+
     await pool.query(
       `
       INSERT INTO icici_sessions (idirect_userid, session_token, username)
@@ -157,26 +193,28 @@ export class SessionService {
         created_at = now()
       `,
       [
-        userId,
-        sessionData.session_token,
+        serverUserId,
+        runtimeSessionToken,
         sessionData.user_details?.idirect_userid || null,
       ]
     );
 
-    await invalidateSessionCache(userId);
-    log("ICICI session saved for user %s", userId);
+    await invalidateSessionCache(serverUserId);
+    log("ICICI session saved for user %s", serverUserId);
   }
 
   /**
-   * ==========================================================
+   * ======================================================
    * Cached session fetch
-   * ==========================================================
+   * ======================================================
    */
   async getSession(userId: string): Promise<IciciSession | null> {
-    const cached = await getCachedSession(userId);
+    const serverUserId = userId;
+
+    const cached = await getCachedSession(serverUserId);
     if (cached) return cached as IciciSession;
 
-    const result = await pool.query(
+    const dbResult = await pool.query(
       `
       SELECT
         s.session_token,
@@ -189,28 +227,40 @@ export class SessionService {
         AND c.broker_name = 'ICICI'
         AND c.is_active = true
       `,
-      [userId]
+      [serverUserId]
     );
 
-    if (result.rowCount === 0) return null;
+    if ((dbResult.rowCount ?? 0) === 0) {
+      return null;
+    }
+
+    /* ------------------------------
+       RUNTIME MATERIALIZATION
+    ------------------------------ */
+    const runtimeAppKey = dbResult.rows[0].app_key;
+    const runtimeAppSecret = dbResult.rows[0].app_secret;
+    const runtimeSessionToken = dbResult.rows[0].session_token;
 
     const session: IciciSession = {
-      api_key: result.rows[0].app_key,
-      api_secret: result.rows[0].app_secret,
-      session_token: result.rows[0].session_token,
+      api_key: runtimeAppKey,
+      api_secret: runtimeAppSecret,
+      session_token: runtimeSessionToken,
     };
 
-    await cacheSession(userId, session, 3600);
+    await cacheSession(serverUserId, session, 3600);
     return session;
   }
 
   async invalidateSession(userId: string): Promise<void> {
-    await invalidateSessionCache(userId);
+    const serverUserId = userId;
+
+    await invalidateSessionCache(serverUserId);
     await pool.query(
       "DELETE FROM icici_sessions WHERE idirect_userid = $1",
-      [userId]
+      [serverUserId]
     );
-    log("ICICI session invalidated for user %s", userId);
+
+    log("ICICI session invalidated for user %s", serverUserId);
   }
 
   async getSessionOrThrow(userId: string): Promise<IciciSession> {
