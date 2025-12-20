@@ -1,60 +1,83 @@
 // backend/src/scripts/expireIciciSessions.ts
+/**
+ * ICICI Session Expiry Script
+ *
+ * Purpose:
+ * - Periodically remove expired ICICI sessions
+ * - DOES NOT touch broker_credentials
+ *
+ * Data Ownership:
+ * - Session lifecycle → icici_sessions table
+ * - Credential lifecycle → broker_credentials table
+ */
+
 import dotenv from "dotenv";
 import { query } from "../config/database.js";
 
 dotenv.config();
 
-async function expireIciciSessions() {
+/* ======================================================
+   CONFIG
+====================================================== */
+const ICICI_SESSION_TTL_HOURS = 24;
+
+/* ======================================================
+   SCRIPT
+====================================================== */
+async function expireIciciSessions(): Promise<void> {
   console.log("🚀 Checking ICICI session expiry...");
 
-  const rows = await query(`
-    SELECT user_id, icici_credentials
-    FROM broker_credentials
-    WHERE broker_name = 'icici'
-      AND icici_credentials IS NOT NULL
-  `);
+  const dbResult = await query(
+    `
+    SELECT
+      idirect_userid,
+      session_token,
+      created_at
+    FROM icici_sessions
+    WHERE created_at < NOW() - INTERVAL '${ICICI_SESSION_TTL_HOURS} hours'
+    `
+  );
 
-  if (rows.rowCount === 0) {
-    console.log("ℹ️ No ICICI sessions found.");
+  if ((dbResult.rowCount ?? 0) === 0) {
+    console.log("ℹ️ No expired ICICI sessions found.");
     return;
   }
 
-  for (const r of rows.rows) {
+  console.log(`⚠️ Found ${dbResult.rowCount} expired ICICI session(s).`);
+
+  for (const row of dbResult.rows) {
+    const serverUserId = row.idirect_userid;
+    const createdAt = row.created_at;
+
     try {
-      const creds = JSON.parse(r.icici_credentials);
-      const expiresAt = creds?.expires_at;
+      await query(
+        `
+        DELETE FROM icici_sessions
+        WHERE idirect_userid = $1
+        `,
+        [serverUserId]
+      );
 
-      if (!expiresAt) {
-        console.log(`ℹ️ User ${r.user_id} has no expiry → leaving session untouched`);
-        continue;
-      }
-
-      const now = new Date();
-      const expiry = new Date(expiresAt);
-
-      if (expiry <= now) {
-        console.log(`❌ Session expired for user ${r.user_id} — clearing`);
-
-        await query(
-          `UPDATE broker_credentials
-           SET icici_credentials = NULL, updated_at = NOW()
-           WHERE user_id = $1 AND broker_name = 'icici'`,
-          [r.user_id]
-        );
-      } else {
-        console.log(`✔ User ${r.user_id} session valid until ${expiresAt}`);
-      }
+      console.log(
+        `❌ Expired ICICI session cleared for user ${serverUserId} (created_at=${createdAt})`
+      );
     } catch (err) {
-      console.error(`Error processing user ${r.user_id}:`, err);
+      console.error(
+        `🔥 Failed to clear ICICI session for user ${serverUserId}:`,
+        err
+      );
     }
   }
 
-  console.log("🏁 Expiry check complete.");
+  console.log("🏁 ICICI session expiry check complete.");
 }
 
+/* ======================================================
+   EXECUTION
+====================================================== */
 expireIciciSessions()
   .then(() => process.exit(0))
   .catch((err) => {
-    console.error("Fatal:", err);
+    console.error("Fatal error:", err);
     process.exit(1);
   });
