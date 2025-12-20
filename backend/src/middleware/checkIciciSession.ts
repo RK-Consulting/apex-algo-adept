@@ -1,10 +1,26 @@
 // backend/src/middleware/checkIciciSession.ts
+/**
+ * ICICI Session Guard Middleware
+ *
+ * Responsibility:
+ * - Verifies that a valid (non-expired) ICICI session exists
+ * - DOES NOT access credentials
+ * - DOES NOT decrypt secrets
+ *
+ * Data source:
+ * - icici_sessions table ONLY
+ */
+
 import { Request, Response, NextFunction } from "express";
 import { query } from "../config/database.js";
-import { decryptJSON } from "../utils/credentialEncryptor.js";
 import debug from "debug";
 
-const log = debug("apex:icici:session");
+const log = debug("alphaforge:icici:session");
+
+/* ======================================================
+   CONFIG
+====================================================== */
+const ICICI_SESSION_TTL_HOURS = 24;
 
 export async function checkIciciSession(
   req: Request,
@@ -12,50 +28,61 @@ export async function checkIciciSession(
   next: NextFunction
 ) {
   try {
-    const user = (req as any).user;
-    if (!user?.userId) {
+    /* ------------------------------
+       AUTH CONTEXT
+    ------------------------------ */
+    const authUser = (req as any).user;
+    if (!authUser?.userId) {
       return res.status(401).json({ error: "AUTH_REQUIRED" });
     }
 
-    const r = await query(
+    const serverUserId = authUser.userId;
+
+    /* ------------------------------
+       SESSION LOOKUP
+    ------------------------------ */
+    const dbResult = await query(
       `
-      SELECT icici_credentials 
-      FROM user_credentials
-      WHERE user_id = $1 AND broker_name = 'icici'
+      SELECT
+        session_token,
+        created_at
+      FROM icici_sessions
+      WHERE idirect_userid = $1
       `,
-      [user.userId]
+      [serverUserId]
     );
 
-    if (!r.rows.length || !r.rows[0].icici_credentials) {
-      log("❌ No ICICI credentials for user:", user.userId);
+    if ((dbResult.rowCount ?? 0) === 0) {
+      log("❌ No ICICI session for user %s", serverUserId);
       return res.status(403).json({
         error: "ICICI_SESSION_MISSING",
         message: "ICICI Direct account is not connected.",
       });
     }
 
-    const creds = decryptJSON(r.rows[0].icici_credentials);
-    const expiresAt = creds?.expires_at;
+    /* ------------------------------
+       EXPIRY CHECK
+    ------------------------------ */
+    const sessionCreatedAt: Date = dbResult.rows[0].created_at;
+    const expiryTime =
+      sessionCreatedAt.getTime() +
+      ICICI_SESSION_TTL_HOURS * 60 * 60 * 1000;
 
-    if (!expiresAt) {
-      // Some sessions don't provide expiry — consider them valid
-      return next();
-    }
+    if (Date.now() >= expiryTime) {
+      log("⛔ ICICI session expired for user %s", serverUserId);
 
-    const now = Date.now();
-    const expiryMs = new Date(expiresAt).getTime();
-
-    if (expiryMs <= now) {
-      log("⛔ ICICI session expired for user:", user.userId);
       return res.status(440).json({
         error: "ICICI_SESSION_EXPIRED",
         message: "Your ICICI Direct session has expired. Please reconnect.",
       });
     }
 
+    /* ------------------------------
+       SESSION VALID
+    ------------------------------ */
     return next();
   } catch (err) {
-    console.error("checkIciciSession error:", err);
+    console.error("checkIciciSession fatal error:", err);
     return res.status(500).json({ error: "SERVER_ERROR" });
   }
 }
