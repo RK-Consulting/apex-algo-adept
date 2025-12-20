@@ -40,21 +40,26 @@ const Settings = () => {
     import.meta.env.VITE_API_URL ||
     "https://api.alphaforge.skillsifter.in";
 
-  /* --------------------------------------------------
-   * Broker dialogs
-   * -------------------------------------------------- */
+  /* ======================================================
+     BROKER DIALOG STATE
+  ====================================================== */
   const [brokerDialogOpen, setBrokerDialogOpen] = useState(false);
   const [iciciBrokerDialogOpen, setIciciBrokerDialogOpen] = useState(false);
   const [selectedBroker, setSelectedBroker] = useState("");
 
-  /* --------------------------------------------------
-   * API Keys tab state
-   * -------------------------------------------------- */
+  /* ======================================================
+     API KEYS TAB — GUI INPUT STATE (EXPLICIT)
+  ====================================================== */
   const [apiBroker, setApiBroker] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [apiSecret, setApiSecret] = useState("");
+
+  const [userInputAppKey, setUserInputAppKey] = useState("");
+  const [userInputAppSecret, setUserInputAppSecret] = useState("");
+
   const [savingApi, setSavingApi] = useState(false);
 
+  /* ======================================================
+     BROKER CONNECT HANDLER
+  ====================================================== */
   const handleConnectBroker = (brokerName: string) => {
     if (brokerName === "ICICIDIRECT") {
       setIciciBrokerDialogOpen(true);
@@ -64,8 +69,11 @@ const Settings = () => {
     }
   };
 
+  /* ======================================================
+     SAVE API KEYS (GUI → REQUEST PAYLOAD)
+  ====================================================== */
   const handleSaveApiKeys = async () => {
-    if (!apiBroker || !apiKey || !apiSecret) {
+    if (!apiBroker || !userInputAppKey || !userInputAppSecret) {
       toast({
         title: "Missing fields",
         description: "Broker, API Key and API Secret are required",
@@ -84,6 +92,15 @@ const Settings = () => {
       return;
     }
 
+    /* ------------------------------
+       REQUEST PAYLOAD (EXPLICIT)
+    ------------------------------ */
+    const requestPayload = {
+      broker_name: apiBroker,
+      app_key: userInputAppKey,
+      app_secret: userInputAppSecret,
+    };
+
     setSavingApi(true);
     try {
       const res = await fetch(`${backendUrl}/api/credentials/store`, {
@@ -92,11 +109,7 @@ const Settings = () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          broker_name: apiBroker,
-          app_key: apiKey,
-          app_secret: apiSecret,
-        }),
+        body: JSON.stringify(requestPayload),
       });
 
       const data = await res.json();
@@ -107,8 +120,11 @@ const Settings = () => {
         description: "Broker API credentials stored securely",
       });
 
-      setApiKey("");
-      setApiSecret("");
+      /* ------------------------------
+         CLEAR GUI STATE
+      ------------------------------ */
+      setUserInputAppKey("");
+      setUserInputAppSecret("");
     } catch (err: any) {
       toast({
         title: "Error",
@@ -284,8 +300,10 @@ const Settings = () => {
                     <div>
                       <Label>API Key</Label>
                       <Input
-                        value={apiKey}
-                        onChange={(e) => setApiKey(e.target.value)}
+                        value={userInputAppKey}
+                        onChange={(e) =>
+                          setUserInputAppKey(e.target.value)
+                        }
                       />
                     </div>
 
@@ -293,8 +311,10 @@ const Settings = () => {
                       <Label>API Secret</Label>
                       <Input
                         type="password"
-                        value={apiSecret}
-                        onChange={(e) => setApiSecret(e.target.value)}
+                        value={userInputAppSecret}
+                        onChange={(e) =>
+                          setUserInputAppSecret(e.target.value)
+                        }
                       />
                     </div>
 
