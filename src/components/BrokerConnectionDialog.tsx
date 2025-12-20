@@ -1,3 +1,5 @@
+// src/components/BrokerConnectionDialog.tsx
+
 import { useState } from "react";
 import {
   Dialog,
@@ -23,9 +25,16 @@ export function BrokerConnectionDialog({
   onOpenChange,
   brokerName,
 }: Props) {
-  const [apiKey, setApiKey] = useState("");
-  const [apiSecret, setApiSecret] = useState("");
-  const [loading, setLoading] = useState(false);
+  /* =======================================================
+     GUI INPUT STATE (USER SCOPE)
+  ======================================================= */
+  const [userInputAppKey, setUserInputAppKey] = useState("");
+  const [userInputAppSecret, setUserInputAppSecret] = useState("");
+
+  /* =======================================================
+     UI RUNTIME STATE
+  ======================================================= */
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
   const backendUrl =
@@ -33,10 +42,16 @@ export function BrokerConnectionDialog({
     import.meta.env.VITE_API_URL ||
     "https://api.alphaforge.skillsifter.in";
 
+  /* =======================================================
+     SUBMIT HANDLER
+  ======================================================= */
   const handleConnect = async () => {
-    if (loading) return; // ✅ prevent double submit
+    if (isSubmitting) return; // prevent double-submit
 
-    if (!apiKey.trim()) {
+    /* ------------------------------
+       VALIDATION (GUI SCOPE)
+    ------------------------------ */
+    if (!userInputAppKey.trim()) {
       toast({
         title: "Error",
         description: "API Key is required",
@@ -45,7 +60,7 @@ export function BrokerConnectionDialog({
       return;
     }
 
-    if (!apiSecret.trim()) {
+    if (!userInputAppSecret.trim()) {
       toast({
         title: "Error",
         description: "API Secret is required",
@@ -54,8 +69,8 @@ export function BrokerConnectionDialog({
       return;
     }
 
-    const token = localStorage.getItem("token");
-    if (!token) {
+    const authToken = localStorage.getItem("token");
+    if (!authToken) {
       toast({
         title: "Session expired",
         description: "Please login again",
@@ -64,42 +79,55 @@ export function BrokerConnectionDialog({
       return;
     }
 
-    setLoading(true);
+    setIsSubmitting(true);
+
     try {
-      const res = await fetch(`${backendUrl}/api/credentials/store`, {
+      /* ------------------------------
+         REQUEST PAYLOAD (BOUNDARY)
+      ------------------------------ */
+      const response = await fetch(`${backendUrl}/api/credentials/store`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify({
-          broker_name: brokerName.toUpperCase(), // ✅ normalization
-          api_key: apiKey,
-          api_secret: apiSecret,
+          broker_name: brokerName.toUpperCase(),
+          app_key: userInputAppKey,        // explicit mapping
+          app_secret: userInputAppSecret,  // explicit mapping
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save credentials");
+      const responseBody = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          responseBody?.error || "Failed to save credentials"
+        );
+      }
 
       toast({
         title: "Success",
         description: `${brokerName} credentials saved`,
       });
 
-      setApiKey("");
-      setApiSecret("");
+      /* ------------------------------
+         CLEAR SENSITIVE INPUT
+      ------------------------------ */
+      setUserInputAppKey("");
+      setUserInputAppSecret("");
       onOpenChange(false);
     } catch (err: any) {
-      setApiKey("");      // ✅ clear sensitive data
-      setApiSecret("");
+      // Defensive cleanup
+      setUserInputAppKey("");
+      setUserInputAppSecret("");
+
       toast({
         title: "Error",
         description: err.message,
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -109,7 +137,7 @@ export function BrokerConnectionDialog({
         <DialogHeader>
           <DialogTitle>Connect to {brokerName}</DialogTitle>
           <DialogDescription>
-            Credentials stored securely on server.
+            Credentials are encrypted and stored securely on the server.
           </DialogDescription>
         </DialogHeader>
 
@@ -117,9 +145,10 @@ export function BrokerConnectionDialog({
           <div>
             <Label>API Key *</Label>
             <Input
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              disabled={loading}
+              value={userInputAppKey}
+              onChange={(e) => setUserInputAppKey(e.target.value)}
+              disabled={isSubmitting}
+              autoComplete="off"
             />
           </div>
 
@@ -127,9 +156,10 @@ export function BrokerConnectionDialog({
             <Label>API Secret *</Label>
             <Input
               type="password"
-              value={apiSecret}
-              onChange={(e) => setApiSecret(e.target.value)}
-              disabled={loading}
+              value={userInputAppSecret}
+              onChange={(e) => setUserInputAppSecret(e.target.value)}
+              disabled={isSubmitting}
+              autoComplete="off"
             />
           </div>
         </div>
@@ -138,13 +168,13 @@ export function BrokerConnectionDialog({
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
-            disabled={loading}
+            disabled={isSubmitting}
           >
             Cancel
           </Button>
 
-          <Button onClick={handleConnect} disabled={loading}>
-            {loading && (
+          <Button onClick={handleConnect} disabled={isSubmitting}>
+            {isSubmitting && (
               <Loader2 className="animate-spin mr-2 h-4 w-4" />
             )}
             Connect
