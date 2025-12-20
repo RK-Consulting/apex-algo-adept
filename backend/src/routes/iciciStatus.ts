@@ -1,14 +1,20 @@
 // apex-algo-adept/backend/src/routes/iciciStatus.ts
 /**
- * ICICI STATUS ROUTER — Refactored for New Architecture
+ * ICICI STATUS ROUTER — System-Engineering–Correct
  *
  * Provides:
- * - Whether ICICI credentials exist
- * - Whether a valid Breeze session is active (server-side only)
+ * - Whether ICICI broker credentials exist (DB-level)
+ * - Whether an active Breeze session exists (server/runtime)
  *
- * Notes:
- * - No JWT/session token is ever exposed
- * - Status derived purely from SessionService + credentials table
+ * Guarantees:
+ * - No secrets exposed
+ * - No session tokens exposed
+ * - broker_credentials is the SINGLE source of truth
+ *
+ * Naming Discipline:
+ * - DB layer     → app_key / app_secret
+ * - Server layer → server*
+ * - Runtime      → SessionService only
  */
 
 import { Router } from "express";
@@ -23,28 +29,45 @@ export const iciciStatusRouter = Router();
  */
 iciciStatusRouter.get("/", authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const userId = req.user!.userId;
+    /* ------------------------------
+       SERVER CONTEXT
+    ------------------------------ */
+    const serverUserId = req.user!.userId;
+    const serverBrokerName = "ICICI";
 
-    // Check if ICICI credentials exist
-    const credResult = await query(
+    /* ------------------------------
+       DB: CHECK CREDENTIAL PRESENCE
+       (NO SECRETS, NO DECRYPTION)
+    ------------------------------ */
+    const dbCredResult = await query(
       `
       SELECT 1
-      FROM icici_credentials
+      FROM broker_credentials
       WHERE user_id = $1
+        AND broker_name = $2
+        AND is_active = true
       `,
-      [userId]
+      [serverUserId, serverBrokerName]
     );
 
-    const hasCredentials = (credResult.rowCount ?? 0) > 0;
+    const hasCredentials = (dbCredResult.rowCount ?? 0) > 0;
 
-    // Check active Breeze session (server-side only)
-    const session = await SessionService.getInstance().getSession(userId);
-    const connected = !!session?.session_token;
+    /* ------------------------------
+       RUNTIME: CHECK ACTIVE SESSION
+       (SERVER-SIDE ONLY)
+    ------------------------------ */
+    const runtimeSession =
+      await SessionService.getInstance().getSession(serverUserId);
 
+    const connected = !!runtimeSession?.session_token;
+
+    /* ------------------------------
+       RESPONSE (STATUS ONLY)
+    ------------------------------ */
     return res.json({
       success: true,
-      connected,
       hasCredentials,
+      connected,
     });
   } catch (err: any) {
     return res.status(500).json({
