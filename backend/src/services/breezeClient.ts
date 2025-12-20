@@ -1,130 +1,184 @@
-// backend/src/services/breezeClient.ts
 /**
- * ICICI Breeze REST API Gateway - Institutional-Grade Custom Integration
- * 
- * Polish Applied:
- * - Strict error typing (unknown + axios.isAxiosError)
- * - Granular 401/403 handling for operator clarity
- * - X-Request-ID for centralized tracing (PM2 + Nginx logs)
- * - Debug-level logging (no production spam)
- * - CustomerDetails via POST (reliable)
- * - Explicit {} checksum for GET
+ * ICICI Breeze REST API Gateway - Institutional-Grade Integration
+ *
+ * Engineering Guarantees:
+ * - Explicit runtime-prefixed credential usage
+ * - Zero DB naming leakage into runtime logic
+ * - AI-readable data lineage (2030+ safe)
+ * - Traceable request lifecycle (Request-ID)
+ * - Circuit breaker + retry hardened
  */
 
-import axios, { AxiosError } from 'axios';
-import { Agent } from 'https';
-import crypto from 'crypto';
-import { calculateChecksum, getTimestamp } from '../utils/breezeChecksum.js';
-import { SessionService } from './sessionService.js';
-import { retryWithBackoff } from '../utils/retry.js';
-import { iciciCircuitBreaker } from '../utils/circuitBreaker.js';
+import axios, { AxiosError } from "axios";
+import { Agent } from "https";
+import crypto from "crypto";
 
-const ICICI_BASE_URL = 'https://api.icicidirect.com/breezeapi';
+import { calculateChecksum, getTimestamp } from "../utils/breezeChecksum.js";
+import { SessionService } from "./sessionService.js";
+import { retryWithBackoff } from "../utils/retry.js";
+import { iciciCircuitBreaker } from "../utils/circuitBreaker.js";
 
-// Connection pooling — ~50ms latency
+/* ======================================================
+   CONSTANTS
+====================================================== */
+const ICICI_BASE_URL = "https://api.icicidirect.com/breezeapi";
+
+/* ======================================================
+   HTTPS AGENT (LOW LATENCY, KEEP-ALIVE)
+====================================================== */
 const httpsAgent = new Agent({
   keepAlive: true,
   maxSockets: 50,
   maxFreeSockets: 10,
-  timeout: 60000,
-  keepAliveMsecs: 30000
+  timeout: 60_000,
+  keepAliveMsecs: 30_000,
 });
 
+/* ======================================================
+   AXIOS INSTANCE
+====================================================== */
 const breezeAxios = axios.create({
   baseURL: ICICI_BASE_URL,
   httpsAgent,
-  timeout: 30000,
+  timeout: 30_000,
   maxRedirects: 5,
-  headers: { "Content-Type": "application/json" }
+  headers: { "Content-Type": "application/json" },
 });
 
+/* ======================================================
+   BREEZE REQUEST GATEWAY
+====================================================== */
 export async function breezeRequest<T = any>(
   userId: string,
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  method: "GET" | "POST" | "PUT" | "DELETE",
   endpoint: string,
   payload: Record<string, any> = {}
 ): Promise<T> {
   const startTime = Date.now();
-  const requestId = crypto.randomUUID(); // Observability
+  const requestId = crypto.randomUUID();
 
-  if (process.env.NODE_ENV !== 'production') {
-    console.debug(`[Breeze] ${method} ${endpoint} - User: ${userId} - ReqID: ${requestId}`);
+  if (process.env.NODE_ENV !== "production") {
+    console.debug(
+      `[Breeze] ${method} ${endpoint} | user=${userId} | reqId=${requestId}`
+    );
   }
 
   try {
-    const session = await SessionService.getInstance().getSession(userId);
-    if (!session || !session.api_key || !session.api_secret || !session.session_token) {
-      throw new Error('ICICI not connected or invalid session.');
+    /* --------------------------------------------------
+       RUNTIME SESSION (EXPLICIT LAYER)
+    -------------------------------------------------- */
+    const runtimeSession =
+      await SessionService.getInstance().getSession(userId);
+
+    if (
+      !runtimeSession ||
+      !runtimeSession.api_key ||
+      !runtimeSession.api_secret ||
+      !runtimeSession.session_token
+    ) {
+      throw new Error("ICICI runtime session invalid or missing");
     }
 
-    // CustomerDetails — POST (reliable across infrastructure)
-    if (endpoint.includes('customerdetails')) {
+    /* --------------------------------------------------
+       RUNTIME MATERIALIZATION
+    -------------------------------------------------- */
+    const runtimeAppKey = runtimeSession.api_key;
+    const runtimeAppSecret = runtimeSession.api_secret;
+    const runtimeSessionToken = runtimeSession.session_token;
+
+    /* --------------------------------------------------
+       CUSTOMER DETAILS (SPECIAL CASE: POST)
+    -------------------------------------------------- */
+    if (endpoint.includes("customerdetails")) {
       const response = await iciciCircuitBreaker.execute(() =>
         retryWithBackoff(() =>
           breezeAxios.post(endpoint, {
-            //SessionToken: payload.SessionToken || session.apisession,
             SessionToken: payload.SessionToken,
-            AppKey: session.api_key
+            AppKey: runtimeAppKey, // runtime → API mapping
           })
         )
       );
 
-      if (response.data.Status !== 200) {
-        throw new Error(`CustomerDetails error: ${response.data.Error || 'Unknown'}`);
+      if (response.data?.Status !== 200) {
+        throw new Error(
+          `CustomerDetails error: ${response.data?.Error || "Unknown"}`
+        );
       }
+
       return response.data;
     }
 
+    /* --------------------------------------------------
+       CHECKSUM COMPUTATION (RUNTIME SECRET)
+    -------------------------------------------------- */
     const timestamp = getTimestamp();
-    const checksumPayload = method === 'GET' ? {} : payload;
-    const checksum = calculateChecksum(timestamp, checksumPayload, session.api_secret);
+    const checksumPayload = method === "GET" ? {} : payload;
 
+    const checksum = calculateChecksum(
+      timestamp,
+      checksumPayload,
+      runtimeAppSecret
+    );
+
+    /* --------------------------------------------------
+       REQUEST HEADERS (RUNTIME → NETWORK)
+    -------------------------------------------------- */
     const headers = {
-      'X-Timestamp': timestamp,
-      'X-AppKey': session.api_key,
-      'X-SessionToken': session.session_token,
-      'X-Checksum': `token ${checksum}`,
-      'X-Request-ID': requestId // Tracing
+      "X-Timestamp": timestamp,
+      "X-AppKey": runtimeAppKey,
+      "X-SessionToken": runtimeSessionToken,
+      "X-Checksum": `token ${checksum}`,
+      "X-Request-ID": requestId,
     };
 
+    /* --------------------------------------------------
+       API INVOCATION
+    -------------------------------------------------- */
     const response = await iciciCircuitBreaker.execute(() =>
       retryWithBackoff(() =>
         breezeAxios({
           method,
           url: endpoint,
           data: payload,
-          headers
+          headers,
         })
       )
     );
 
-    if (response.data.Status && response.data.Status !== 200) {
-      throw new Error(`Breeze API error: ${response.data.Error || 'Unknown'}`);
+    if (response.data?.Status && response.data.Status !== 200) {
+      throw new Error(
+        `Breeze API error: ${response.data.Error || "Unknown"}`
+      );
     }
 
-    if (process.env.NODE_ENV !== 'production') {
-      console.debug(`[Breeze] ${method} ${endpoint} - Success (${Date.now() - startTime}ms) - ReqID: ${requestId}`);
+    if (process.env.NODE_ENV !== "production") {
+      console.debug(
+        `[Breeze] ${method} ${endpoint} | OK | ${Date.now() - startTime}ms | reqId=${requestId}`
+      );
     }
+
     return response.data;
   } catch (error: unknown) {
     const axiosError = error as AxiosError;
 
     if (axios.isAxiosError(axiosError)) {
       const status = axiosError.response?.status;
-      const data = axiosError.response?.data as any;
 
       if (status === 401) {
         await SessionService.getInstance().invalidateSession(userId);
-        throw new Error('ICICI session expired. Please reconnect to Breeze.');
+        throw new Error(
+          "ICICI session expired. Re-authentication required."
+        );
       }
 
       if (status === 403) {
         throw new Error(
-          'ICICI access denied (403). Possible causes:\n' +
-          '• Server IP not whitelisted in ICICI portal\n' +
-          '• Invalid or expired API credentials\n' +
-          '• Checksum calculation error\n' +
-          '• Session token invalid'
+          "ICICI access denied (403).\n" +
+            "Possible causes:\n" +
+            "• Server IP not whitelisted\n" +
+            "• Invalid API credentials\n" +
+            "• Checksum mismatch\n" +
+            "• Session token invalid"
         );
       }
     }
@@ -133,20 +187,23 @@ export async function breezeRequest<T = any>(
   }
 }
 
-// Convenience wrappers unchanged
-// getCustomerDetails, placeOrder, getOrders, etc.
-
-// Login URL
-export function getBreezeLoginUrl(apiKey: string): string {
-  return `https://api.icicidirect.com/apiuser/login?api_key=${encodeURIComponent(apiKey)}`;
+/* ======================================================
+   LOGIN URL (PURE API CONTRACT)
+====================================================== */
+export function getBreezeLoginUrl(runtimeAppKey: string): string {
+  return `https://api.icicidirect.com/apiuser/login?api_key=${encodeURIComponent(
+    runtimeAppKey
+  )}`;
 }
 
-// CustomerDetails helper (used only during auth flow)
+/* ======================================================
+   CUSTOMER DETAILS HELPER (AUTH FLOW ONLY)
+====================================================== */
 export async function getCustomerDetails(
   userId: string,
-  apisession: string
+  reqApiSession: string
 ) {
   return breezeRequest(userId, "POST", "/api/v1/customerdetails", {
-    SessionToken: apisession,
+    SessionToken: reqApiSession,
   });
 }
