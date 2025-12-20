@@ -8,7 +8,7 @@ import { query } from "../config/database.js";
 const router = Router();
 
 /* ======================================================
-   ENCRYPTION TYPES
+   TYPES
 ====================================================== */
 type EncryptedPayload = {
   encrypted: string;
@@ -18,14 +18,14 @@ type EncryptedPayload = {
 
 type StoreRequestBody = {
   broker_name?: string;
-  app_key?: string;
-  app_secret?: string;
+  req_app_key?: string;     // GUI → backend
+  req_app_secret?: string; // GUI → backend
 };
 
 /* ======================================================
-   KEY DERIVATION
+   KEY DERIVATION (SERVER SCOPE)
 ====================================================== */
-function getEncryptionKey(): Buffer {
+function getServerEncryptionKey(): Buffer {
   const masterSecret = process.env.CREDENTIALS_ENCRYPTION_KEY;
   if (!masterSecret) {
     throw new Error("CREDENTIALS_ENCRYPTION_KEY not configured");
@@ -41,17 +41,17 @@ function getEncryptionKey(): Buffer {
 }
 
 /* ======================================================
-   ENCRYPT / DECRYPT HELPERS
+   ENCRYPT / DECRYPT (SERVER UTILS)
 ====================================================== */
-async function encryptData(
-  plain: string,
-  key: Buffer
+async function encryptServerValue(
+  srv_plain_value: string,
+  srv_key: Buffer
 ): Promise<EncryptedPayload> {
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const cipher = crypto.createCipheriv("aes-256-gcm", srv_key, iv);
 
   const encrypted = Buffer.concat([
-    cipher.update(Buffer.from(plain, "utf8")),
+    cipher.update(Buffer.from(srv_plain_value, "utf8")),
     cipher.final(),
   ]);
 
@@ -62,19 +62,19 @@ async function encryptData(
   };
 }
 
-async function decryptData(
-  payload: EncryptedPayload,
-  key: Buffer
+async function decryptServerValue(
+  db_payload: EncryptedPayload,
+  srv_key: Buffer
 ): Promise<string> {
   const decipher = crypto.createDecipheriv(
     "aes-256-gcm",
-    key,
-    Buffer.from(payload.iv, "base64")
+    srv_key,
+    Buffer.from(db_payload.iv, "base64")
   );
-  decipher.setAuthTag(Buffer.from(payload.tag, "base64"));
+  decipher.setAuthTag(Buffer.from(db_payload.tag, "base64"));
 
   const decrypted = Buffer.concat([
-    decipher.update(Buffer.from(payload.encrypted, "base64")),
+    decipher.update(Buffer.from(db_payload.encrypted, "base64")),
     decipher.final(),
   ]);
 
@@ -85,8 +85,8 @@ async function decryptData(
    GET METADATA (NO SECRETS)
 ====================================================== */
 router.get("/:broker", authenticateToken, async (req: AuthRequest, res) => {
-  const userId = req.user!.userId;
-  const broker = req.params.broker.toUpperCase();
+  const srv_user_id = req.user!.userId;
+  const srv_broker_name = req.params.broker.toUpperCase();
 
   const result = await query(
     `
@@ -94,10 +94,10 @@ router.get("/:broker", authenticateToken, async (req: AuthRequest, res) => {
     FROM broker_credentials
     WHERE user_id = $1 AND broker_name = $2
     `,
-    [userId, broker]
+    [srv_user_id, srv_broker_name]
   );
 
-  if (result.rowCount === 0) {
+  if ((result.rowCount ?? 0) === 0) {
     return res.json({ connected: false });
   }
 
@@ -108,43 +108,64 @@ router.get("/:broker", authenticateToken, async (req: AuthRequest, res) => {
 });
 
 /* ======================================================
-   STORE API CREDENTIALS (ENCRYPTED)
+   STORE API CREDENTIALS (GUI → SERVER → DB)
 ====================================================== */
 router.post("/store", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
-    const userId = req.user!.userId;
-    const { broker_name, req_app_key, req_app_secret } = req.body as StoreRequestBody;
+    const srv_user_id = req.user!.userId;
+
+    const {
+      broker_name,
+      req_app_key,
+      req_app_secret,
+    } = req.body as StoreRequestBody;
 
     if (!broker_name || !req_app_key || !req_app_secret) {
       return res.status(400).json({
-        error: "broker_name, api_key and api_secret are required",
+        error: "broker_name, app_key and app_secret are required",
       });
     }
 
-    const key = getEncryptionKey();
+    const srv_broker_name = broker_name.toUpperCase();
 
-    const encryptedApiKey = await encryptData(app_key, key);
-    const encryptedApiSecret = await encryptData(app_secret, key);
+    // SERVER SCOPE VARIABLES
+    const srv_app_key = req_app_key;
+    const srv_app_secret = req_app_secret;
+
+    const srv_crypto_key = getServerEncryptionKey();
+
+    const db_app_key_payload = await encryptServerValue(
+      srv_app_key,
+      srv_crypto_key
+    );
+    const db_app_secret_payload = await encryptServerValue(
+      srv_app_secret,
+      srv_crypto_key
+    );
 
     const existing = await query(
-      `SELECT id FROM broker_credentials WHERE user_id = $1 AND broker_name = $2`,
-      [userId, broker_name.toUpperCase()]
+      `
+      SELECT id
+      FROM broker_credentials
+      WHERE user_id = $1 AND broker_name = $2
+      `,
+      [srv_user_id, srv_broker_name]
     );
 
     if ((existing.rowCount ?? 0) > 0) {
       await query(
         `
         UPDATE broker_credentials
-        SET api_key = $1,
-            api_secret = $2,
+        SET app_key = $1,
+            app_secret = $2,
             updated_at = NOW()
         WHERE user_id = $3 AND broker_name = $4
         `,
         [
-          JSON.stringify(encryptedApiKey),
-          JSON.stringify(encryptedApiSecret),
-          userId,
-          broker_name.toUpperCase(),
+          JSON.stringify(db_app_key_payload),
+          JSON.stringify(db_app_secret_payload),
+          srv_user_id,
+          srv_broker_name,
         ]
       );
     } else {
@@ -155,10 +176,10 @@ router.post("/store", authenticateToken, async (req: AuthRequest, res, next) => 
         VALUES ($1, $2, $3, $4, true)
         `,
         [
-          userId,
-          broker_name.toUpperCase(),
-          JSON.stringify(encryptedApiKey),
-          JSON.stringify(encryptedApiSecret),
+          srv_user_id,
+          srv_broker_name,
+          JSON.stringify(db_app_key_payload),
+          JSON.stringify(db_app_secret_payload),
         ]
       );
     }
@@ -177,12 +198,14 @@ router.post("/store", authenticateToken, async (req: AuthRequest, res, next) => 
 ====================================================== */
 router.post("/retrieve", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
-    const userId = req.user!.userId;
+    const srv_user_id = req.user!.userId;
     const { broker_name } = req.body;
 
     if (!broker_name) {
       return res.status(400).json({ error: "broker_name required" });
     }
+
+    const srv_broker_name = broker_name.toUpperCase();
 
     const result = await query(
       `
@@ -190,22 +213,25 @@ router.post("/retrieve", authenticateToken, async (req: AuthRequest, res, next) 
       FROM broker_credentials
       WHERE user_id = $1 AND broker_name = $2
       `,
-      [userId, broker_name.toUpperCase()]
+      [srv_user_id, srv_broker_name]
     );
 
-    if (result.rowCount === 0) {
+    if ((result.rowCount ?? 0) === 0) {
       return res.status(404).json({ error: "Credentials not found" });
     }
 
-    const key = getEncryptionKey();
+    const srv_crypto_key = getServerEncryptionKey();
 
-    const apiKeyPayload = JSON.parse(result.rows[0].api_key);
-    const apiSecretPayload = JSON.parse(result.rows[0].api_secret);
+    const db_app_key_payload: EncryptedPayload = JSON.parse(result.rows[0].app_key);
+    const db_app_secret_payload: EncryptedPayload = JSON.parse(result.rows[0].app_secret);
+
+    const srv_app_key = await decryptServerValue(db_app_key_payload, srv_crypto_key);
+    const srv_app_secret = await decryptServerValue(db_app_secret_payload, srv_crypto_key);
 
     return res.json({
-      broker_name,
-      app_key: await decryptData(apiKeyPayload, key),
-      app_secret: await decryptData(apiSecretPayload, key),
+      broker_name: srv_broker_name,
+      app_key: srv_app_key,
+      app_secret: srv_app_secret,
     });
   } catch (err) {
     next(err);
