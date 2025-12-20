@@ -113,9 +113,9 @@ router.get("/:broker", authenticateToken, async (req: AuthRequest, res) => {
 router.post("/store", authenticateToken, async (req: AuthRequest, res, next) => {
   try {
     const userId = req.user!.userId;
-    const { broker_name, app_key, app_secret } = req.body as StoreRequestBody;
+    const { broker_name, req_app_key, req_app_secret } = req.body as StoreRequestBody;
 
-    if (!broker_name || !app_key || !app_secret) {
+    if (!broker_name || !req_app_key || !req_app_secret) {
       return res.status(400).json({
         error: "broker_name, api_key and api_secret are required",
       });
