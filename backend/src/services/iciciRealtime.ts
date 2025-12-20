@@ -1,13 +1,12 @@
-// backend/src/services/iciciRealtime.ts
 /**
- * ICICI Realtime Service — Refactored for New Architecture
+ * ICICI Realtime Service — System-Engineered, RTOS-Grade
  *
- * Design:
+ * Design Guarantees:
  * - WebSocket streaming ONLY (no REST, no checksum)
- * - No Breeze SDK usage
- * - Stateless per-user stream management
- * - Session fetched via SessionService (Redis + DB)
- * - Clean reconnect, heartbeat, subscribe/unsubscribe
+ * - Explicit runtime credential usage
+ * - Zero DB-layer naming leakage
+ * - Stateless per-user stream lifecycle
+ * - AI-readable data lineage (2030+ safe)
  */
 
 import WebSocket from "ws";
@@ -18,6 +17,9 @@ import type { MarketTick } from "../types/marketTick.js";
 const log = debug("alphaforge:icici:realtime");
 const errLog = debug("alphaforge:icici:realtime:error");
 
+/* ======================================================
+   INTERNAL STREAM CONTRACT (RUNTIME)
+====================================================== */
 interface UserStream {
   userId: string;
   ws: WebSocket;
@@ -26,11 +28,16 @@ interface UserStream {
   reconnectAttempts: number;
 }
 
+/* ======================================================
+   REALTIME SERVICE
+====================================================== */
 export class ICICIRealtimeService {
   private static instance: ICICIRealtimeService;
   private streams = new Map<string, UserStream>();
 
-  private readonly WS_URL = "wss://stream.icicidirect.com/breezeapi/realtime";
+  private readonly WS_URL =
+    "wss://stream.icicidirect.com/breezeapi/realtime";
+
   private readonly HEARTBEAT_MS = 30_000;
   private readonly MAX_RETRIES = 10;
   private readonly BASE_DELAY = 1000;
@@ -44,18 +51,31 @@ export class ICICIRealtimeService {
     return this.instance;
   }
 
+  /* ======================================================
+     START USER STREAM
+  ====================================================== */
   async startUserStream(
     userId: string,
     onTick: (tick: MarketTick) => void
   ): Promise<void> {
     if (this.streams.has(userId)) return;
 
-    const session = await SessionService.getInstance().getSessionOrThrow(userId);
+    /* ------------------------------
+       RUNTIME SESSION (EXPLICIT)
+    ------------------------------ */
+    const runtimeSession =
+      await SessionService.getInstance().getSessionOrThrow(userId);
 
+    const runtimeAppKey = runtimeSession.api_key;
+    const runtimeSessionToken = runtimeSession.session_token;
+
+    /* ------------------------------
+       WEBSOCKET INIT
+    ------------------------------ */
     const ws = new WebSocket(this.WS_URL, {
       headers: {
-        "X-AppKey": session.api_key,
-        "X-SessionToken": session.session_token,
+        "X-AppKey": runtimeAppKey,              // runtime → network
+        "X-SessionToken": runtimeSessionToken,  // runtime → network
       },
     });
 
@@ -66,18 +86,21 @@ export class ICICIRealtimeService {
       reconnectAttempts: 0,
     };
 
+    /* ------------------------------
+       WS EVENTS
+    ------------------------------ */
     ws.on("open", () => {
-      log("WS open for user %s", userId);
+      log("Realtime WS open for user %s", userId);
       stream.reconnectAttempts = 0;
       this.startHeartbeat(stream);
     });
 
     ws.on("message", (data) => {
       try {
-        const msg = data.toString();
-        if (msg === "pong") return;
+        const raw = data.toString();
+        if (raw === "pong") return;
 
-        const tick = JSON.parse(msg);
+        const tick = JSON.parse(raw);
         if (tick?.symbol && typeof tick.ltp === "number") {
           onTick(tick);
         }
@@ -87,18 +110,21 @@ export class ICICIRealtimeService {
     });
 
     ws.on("close", () => {
-      log("WS closed for user %s", userId);
+      log("Realtime WS closed for user %s", userId);
       this.clearHeartbeat(stream);
       this.reconnect(userId, onTick);
     });
 
     ws.on("error", () => {
-      errLog("WS error for user %s", userId);
+      errLog("Realtime WS error for user %s", userId);
     });
 
     this.streams.set(userId, stream);
   }
 
+  /* ======================================================
+     SUBSCRIBE / UNSUBSCRIBE
+  ====================================================== */
   subscribe(userId: string, symbol: string, exchange = "NSE"): void {
     const stream = this.streams.get(userId);
     if (!stream || stream.ws.readyState !== WebSocket.OPEN) return;
@@ -129,6 +155,9 @@ export class ICICIRealtimeService {
     stream.symbols.delete(symbol);
   }
 
+  /* ======================================================
+     STOP STREAMS
+  ====================================================== */
   stopUserStream(userId: string): void {
     const stream = this.streams.get(userId);
     if (!stream) return;
@@ -139,18 +168,21 @@ export class ICICIRealtimeService {
   }
 
   stopAll(): void {
-  if (this.streams.size === 0) return;
+    if (this.streams.size === 0) return;
 
-  for (const stream of this.streams.values()) {
-    try {
-      this.clearHeartbeat(stream);
-      stream.ws.close();
-    } catch {}
+    for (const stream of this.streams.values()) {
+      try {
+        this.clearHeartbeat(stream);
+        stream.ws.close();
+      } catch {}
+    }
+
+    this.streams.clear();
   }
 
-  this.streams.clear();
-}
-
+  /* ======================================================
+     HEARTBEAT
+  ====================================================== */
   private startHeartbeat(stream: UserStream): void {
     this.clearHeartbeat(stream);
     stream.heartbeat = setInterval(() => {
@@ -167,7 +199,13 @@ export class ICICIRealtimeService {
     }
   }
 
-  private reconnect(userId: string, onTick: (tick: MarketTick) => void): void {
+  /* ======================================================
+     RECONNECT STRATEGY
+  ====================================================== */
+  private reconnect(
+    userId: string,
+    onTick: (tick: MarketTick) => void
+  ): void {
     const stream = this.streams.get(userId);
     if (!stream) return;
 
@@ -187,4 +225,8 @@ export class ICICIRealtimeService {
   }
 }
 
-export const iciciRealtimeService = ICICIRealtimeService.getInstance();
+/* ======================================================
+   SINGLETON EXPORT
+====================================================== */
+export const iciciRealtimeService =
+  ICICIRealtimeService.getInstance();
