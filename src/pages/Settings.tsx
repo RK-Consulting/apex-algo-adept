@@ -8,11 +8,9 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  CardDescription,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
   Tabs,
@@ -21,7 +19,6 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import {
-  Settings as SettingsIcon,
   Shield,
   Bell,
   Link2,
@@ -29,103 +26,24 @@ import {
 } from "lucide-react";
 
 import Profile from "./settings/Profile";
+import ApiKeys from "./settings/ApiKeys";
 import { BrokerConnectionDialog } from "@/components/BrokerConnectionDialog";
 import { ICICIBrokerDialog } from "@/components/ICICIBrokerDialog";
-import { useToast } from "@/hooks/use-toast";
 
 const Settings = () => {
-  const { toast } = useToast();
-
-  const backendUrl =
-    import.meta.env.VITE_BACKEND_URL ||
-    import.meta.env.VITE_API_URL ||
-    "https://api.alphaforge.skillsifter.in";
-
   /* ======================================================
-     BROKER DIALOG STATE
+     BROKER DIALOG STATE (ORCHESTRATION ONLY)
   ====================================================== */
   const [brokerDialogOpen, setBrokerDialogOpen] = useState(false);
   const [iciciBrokerDialogOpen, setIciciBrokerDialogOpen] = useState(false);
   const [selectedBroker, setSelectedBroker] = useState("");
 
-  /* ======================================================
-     API KEYS TAB STATE
-  ====================================================== */
-  const [apiBroker, setApiBroker] = useState("");
-  const [userInputAppKey, setUserInputAppKey] = useState("");
-  const [userInputAppSecret, setUserInputAppSecret] = useState("");
-  const [savingApi, setSavingApi] = useState(false);
-
-  /* ======================================================
-     BROKER CONNECT HANDLER
-  ====================================================== */
   const handleConnectBroker = (brokerName: string) => {
     if (brokerName === "ICICIDIRECT") {
       setIciciBrokerDialogOpen(true);
     } else {
       setSelectedBroker(brokerName);
       setBrokerDialogOpen(true);
-    }
-  };
-
-  /* ======================================================
-     SAVE API KEYS
-  ====================================================== */
-  const handleSaveApiKeys = async () => {
-    if (!apiBroker || !userInputAppKey || !userInputAppSecret) {
-      toast({
-        title: "Missing fields",
-        description: "Broker, API Key and API Secret are required",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const token = localStorage.getItem("token");
-    if (!token) {
-      toast({
-        title: "Session expired",
-        description: "Please login again",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const payload = {
-      broker_name: apiBroker,
-      app_key: userInputAppKey,
-      app_secret: userInputAppSecret,
-    };
-
-    setSavingApi(true);
-    try {
-      const res = await fetch(`${backendUrl}/api/credentials/store`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-
-      toast({
-        title: "Saved",
-        description: "Broker API credentials stored securely",
-      });
-
-      setUserInputAppKey("");
-      setUserInputAppSecret("");
-    } catch (err: any) {
-      toast({
-        title: "Error",
-        description: err.message,
-        variant: "destructive",
-      });
-    } finally {
-      setSavingApi(false);
     }
   };
 
@@ -229,64 +147,14 @@ const Settings = () => {
 
               {/* ================= API KEYS ================= */}
               <TabsContent value="api">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <SettingsIcon className="w-5 h-5" /> API Keys
-                    </CardTitle>
-                    <CardDescription>
-                      Store broker API credentials securely
-                    </CardDescription>
-                  </CardHeader>
-
-                  <CardContent className="space-y-4">
-                    <div>
-                      <Label>Broker</Label>
-                      <select
-                        className="w-full p-2 rounded-md border bg-background"
-                        value={apiBroker}
-                        onChange={(e) => setApiBroker(e.target.value)}
-                      >
-                        <option value="">Select broker</option>
-                        <option value="ICICI">ICICI Direct</option>
-                        <option value="ZERODHA">Zerodha</option>
-                        <option value="UPSTOX">Upstox</option>
-                        <option value="ANGEL">Angel One</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <Label>API Key</Label>
-                      <Input
-                        value={userInputAppKey}
-                        onChange={(e) =>
-                          setUserInputAppKey(e.target.value)
-                        }
-                      />
-                    </div>
-
-                    <div>
-                      <Label>API Secret</Label>
-                      <Input
-                        type="password"
-                        value={userInputAppSecret}
-                        onChange={(e) =>
-                          setUserInputAppSecret(e.target.value)
-                        }
-                      />
-                    </div>
-
-                    <Button onClick={handleSaveApiKeys} disabled={savingApi}>
-                      Save API Credentials
-                    </Button>
-                  </CardContent>
-                </Card>
+                <ApiKeys />
               </TabsContent>
             </Tabs>
           </div>
         </main>
       </div>
 
+      {/* ================= BROKER DIALOGS ================= */}
       <BrokerConnectionDialog
         open={brokerDialogOpen}
         onOpenChange={setBrokerDialogOpen}
