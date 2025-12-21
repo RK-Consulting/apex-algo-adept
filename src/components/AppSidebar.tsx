@@ -1,3 +1,5 @@
+// /src/components/AppSidebar.tsx
+
 import {
   LayoutDashboard,
   TrendingUp,
@@ -6,6 +8,7 @@ import {
   BarChart3,
   Settings,
   LogOut,
+  User,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import {
@@ -19,6 +22,7 @@ import {
   SidebarMenuItem,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { useProfileSummary } from "@/hooks/useProfileSummary";
 
 const menuItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -34,8 +38,11 @@ const bottomItems = [
 ];
 
 export function AppSidebar() {
+  const { full_name, email } = useProfileSummary();
+
   return (
     <Sidebar className="border-r border-border w-44">
+      {/* ================= BRAND HEADER ================= */}
       <div className="p-6 border-b border-border">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center">
@@ -48,7 +55,9 @@ export function AppSidebar() {
         </div>
       </div>
 
+      {/* ================= MAIN CONTENT ================= */}
       <SidebarContent>
+        {/* -------- Main Menu -------- */}
         <SidebarGroup>
           <SidebarGroupLabel>Main Menu</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -66,39 +75,3 @@ export function AppSidebar() {
                       }
                     >
                       <item.icon className="w-4 h-4" />
-                      <span>{item.title}</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup className="mt-auto">
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {bottomItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <NavLink
-                      to={item.url}
-                      className="hover:bg-sidebar-accent/50"
-                    >
-                      <item.icon className="w-4 h-4" />
-                      <span>{item.title}</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
-
-      <div className="p-4 border-t border-border">
-        <SidebarTrigger />
-      </div>
-    </Sidebar>
-  );
-}
