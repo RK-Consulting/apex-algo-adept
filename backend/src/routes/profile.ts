@@ -1,3 +1,5 @@
+// /backend/src/routes/profile.ts
+
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 import { query } from "../config/database.js";
@@ -9,14 +11,17 @@ router.get("/", authenticateToken, async (req: AuthRequest, res) => {
   const userId = req.user!.userId;
 
   const result = await query(
-    `SELECT full_name, email, phone, pan
-     FROM users
-     WHERE user_id = $1`,
+    `
+    SELECT full_name, email, phone, pan
+    FROM users
+    WHERE id = $1
+    `,
     [userId]
   );
 
   if (result.rowCount === 0) {
-    return res.json({
+    // This should practically never happen
+    return res.status(404).json({
       exists: false,
       isComplete: false,
     });
@@ -37,24 +42,22 @@ router.get("/", authenticateToken, async (req: AuthRequest, res) => {
   });
 });
 
-/* ================= UPSERT PROFILE ================= */
+/* ================= UPDATE PROFILE ================= */
 router.post("/", authenticateToken, async (req: AuthRequest, res) => {
   const userId = req.user!.userId;
-  const { full_name, email, phone, pan } = req.body;
+  const { full_name, phone, pan } = req.body;
 
   await query(
     `
-    INSERT INTO users (user_id, full_name, email, phone, pan)
-    VALUES ($1, $2, $3, $4, $5)
-    ON CONFLICT (user_id)
-    DO UPDATE SET
-      full_name = EXCLUDED.full_name,
-      email = EXCLUDED.email,
-      phone = EXCLUDED.phone,
-      pan = EXCLUDED.pan,
+    UPDATE users
+    SET
+      full_name = $2,
+      phone = $3,
+      pan = $4,
       updated_at = now()
+    WHERE id = $1
     `,
-    [userId, full_name, email, phone, pan]
+    [userId, full_name, phone, pan]
   );
 
   res.json({ success: true });
