@@ -34,6 +34,7 @@ import { watchlistRouter } from "./routes/watchlist.js";
 import { credentialsRouter } from "./routes/credentials.js";
 import { aiRouter } from "./routes/ai.js";
 import redisDevRouter from "./routes/redis.js"; // Default export from redis.js
+import profileRouter from "./routes/profile.js";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -84,6 +85,7 @@ app.use("/api/strategies", authenticateToken, strategiesRouter);
 app.use("/api/watchlist", authenticateToken, watchlistRouter);
 app.use("/api/ai", authenticateToken, aiRouter);
 app.use("/api/redis", redisDevRouter); // Dev-only
+app.use("/api/profile", profileRouter);
 
 // ICICI Breeze Protected Routes
 app.use("/api/icici/broker", authenticateToken, iciciBrokerRouter);
