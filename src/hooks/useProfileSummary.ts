@@ -23,12 +23,15 @@ export const useProfileSummary = () => {
     })
       .then((res) => res.json())
       .then((data) => {
-        if (data.exists) {
+        if (data?.exists) {
           setSummary({
-            full_name: data.profile.full_name,
-            email: data.profile.email,
+            full_name: data.profile?.full_name,
+            email: data.profile?.email,
           });
         }
+      })
+      .catch(() => {
+        // Silent failure — sidebar must never break UI
       });
   }, []);
 
