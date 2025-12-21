@@ -22,12 +22,13 @@ import {
 } from "@/components/ui/tabs";
 import {
   Settings as SettingsIcon,
-  User,
   Shield,
   Bell,
   Link2,
   Wallet,
 } from "lucide-react";
+
+import Profile from "./settings/Profile";
 import { BrokerConnectionDialog } from "@/components/BrokerConnectionDialog";
 import { ICICIBrokerDialog } from "@/components/ICICIBrokerDialog";
 import { useToast } from "@/hooks/use-toast";
@@ -48,13 +49,11 @@ const Settings = () => {
   const [selectedBroker, setSelectedBroker] = useState("");
 
   /* ======================================================
-     API KEYS TAB — GUI INPUT STATE (EXPLICIT)
+     API KEYS TAB STATE
   ====================================================== */
   const [apiBroker, setApiBroker] = useState("");
-
   const [userInputAppKey, setUserInputAppKey] = useState("");
   const [userInputAppSecret, setUserInputAppSecret] = useState("");
-
   const [savingApi, setSavingApi] = useState(false);
 
   /* ======================================================
@@ -70,7 +69,7 @@ const Settings = () => {
   };
 
   /* ======================================================
-     SAVE API KEYS (GUI → REQUEST PAYLOAD)
+     SAVE API KEYS
   ====================================================== */
   const handleSaveApiKeys = async () => {
     if (!apiBroker || !userInputAppKey || !userInputAppSecret) {
@@ -92,10 +91,7 @@ const Settings = () => {
       return;
     }
 
-    /* ------------------------------
-       REQUEST PAYLOAD (EXPLICIT)
-    ------------------------------ */
-    const requestPayload = {
+    const payload = {
       broker_name: apiBroker,
       app_key: userInputAppKey,
       app_secret: userInputAppSecret,
@@ -109,7 +105,7 @@ const Settings = () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(requestPayload),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
@@ -120,9 +116,6 @@ const Settings = () => {
         description: "Broker API credentials stored securely",
       });
 
-      /* ------------------------------
-         CLEAR GUI STATE
-      ------------------------------ */
       setUserInputAppKey("");
       setUserInputAppSecret("");
     } catch (err: any) {
@@ -140,6 +133,7 @@ const Settings = () => {
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
         <AppSidebar />
+
         <main className="flex-1 overflow-auto">
           <div className="container mx-auto p-6 space-y-6">
             <div>
@@ -160,32 +154,7 @@ const Settings = () => {
 
               {/* ================= PROFILE ================= */}
               <TabsContent value="profile">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <User className="w-5 h-5" /> Profile Information
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label>Full Name</Label>
-                      <Input />
-                    </div>
-                    <div>
-                      <Label>Email</Label>
-                      <Input type="email" />
-                    </div>
-                    <div>
-                      <Label>Phone</Label>
-                      <Input />
-                    </div>
-                    <div>
-                      <Label>PAN Number</Label>
-                      <Input />
-                    </div>
-                    <Button className="md:col-span-2">Save Changes</Button>
-                  </CardContent>
-                </Card>
+                <Profile />
               </TabsContent>
 
               {/* ================= BROKER ================= */}
@@ -274,18 +243,7 @@ const Settings = () => {
                     <div>
                       <Label>Broker</Label>
                       <select
-                        className="
-                          w-full
-                          p-2
-                          rounded-md
-                          border
-                          border-border
-                          bg-background
-                          text-foreground
-                          focus:outline-none
-                          focus:ring-2
-                          focus:ring-primary
-                        "
+                        className="w-full p-2 rounded-md border bg-background"
                         value={apiBroker}
                         onChange={(e) => setApiBroker(e.target.value)}
                       >
