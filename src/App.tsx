@@ -61,92 +61,102 @@ const App = () => {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ProfileProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
 
-          <BrowserRouter>
-            <Routes>
-              {/* ---------------- PUBLIC ROUTES ---------------- */}
-              <Route path="/login" element={<Login />} />
-              <Route path="/signup" element={<Signup />} />
+        <BrowserRouter>
+          <Routes>
+            {/* ---------- PUBLIC ROUTES ---------- */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/icici-callback" element={<ICICICallback />} />
 
-              {/* ICICI OAuth Redirect Handler */}
-              <Route path="/icici-callback" element={<ICICICallback />} />
-
-              {/* ---------------- PROTECTED ROUTES ---------------- */}
-              <Route
-                path="/"
-                element={
-                  <ProtectedRoute>
+            {/* ---------- PROTECTED ROUTES ---------- */}
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <ProfileProvider>
                     <Index />
-                  </ProtectedRoute>
-                }
-              />
+                  </ProfileProvider>
+                </ProtectedRoute>
+              }
+            />
 
-              <Route
-                path="/markets"
-                element={
-                  <ProtectedRoute>
+            <Route
+              path="/markets"
+              element={
+                <ProtectedRoute>
+                  <ProfileProvider>
                     <Markets />
-                  </ProtectedRoute>
-                }
-              />
+                  </ProfileProvider>
+                </ProtectedRoute>
+              }
+            />
 
-              <Route
-                path="/strategies"
-                element={
-                  <ProtectedRoute>
+            <Route
+              path="/strategies"
+              element={
+                <ProtectedRoute>
+                  <ProfileProvider>
                     <Strategies />
-                  </ProtectedRoute>
-                }
-              />
+                  </ProfileProvider>
+                </ProtectedRoute>
+              }
+            />
 
-              <Route
-                path="/portfolio"
-                element={
-                  <ProtectedRoute>
+            <Route
+              path="/portfolio"
+              element={
+                <ProtectedRoute>
+                  <ProfileProvider>
                     <Portfolio />
-                  </ProtectedRoute>
-                }
-              />
+                  </ProfileProvider>
+                </ProtectedRoute>
+              }
+            />
 
-              <Route
-                path="/analytics"
-                element={
-                  <ProtectedRoute>
+            <Route
+              path="/analytics"
+              element={
+                <ProtectedRoute>
+                  <ProfileProvider>
                     <Analytics />
-                  </ProtectedRoute>
-                }
-              />
+                  </ProfileProvider>
+                </ProtectedRoute>
+              }
+            />
 
-              <Route
-                path="/settings"
-                element={
-                  <ProtectedRoute>
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <ProfileProvider>
                     <Settings />
-                  </ProtectedRoute>
-                }
-              />
+                  </ProfileProvider>
+                </ProtectedRoute>
+              }
+            />
 
-              <Route path="/logout" element={<Logout />} />
-
-              <Route
-                path="/stock/:symbol"
-                element={
-                  <ProtectedRoute>
+            <Route
+              path="/stock/:symbol"
+              element={
+                <ProtectedRoute>
+                  <ProfileProvider>
                     <StockDetails />
-                  </ProtectedRoute>
-                }
-              />
+                  </ProfileProvider>
+                </ProtectedRoute>
+              }
+            />
 
-              {/* ---------------- FALLBACK ---------------- */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
-      </ProfileProvider>
+            <Route path="/logout" element={<Logout />} />
+
+            {/* ---------- FALLBACK ---------- */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
     </QueryClientProvider>
   );
 };
