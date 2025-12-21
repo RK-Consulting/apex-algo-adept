@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { ProfileProvider } from "@/context/ProfileContext";
 
 // Pages
 import Index from "./pages/Index";
@@ -24,7 +25,6 @@ import ICICICallback from "./pages/ICICICallback";
 const queryClient = new QueryClient();
 
 const App = () => {
-
   /* -------------------------------------------------------
    * GLOBAL ICICI SESSION EXPIRY + MISSING HANDLER
    * -----------------------------------------------------*/
@@ -35,7 +35,7 @@ const App = () => {
 
       window.dispatchEvent(
         new CustomEvent("SHOW_ICICI_RECONNECT_DIALOG", {
-          detail: { expired: true }
+          detail: { expired: true },
         })
       );
     }
@@ -45,7 +45,7 @@ const App = () => {
 
       window.dispatchEvent(
         new CustomEvent("SHOW_ICICI_RECONNECT_DIALOG", {
-          detail: { missing: true }
+          detail: { missing: true },
         })
       );
     }
@@ -61,90 +61,92 @@ const App = () => {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            
-            {/* Public Routes */}
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
+      <ProfileProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
 
-            {/* ICICI OAuth Redirect Handler */}
-            <Route path="/icici-callback" element={<ICICICallback />} />
+          <BrowserRouter>
+            <Routes>
+              {/* ---------------- PUBLIC ROUTES ---------------- */}
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
 
-            {/* Protected Routes */}
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <Index />
-                </ProtectedRoute>
-              }
-            />
+              {/* ICICI OAuth Redirect Handler */}
+              <Route path="/icici-callback" element={<ICICICallback />} />
 
-            <Route
-              path="/markets"
-              element={
-                <ProtectedRoute>
-                  <Markets />
-                </ProtectedRoute>
-              }
-            />
+              {/* ---------------- PROTECTED ROUTES ---------------- */}
+              <Route
+                path="/"
+                element={
+                  <ProtectedRoute>
+                    <Index />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route
-              path="/strategies"
-              element={
-                <ProtectedRoute>
-                  <Strategies />
-                </ProtectedRoute>
-              }
-            />
+              <Route
+                path="/markets"
+                element={
+                  <ProtectedRoute>
+                    <Markets />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route
-              path="/portfolio"
-              element={
-                <ProtectedRoute>
-                  <Portfolio />
-                </ProtectedRoute>
-              }
-            />
+              <Route
+                path="/strategies"
+                element={
+                  <ProtectedRoute>
+                    <Strategies />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route
-              path="/analytics"
-              element={
-                <ProtectedRoute>
-                  <Analytics />
-                </ProtectedRoute>
-              }
-            />
+              <Route
+                path="/portfolio"
+                element={
+                  <ProtectedRoute>
+                    <Portfolio />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route
-              path="/settings"
-              element={
-                <ProtectedRoute>
-                  <Settings />
-                </ProtectedRoute>
-              }
-            />
+              <Route
+                path="/analytics"
+                element={
+                  <ProtectedRoute>
+                    <Analytics />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route path="/logout" element={<Logout />} />
+              <Route
+                path="/settings"
+                element={
+                  <ProtectedRoute>
+                    <Settings />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route
-              path="/stock/:symbol"
-              element={
-                <ProtectedRoute>
-                  <StockDetails />
-                </ProtectedRoute>
-              }
-            />
+              <Route path="/logout" element={<Logout />} />
 
-            {/* Catch-All */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
+              <Route
+                path="/stock/:symbol"
+                element={
+                  <ProtectedRoute>
+                    <StockDetails />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* ---------------- FALLBACK ---------------- */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </TooltipProvider>
+      </ProfileProvider>
     </QueryClientProvider>
   );
 };
