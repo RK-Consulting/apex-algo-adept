@@ -10,7 +10,7 @@ router.get("/", authenticateToken, async (req: AuthRequest, res) => {
 
   const result = await query(
     `SELECT full_name, email, phone, pan
-     FROM user_profiles
+     FROM users
      WHERE user_id = $1`,
     [userId]
   );
@@ -44,7 +44,7 @@ router.post("/", authenticateToken, async (req: AuthRequest, res) => {
 
   await query(
     `
-    INSERT INTO user_profiles (user_id, full_name, email, phone, pan)
+    INSERT INTO users (user_id, full_name, email, phone, pan)
     VALUES ($1, $2, $3, $4, $5)
     ON CONFLICT (user_id)
     DO UPDATE SET
