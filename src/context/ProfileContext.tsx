@@ -13,6 +13,8 @@ type ProfileState = {
   refresh: () => void;
 };
 
+const { profile, loading, refresh } = useProfile();
+
 const ProfileContext = createContext<ProfileState | null>(null);
 
 export const ProfileProvider = ({ children }: { children: React.ReactNode }) => {
@@ -42,8 +44,8 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
   };
 
   useEffect(() => {
-    fetchProfile();
-  }, []);
+    if (profile) setProfile(profile);
+  }, [profile]);
 
   return (
     <ProfileContext.Provider
