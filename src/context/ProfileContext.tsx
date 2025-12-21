@@ -6,46 +6,51 @@ const backendUrl =
   import.meta.env.VITE_API_URL ||
   "https://api.alphaforge.skillsifter.in";
 
-type ProfileState = {
+type ProfileContextType = {
   profile: any | null;
   isComplete: boolean;
   loading: boolean;
   refresh: () => void;
 };
 
-const { profile, loading, refresh } = useProfile();
-
-const ProfileContext = createContext<ProfileState | null>(null);
+const ProfileContext = createContext<ProfileContextType | undefined>(undefined);
 
 export const ProfileProvider = ({ children }: { children: React.ReactNode }) => {
   const [profile, setProfile] = useState<any | null>(null);
   const [isComplete, setIsComplete] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = () => {
+  const fetchProfile = async () => {
     const token = localStorage.getItem("token");
-    if (!token) return;
+    if (!token) {
+      setLoading(false);
+      return;
+    }
 
-    setLoading(true);
-    fetch(`${backendUrl}/api/profile`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.exists) {
-          setProfile(data.profile);
-          setIsComplete(data.isComplete);
-        } else {
-          setProfile(null);
-          setIsComplete(false);
-        }
-      })
-      .finally(() => setLoading(false));
+    try {
+      const res = await fetch(`${backendUrl}/api/profile`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+
+      if (data?.exists) {
+        setProfile(data.profile);
+        setIsComplete(data.isComplete);
+      } else {
+        setProfile(null);
+        setIsComplete(false);
+      }
+    } catch {
+      // silent by design
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    if (profile) setProfile(profile);
-  }, [profile]);
+    fetchProfile();
+  }, []);
 
   return (
     <ProfileContext.Provider
@@ -58,6 +63,8 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
 
 export const useProfile = () => {
   const ctx = useContext(ProfileContext);
-  if (!ctx) throw new Error("useProfile must be used inside ProfileProvider");
+  if (!ctx) {
+    throw new Error("useProfile must be used inside ProfileProvider");
+  }
   return ctx;
 };
