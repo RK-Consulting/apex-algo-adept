@@ -8,7 +8,6 @@ import {
   BarChart3,
   Settings,
   LogOut,
-  User,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import {
@@ -75,3 +74,40 @@ export function AppSidebar() {
                       }
                     >
                       <item.icon className="w-4 h-4" />
+                      <span>{item.title}</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* -------- Bottom Menu -------- */}
+        <SidebarGroup className="mt-auto">
+          <SidebarGroupLabel>Account</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {bottomItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild>
+                    <NavLink
+                      to={item.url}
+                      className="hover:bg-sidebar-accent/50"
+                    >
+                      <item.icon className="w-4 h-4" />
+                      <span>{item.title}</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+
+      {/* ================= COLLAPSE TRIGGER ================= */}
+      <SidebarTrigger className="absolute -right-3 top-4" />
+    </Sidebar>
+  );
+}
