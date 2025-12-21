@@ -8,6 +8,8 @@ import {
   BarChart3,
   Settings,
   LogOut,
+  User,
+  AlertTriangle,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import {
@@ -22,6 +24,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { useProfileSummary } from "@/hooks/useProfileSummary";
+import { useProfile } from "@/context/ProfileContext";
 
 const menuItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -38,6 +41,7 @@ const bottomItems = [
 
 export function AppSidebar() {
   const { full_name, email } = useProfileSummary();
+  const { isComplete } = useProfile();
 
   return (
     <Sidebar className="border-r border-border w-44">
@@ -83,7 +87,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* -------- Bottom Menu -------- */}
+        {/* -------- Account Menu -------- */}
         <SidebarGroup className="mt-auto">
           <SidebarGroupLabel>Account</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -105,6 +109,32 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+
+      {/* ================= USER PROFILE + STATUS ================= */}
+      <div className="p-4 border-t border-border space-y-3">
+        <div className="flex items-center gap-2 text-sm">
+          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+            <User className="w-4 h-4 text-muted-foreground" />
+          </div>
+
+          <div className="leading-tight overflow-hidden">
+            <div className="font-medium truncate flex items-center gap-1">
+              {full_name || "User"}
+
+              {!isComplete && (
+                <span className="flex items-center gap-1 text-xs text-yellow-600">
+                  <AlertTriangle className="w-3 h-3" />
+                  Incomplete
+                </span>
+              )}
+            </div>
+
+            <div className="text-xs text-muted-foreground truncate">
+              {email || ""}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* ================= COLLAPSE TRIGGER ================= */}
       <SidebarTrigger className="absolute -right-3 top-4" />
