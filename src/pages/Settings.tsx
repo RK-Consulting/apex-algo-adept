@@ -29,8 +29,16 @@ import Profile from "./settings/Profile";
 import ApiKeys from "./settings/ApiKeys";
 import { BrokerConnectionDialog } from "@/components/BrokerConnectionDialog";
 import { ICICIBrokerDialog } from "@/components/ICICIBrokerDialog";
+import { useProfile } from "@/context/ProfileContext";
+import { useToast } from "@/hooks/use-toast";
 
 const Settings = () => {
+  /* ======================================================
+     PROFILE STATE (GLOBAL, READ-ONLY)
+  ====================================================== */
+  const { isComplete } = useProfile();
+  const { toast } = useToast();
+
   /* ======================================================
      BROKER DIALOG STATE (ORCHESTRATION ONLY)
   ====================================================== */
@@ -38,7 +46,20 @@ const Settings = () => {
   const [iciciBrokerDialogOpen, setIciciBrokerDialogOpen] = useState(false);
   const [selectedBroker, setSelectedBroker] = useState("");
 
+  /* ======================================================
+     BROKER CONNECT HANDLER (GATED)
+  ====================================================== */
   const handleConnectBroker = (brokerName: string) => {
+    if (!isComplete) {
+      toast({
+        title: "Profile incomplete",
+        description:
+          "Please complete your profile before connecting a broker.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (brokerName === "ICICIDIRECT") {
       setIciciBrokerDialogOpen(true);
     } else {
