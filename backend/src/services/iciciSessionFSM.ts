@@ -67,3 +67,86 @@ export class IciciSessionFSM {
 
   /* =====================================================
      TRANSITION STATE
+  ===================================================== */
+  static async transition(
+    userId: string,
+    from: IciciState,
+    to: IciciState,
+    options: {
+      sessionToken?: string;
+      expiresAt?: Date;
+      lockMinutes?: number;
+    } = {}
+  ) {
+    this.assertAllowed(from, to);
+
+    log(`🔁 ICICI FSM transition ${from} → ${to} (user=${userId})`);
+
+    if (to === "AUTH_IN_PROGRESS") {
+      await query(
+        `
+        UPDATE icici_sessions
+        SET auth_started_at = now()
+        WHERE user_id = $1
+        `,
+        [userId]
+      );
+    }
+
+    if (to === "SESSION_ACTIVE") {
+      await query(
+        `
+        UPDATE icici_sessions
+        SET
+          session_token = $2,
+          expires_at = $3,
+          locked_until = NULL,
+          updated_at = now()
+        WHERE user_id = $1
+        `,
+        [userId, options.sessionToken, options.expiresAt]
+      );
+    }
+
+    if (to === "SESSION_EXPIRED") {
+      await query(
+        `
+        UPDATE icici_sessions
+        SET session_token = NULL,
+            updated_at = now()
+        WHERE user_id = $1
+        `,
+        [userId]
+      );
+    }
+
+    if (to === "LOCKED") {
+      const lockMinutes = options.lockMinutes ?? 30;
+      await query(
+        `
+        UPDATE icici_sessions
+        SET locked_until = now() + interval '${lockMinutes} minutes'
+        WHERE user_id = $1
+        `,
+        [userId]
+      );
+    }
+  }
+
+  /* =====================================================
+     GUARD HELPERS
+  ===================================================== */
+  static async requireActive(userId: string) {
+    const state = await this.getState(userId);
+    if (state !== "SESSION_ACTIVE") {
+      throw new Error(`ICICI not active (state=${state})`);
+    }
+  }
+
+  static async requireNotLocked(userId: string) {
+    const state = await this.getState(userId);
+    if (state === "LOCKED") {
+      throw new Error("ICICI temporarily locked due to failures");
+    }
+  }
+}
