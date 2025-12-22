@@ -43,8 +43,12 @@ const router = Router();
 });
 */
 router.get("/", async (_req, res) => {
-  res.json({ ok: true });
+  const result = await query(
+    `SELECT id, email, full_name, phone, pan FROM users LIMIT 1`
+  );
+  res.json(result.rows[0] || {});
 });
+
 /* ================= UPDATE PROFILE ================= */
 router.post("/", authenticateToken, async (req: AuthRequest, res) => {
   const userId = req.user!.userId;
