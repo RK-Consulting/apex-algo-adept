@@ -7,12 +7,12 @@ import { query } from "../config/database.js";
 const router = Router();
 
 /* ================= GET PROFILE ================= */
-/* router.get("/", authenticateToken, async (req: AuthRequest, res) => {
+router.get("/", authenticateToken, async (req: AuthRequest, res) => {
   const userId = req.user!.userId;
 
   const result = await query(
     `
-    SELECT full_name, email, phone, pan
+    SELECT id, email, full_name, phone, pan
     FROM users
     WHERE id = $1
     `,
@@ -20,7 +20,6 @@ const router = Router();
   );
 
   if (result.rowCount === 0) {
-    // This should practically never happen
     return res.status(404).json({
       exists: false,
       isComplete: false,
@@ -40,13 +39,6 @@ const router = Router();
     isComplete,
     profile,
   });
-});
-*/
-router.get("/", async (_req, res) => {
-  const result = await query(
-    `SELECT id, email, full_name, phone, pan FROM users LIMIT 1`
-  );
-  res.json(result.rows[0] || {});
 });
 
 /* ================= UPDATE PROFILE ================= */
