@@ -7,7 +7,7 @@ import { query } from "../config/database.js";
 const router = Router();
 
 /* ================= GET PROFILE ================= */
-router.get("/", authenticateToken, async (req: AuthRequest, res) => {
+/* router.get("/", authenticateToken, async (req: AuthRequest, res) => {
   const userId = req.user!.userId;
 
   const result = await query(
@@ -41,7 +41,10 @@ router.get("/", authenticateToken, async (req: AuthRequest, res) => {
     profile,
   });
 });
-
+*/
+router.get("/", async (_req, res) => {
+  res.json({ ok: true });
+});
 /* ================= UPDATE PROFILE ================= */
 router.post("/", authenticateToken, async (req: AuthRequest, res) => {
   const userId = req.user!.userId;
