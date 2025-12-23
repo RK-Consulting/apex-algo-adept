@@ -1,3 +1,5 @@
+// /backend/src/routes/iciciBroker.ts
+
 /**
  * ICICI Broker Routes — Aligned with System Architecture
  *
@@ -18,6 +20,7 @@
 import { Router } from "express";
 import debug from "debug";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
+import { iciciGuard } from "../middleware/iciciGuard.js";
 import { query } from "../config/database.js";
 
 const router = Router();
@@ -59,17 +62,24 @@ router.get(
 );
 
 /* ======================================================
-   2) CONNECT ENTRYPOINT (Frontend Hint Only)
+   2) CONNECT ENTRYPOINT (GUARDED)
    ====================================================== */
 router.post(
   "/connect",
   authenticateToken,
+  iciciGuard({
+    requireProfileComplete: true,
+    requireCredentials: true,
+    disallowIfSessionActive: true,
+  }),
   async (_req: AuthRequest, res) => {
     /**
      * Frontend flow:
      * 1. Ensure credentials saved via /api/credentials/store
      * 2. Call /api/icici/auth/login
      */
+    log("ICICI connect preconditions satisfied");
+
     return res.json({
       success: true,
       message: "Proceed to ICICI OAuth via /api/icici/auth/login",
@@ -78,3 +88,4 @@ router.post(
 );
 
 export { router as iciciBrokerRouter };
+export default router;
