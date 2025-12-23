@@ -1,4 +1,5 @@
 // backend/src/routes/icici/authCallback.ts
+// backend/src/routes/icici/authCallback.ts
 /**
  * ICICI Breeze Authentication Callback Handler
  *
@@ -44,7 +45,10 @@ router.get(
       } = req.query;
 
       if (!sessionToken || typeof sessionToken !== "string") {
-        log("Invalid session_token in GET callback for user %s", req.user?.userId);
+        log(
+          "Invalid session_token in GET callback for user %s",
+          req.user?.userId
+        );
         return res.status(400).json({
           success: false,
           error: "Invalid session token from ICICI",
@@ -71,7 +75,11 @@ router.get(
         `${frontendUrl}/dashboard?icici_connected=true&flow=direct`
       );
     } catch (error: any) {
-      log("GET callback error for user %s: %s", req.user?.userId, error.message);
+      log(
+        "GET callback error for user %s: %s",
+        req.user?.userId,
+        error.message
+      );
       return res.status(500).json({
         success: false,
         error: "Failed to process ICICI callback",
@@ -124,7 +132,11 @@ router.post(
         flow: "complete",
       });
     } catch (error: any) {
-      log("POST complete error for user %s: %s", req.user?.userId, error.message);
+      log(
+        "POST complete error for user %s: %s",
+        req.user?.userId,
+        error.message
+      );
       return res.status(500).json({
         success: false,
         error: error.message || "ICICI connection failed",
