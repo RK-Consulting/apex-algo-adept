@@ -1,5 +1,3 @@
-// backend/src/routes/icici/authLogin.ts
-
 /**
  * ICICI OAuth Login Initiator
  *
@@ -15,6 +13,7 @@
 
 import { Router } from "express";
 import { authenticateToken, AuthRequest } from "../../middleware/auth.js";
+import { iciciGuard } from "../../middleware/iciciGuard.js";
 import { query } from "../../config/database.js";
 import debug from "debug";
 
@@ -28,6 +27,10 @@ const router = Router();
 router.get(
   "/auth/login",
   authenticateToken,
+  iciciGuard({
+    requireActiveSession: false,
+    allowWhenExpired: true,
+  }),
   async (req: AuthRequest, res) => {
     try {
       /* ------------------------------
