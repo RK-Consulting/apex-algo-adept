@@ -1,3 +1,5 @@
+// /backend/src/routes/icici/authLogin.ts
+
 /**
  * ICICI OAuth Login Initiator
  *
@@ -27,10 +29,17 @@ const router = Router();
 router.get(
   "/auth/login",
   authenticateToken,
+
+  /* ======================================================
+     ICICI GUARD
+     - Allows login even if previous session expired
+     - Prevents retry storms / rapid re-entry
+  ====================================================== */
   iciciGuard({
     requireActiveSession: false,
     allowWhenExpired: true,
   }),
+
   async (req: AuthRequest, res) => {
     try {
       /* ------------------------------
