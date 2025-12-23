@@ -1,79 +1,125 @@
 // backend/src/middleware/iciciGuard.ts
 
-import { Request, Response, NextFunction } from "express";
-import debug from "debug";
-import { IciciSessionFSM } from "../services/iciciSessionFSM.js";
-import { AuthRequest } from "./auth.js";
-
-const log = debug("alphaforge:icici:guard");
-
 /**
  * ICICI Guard Middleware
  *
- * Enforces:
- * - FSM state validation
- * - No retry storms
- * - No direct ICICI access without valid session
+ * Enforces ICICI connection state machine
+ * Prevents OAuth / callback bombardment
  *
- * This middleware MUST wrap every ICICI route
+ * Guards:
+ * - /api/icici/auth/login
+ * - /api/icici/auth/callback
+ * - /api/icici/broker/connect
+ *
+ * Single Source of Truth:
+ * - broker_credentials table
+ * - icici_sessions table (via SessionService)
  */
-export function iciciGuard(options?: {
-  requireActiveSession?: boolean;
-  allowWhenExpired?: boolean;
-}) {
-  const requireActiveSession = options?.requireActiveSession ?? true;
-  const allowWhenExpired = options?.allowWhenExpired ?? false;
 
-  return async function (
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) {
+import { Response, NextFunction } from "express";
+import debug from "debug";
+import { AuthRequest } from "./auth.js";
+import { query } from "../config/database.js";
+import { SessionService } from "../services/sessionService.js";
+
+const log = debug("alphaforge:icici:guard");
+
+export type IciciGuardMode =
+  | "LOGIN"
+  | "CALLBACK"
+  | "CONNECT";
+
+export const iciciGuard =
+  (mode: IciciGuardMode) =>
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const userId = req.user?.userId;
-
       if (!userId) {
         return res.status(401).json({
-          error: "Unauthorized",
-          code: "AUTH_REQUIRED",
+          success: false,
+          error: "Unauthenticated",
         });
       }
 
-      const state = await IciciSessionFSM.getState(userId);
-      log(`ICICI Guard: user=${userId}, state=${state}`);
+      /* ======================================================
+         1) CHECK ICICI CREDENTIALS EXIST & ACTIVE
+         ====================================================== */
+      const credResult = await query(
+        `
+        SELECT id, is_active
+        FROM broker_credentials
+        WHERE user_id = $1
+          AND broker_name = 'ICICI'
+          AND is_active = true
+        `,
+        [userId]
+      );
 
-      // Hard stop: LOCKED
-      if (state === "LOCKED") {
-        return res.status(429).json({
-          error: "ICICI temporarily locked due to multiple failures",
-          code: "ICICI_LOCKED",
+      if ((credResult.rowCount ?? 0) === 0) {
+        log("User %s has no active ICICI credentials", userId);
+        return res.status(400).json({
+          success: false,
+          code: "ICICI_CREDENTIALS_MISSING",
+          message: "ICICI API credentials not configured",
         });
       }
 
-      // Require active session
-      if (requireActiveSession && state !== "SESSION_ACTIVE") {
-        // Allow specific expired flows if configured
-        if (state === "SESSION_EXPIRED" && allowWhenExpired) {
-          return next();
+      /* ======================================================
+         2) CHECK EXISTING ICICI SESSION
+         ====================================================== */
+      const sessionService = SessionService.getInstance();
+      const activeSession = await sessionService.getSession(userId);
+
+      const hasActiveSession = !!activeSession?.session_token;
+
+      /* ======================================================
+         3) MODE-SPECIFIC RULES
+         ====================================================== */
+
+      // ---- LOGIN ENTRYPOINT ----
+      if (mode === "LOGIN") {
+        if (hasActiveSession) {
+          log("Blocked ICICI login — already connected (user %s)", userId);
+          return res.status(409).json({
+            success: false,
+            code: "ICICI_ALREADY_CONNECTED",
+            message: "ICICI already connected",
+          });
         }
-
-        return res.status(409).json({
-          error: "ICICI session not active",
-          state,
-          code: "ICICI_SESSION_INVALID",
-        });
       }
 
-      // Everything ok
-      return next();
-    } catch (err: any) {
-      log("❌ ICICI Guard error", err);
+      // ---- CALLBACK HANDLER ----
+      if (mode === "CALLBACK") {
+        if (hasActiveSession) {
+          log("Blocked ICICI callback replay (user %s)", userId);
+          return res.status(409).json({
+            success: false,
+            code: "ICICI_CALLBACK_REPLAY",
+            message: "ICICI session already established",
+          });
+        }
+      }
 
+      // ---- BROKER CONNECT (HINT ONLY) ----
+      if (mode === "CONNECT") {
+        if (hasActiveSession) {
+          return res.json({
+            success: true,
+            connected: true,
+            message: "ICICI already connected",
+          });
+        }
+      }
+
+      /* ======================================================
+         4) PASS CONTROL
+         ====================================================== */
+      next();
+    } catch (err: any) {
+      log("ICICI guard failure for user %s: %s", req.user?.userId, err.message);
       return res.status(500).json({
+        success: false,
         error: "ICICI guard failure",
-        message: err.message,
-        code: "ICICI_GUARD_ERROR",
       });
     }
   };
-}
