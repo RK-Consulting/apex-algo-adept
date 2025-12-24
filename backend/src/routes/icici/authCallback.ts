@@ -1,16 +1,16 @@
 // backend/src/routes/icici/authCallback.ts
-// backend/src/routes/icici/authCallback.ts
+
 /**
  * ICICI Breeze Authentication Callback Handler
  *
- * Supports Dual Flows for Maximum Compatibility:
- * 1. GET /auth/callback: If ICICI redirects with session_token directly (legacy/custom)
- * 2. POST /auth/complete: Secure Breeze flow — apisession exchanged server-side
+ * Supports Dual Flows:
+ * 1. GET /auth/callback  → legacy / direct session_token
+ * 2. POST /auth/complete → secure apisession exchange
  *
  * Security:
  * - JWT protected
  * - Rate limited
- * - FSM guarded (login must be initiated)
+ * - FSM guarded
  * - No secrets exposed to frontend
  */
 
@@ -21,23 +21,23 @@ import { iciciGuard } from "../../middleware/iciciGuard.js";
 import { iciciLimiter } from "../../middleware/rateLimiter.js";
 import { getCustomerDetails } from "../../services/breezeClient.js";
 import { SessionService } from "../../services/sessionService.js";
+import { query } from "../../config/database.js";
 
 const router = Router();
 const log = debug("alphaforge:icici:callback");
 
 /* ============================================================
    GET /api/icici/auth/callback
-   Fallback — direct session_token from ICICI redirect
+   Legacy flow — direct session_token
 ============================================================ */
 router.get(
   "/auth/callback",
   iciciLimiter,
   authenticateToken,
-  iciciGuard({
-    requireLoginInitiated: true,
-    requireActiveSession: false,
-  }),
+  iciciGuard("CALLBACK"),
   async (req: AuthRequest, res) => {
+    const userId = req.user!.userId;
+
     try {
       const {
         session_token: sessionToken,
@@ -45,17 +45,25 @@ router.get(
       } = req.query;
 
       if (!sessionToken || typeof sessionToken !== "string") {
-        log(
-          "Invalid session_token in GET callback for user %s",
-          req.user?.userId
-        );
+        log("Invalid session_token in GET callback for user %s", userId);
         return res.status(400).json({
           success: false,
           error: "Invalid session token from ICICI",
         });
       }
 
-      const userId = req.user!.userId;
+      /* ------------------------------
+         FSM → CALLBACK_RECEIVED
+      ------------------------------ */
+      await query(
+        `
+        UPDATE icici_login_attempts
+        SET state = 'CALLBACK_RECEIVED',
+            updated_at = now()
+        WHERE user_id = $1
+        `,
+        [userId]
+      );
 
       await SessionService.getInstance().saveSession(userId, {
         session_token: sessionToken,
@@ -66,7 +74,21 @@ router.get(
           : undefined,
       });
 
-      log("ICICI session saved via GET callback for user %s", userId);
+      /* ------------------------------
+         FSM → SESSION_ACTIVE
+      ------------------------------ */
+      await query(
+        `
+        UPDATE icici_login_attempts
+        SET state = 'SESSION_ACTIVE',
+            attempts = 0,
+            updated_at = now()
+        WHERE user_id = $1
+        `,
+        [userId]
+      );
+
+      log("ICICI session established via GET callback for user %s", userId);
 
       const frontendUrl =
         process.env.FRONTEND_URL || "https://alphaforge.skillsifter.in";
@@ -75,11 +97,18 @@ router.get(
         `${frontendUrl}/dashboard?icici_connected=true&flow=direct`
       );
     } catch (error: any) {
-      log(
-        "GET callback error for user %s: %s",
-        req.user?.userId,
-        error.message
+      log("GET callback error for user %s: %s", userId, error.message);
+
+      await query(
+        `
+        UPDATE icici_login_attempts
+        SET state = 'FAILED',
+            updated_at = now()
+        WHERE user_id = $1
+        `,
+        [userId]
       );
+
       return res.status(500).json({
         success: false,
         error: "Failed to process ICICI callback",
@@ -90,20 +119,18 @@ router.get(
 
 /* ============================================================
    POST /api/icici/auth/complete
-   Recommended secure server-side exchange
+   Secure server-side exchange
 ============================================================ */
 router.post(
   "/auth/complete",
   iciciLimiter,
   authenticateToken,
-  iciciGuard({
-    requireLoginInitiated: true,
-    requireActiveSession: false,
-  }),
+  iciciGuard("CALLBACK"),
   async (req: AuthRequest, res) => {
+    const userId = req.user!.userId;
+
     try {
       const { apisession } = req.body;
-      const userId = req.user!.userId;
 
       if (!apisession || typeof apisession !== "string") {
         return res.status(400).json({
@@ -111,6 +138,19 @@ router.post(
           error: "apisession required",
         });
       }
+
+      /* ------------------------------
+         FSM → CALLBACK_RECEIVED
+      ------------------------------ */
+      await query(
+        `
+        UPDATE icici_login_attempts
+        SET state = 'CALLBACK_RECEIVED',
+            updated_at = now()
+        WHERE user_id = $1
+        `,
+        [userId]
+      );
 
       const cdData = await getCustomerDetails(userId, apisession);
       const sessionToken = cdData?.Success?.session_token;
@@ -124,6 +164,20 @@ router.post(
         user_details: cdData?.Success,
       });
 
+      /* ------------------------------
+         FSM → SESSION_ACTIVE
+      ------------------------------ */
+      await query(
+        `
+        UPDATE icici_login_attempts
+        SET state = 'SESSION_ACTIVE',
+            attempts = 0,
+            updated_at = now()
+        WHERE user_id = $1
+        `,
+        [userId]
+      );
+
       log("ICICI Breeze connected successfully for user %s", userId);
 
       return res.json({
@@ -132,11 +186,18 @@ router.post(
         flow: "complete",
       });
     } catch (error: any) {
-      log(
-        "POST complete error for user %s: %s",
-        req.user?.userId,
-        error.message
+      log("POST complete error for user %s: %s", userId, error.message);
+
+      await query(
+        `
+        UPDATE icici_login_attempts
+        SET state = 'FAILED',
+            updated_at = now()
+        WHERE user_id = $1
+        `,
+        [userId]
       );
+
       return res.status(500).json({
         success: false,
         error: error.message || "ICICI connection failed",
