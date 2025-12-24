@@ -49,5 +49,9 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "scripts": {
+    "db:verify": "../scripts/db/verify-db.sh",
+    "db:migrate": "../scripts/db/migrate.sh"
   }
 }
