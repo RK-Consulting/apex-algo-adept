@@ -3,17 +3,16 @@
 /**
  * ICICI Guard Middleware
  *
- * Enforces ICICI connection state machine
+ * Enforces ICICI connection finite-state machine
  * Prevents OAuth / callback bombardment
  *
  * Guards:
- * - /api/icici/auth/login
- * - /api/icici/auth/callback
- * - /api/icici/broker/connect
+ * - /api/icici/auth/login     → LOGIN
+ * - /api/icici/auth/callback  → CALLBACK
+ * - /api/icici/broker/connect → CONNECT
  *
- * Single Source of Truth:
- * - broker_credentials table
- * - icici_sessions table (via SessionService)
+ * FSM Source of Truth:
+ * - icici_login_attempts
  */
 
 import { Response, NextFunction } from "express";
@@ -25,6 +24,9 @@ import { SessionService } from "../services/sessionService.js";
 const log = debug("alphaforge:icici:guard");
 
 export type IciciGuardMode = "LOGIN" | "CALLBACK" | "CONNECT";
+
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCK_DURATION_MIN = 15;
 
 export const iciciGuard =
   (mode: IciciGuardMode) =>
@@ -51,7 +53,7 @@ export const iciciGuard =
         [userId]
       );
 
-      if ((profileResult.rowCount ?? 0) === 0) {
+      if (profileResult.rowCount === 0) {
         return res.status(400).json({
           success: false,
           code: "PROFILE_MISSING",
@@ -83,7 +85,7 @@ export const iciciGuard =
         [userId]
       );
 
-      if ((credResult.rowCount ?? 0) === 0) {
+      if (credResult.rowCount === 0) {
         return res.status(400).json({
           success: false,
           code: "ICICI_CREDENTIALS_MISSING",
@@ -92,11 +94,11 @@ export const iciciGuard =
       }
 
       /* ======================================================
-         3) FSM STATE CHECK (icici_login_attempts)
+         3) FSM STATE LOAD
          ====================================================== */
       const fsmResult = await query(
         `
-        SELECT state, locked_until
+        SELECT state, attempts, locked_until
         FROM icici_login_attempts
         WHERE user_id = $1
         `,
@@ -121,7 +123,7 @@ export const iciciGuard =
       const hasActiveSession = !!activeSession?.session_token;
 
       if (fsm?.state === "SESSION_ACTIVE" && !hasActiveSession) {
-        log("FSM desync detected — resetting ICICI state for user %s", userId);
+        log("FSM desync detected — resetting state (user %s)", userId);
         await query(
           `
           UPDATE icici_login_attempts
@@ -133,9 +135,10 @@ export const iciciGuard =
       }
 
       /* ======================================================
-         5) MODE-SPECIFIC ENFORCEMENT
+         5) MODE-SPECIFIC FSM ENFORCEMENT
          ====================================================== */
 
+      /* ---------- LOGIN ---------- */
       if (mode === "LOGIN") {
         if (hasActiveSession || fsm?.state === "LOGIN_INITIATED") {
           return res.status(409).json({
@@ -144,8 +147,47 @@ export const iciciGuard =
             message: "ICICI login already in progress or connected",
           });
         }
+
+        const nextAttempts = (fsm?.attempts ?? 0) + 1;
+
+        if (nextAttempts >= MAX_LOGIN_ATTEMPTS) {
+          await query(
+            `
+            INSERT INTO icici_login_attempts (user_id, state, attempts, locked_until)
+            VALUES ($1, 'LOCKED', $2, now() + interval '${LOCK_DURATION_MIN} minutes')
+            ON CONFLICT (user_id)
+            DO UPDATE SET
+              state = 'LOCKED',
+              attempts = EXCLUDED.attempts,
+              locked_until = EXCLUDED.locked_until,
+              updated_at = now()
+            `,
+            [userId, nextAttempts]
+          );
+
+          return res.status(423).json({
+            success: false,
+            code: "ICICI_LOCKED",
+            message: "Too many login attempts. Temporarily locked.",
+          });
+        }
+
+        await query(
+          `
+          INSERT INTO icici_login_attempts (user_id, state, attempts, last_attempt_at)
+          VALUES ($1, 'LOGIN_INITIATED', 1, now())
+          ON CONFLICT (user_id)
+          DO UPDATE SET
+            state = 'LOGIN_INITIATED',
+            attempts = $2,
+            last_attempt_at = now(),
+            updated_at = now()
+          `,
+          [userId, nextAttempts]
+        );
       }
 
+      /* ---------- CALLBACK ---------- */
       if (mode === "CALLBACK") {
         if (fsm?.state !== "LOGIN_INITIATED") {
           return res.status(409).json({
@@ -156,6 +198,7 @@ export const iciciGuard =
         }
       }
 
+      /* ---------- CONNECT ---------- */
       if (mode === "CONNECT") {
         if (hasActiveSession) {
           return res.json({
