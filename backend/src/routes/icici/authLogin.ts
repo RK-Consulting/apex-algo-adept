@@ -31,14 +31,11 @@ router.get(
   authenticateToken,
 
   /* ======================================================
-     ICICI GUARD
-     - Allows login even if previous session expired
-     - Prevents retry storms / rapid re-entry
+     ICICI GUARD (FSM-AWARE)
+     - Blocks active sessions
+     - Blocks parallel login attempts
   ====================================================== */
-  iciciGuard({
-    requireActiveSession: false,
-    allowWhenExpired: true,
-  }),
+  iciciGuard("LOGIN"),
 
   async (req: AuthRequest, res) => {
     try {
@@ -47,6 +44,23 @@ router.get(
       ------------------------------ */
       const serverUserId = req.user!.userId;
       const serverBrokerName = "ICICI";
+
+      /* ------------------------------
+         FSM: MARK LOGIN INITIATED
+      ------------------------------ */
+      await query(
+        `
+        INSERT INTO icici_login_attempts (user_id, state, attempts, last_attempt_at)
+        VALUES ($1, 'LOGIN_INITIATED', 1, now())
+        ON CONFLICT (user_id)
+        DO UPDATE SET
+          state = 'LOGIN_INITIATED',
+          attempts = icici_login_attempts.attempts + 1,
+          last_attempt_at = now(),
+          updated_at = now()
+        `,
+        [serverUserId]
+      );
 
       /* ------------------------------
          DB LOOKUP (NO SECRETS)
@@ -75,7 +89,7 @@ router.get(
       const serverAppKey: string = dbResult.rows[0].app_key;
 
       /* ------------------------------
-         REDIRECT
+         REDIRECT TO ICICI
       ------------------------------ */
       const loginUrl =
         "https://api.icicidirect.com/apiuser/login?api_key=" +
@@ -85,6 +99,17 @@ router.get(
       return res.redirect(loginUrl);
     } catch (err: any) {
       log("ICICI login init failed: %s", err.message);
+
+      // FSM failure fallback
+      await query(
+        `
+        UPDATE icici_login_attempts
+        SET state = 'FAILED', updated_at = now()
+        WHERE user_id = $1
+        `,
+        [req.user?.userId]
+      );
+
       return res.status(500).json({
         success: false,
         error: "Failed to initiate ICICI login",
