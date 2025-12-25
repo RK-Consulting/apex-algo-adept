@@ -7,7 +7,7 @@
 
   "scripts": {
     "preflight": "npm run db:verify && npm run env:verify",
-    "env:verify": "node ./scripts/env/verify-env.js",
+    "env:verify": "node ../scripts/env/verify-env.js",
 
     "dev": "tsx watch --env-file=.env ./src/server.ts",
     "build": "tsc",
@@ -17,8 +17,8 @@
     "seed": "node --env-file=.env ./dist/scripts/seed.js",
     "refresh:icici": "node --env-file=.env ./dist/scripts/refreshIciciSession.js",
 
-    "db:verify": "./scripts/db/verify-db-12-2025.sh",
-    "db:migrate": "./scripts/db/migrate.sh",
+    "db:verify": "../scripts/db/verify-db-12-2025.sh",
+    "db:migrate": "../scripts/db/migrate.sh",
 
     "test": "jest --runInBand"
   },
