@@ -4,15 +4,25 @@
   "description": "Standalone backend server for AlphaForge trading platform",
   "type": "module",
   "main": "dist/server.js",
+
   "scripts": {
+    "preflight": "npm run db:verify && npm run env:verify",
+    "env:verify": "node ./scripts/env/verify-env.js",
+
     "dev": "tsx watch --env-file=.env ./src/server.ts",
     "build": "tsc",
     "start": "node --env-file=.env ./dist/server.js",
+
     "migrate": "node --env-file=.env ./dist/scripts/migrate.js",
     "seed": "node --env-file=.env ./dist/scripts/seed.js",
     "refresh:icici": "node --env-file=.env ./dist/scripts/refreshIciciSession.js",
+
+    "db:verify": "./scripts/db/verify-db.sh",
+    "db:migrate": "./scripts/db/migrate.sh",
+
     "test": "jest --runInBand"
   },
+
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "breezeconnect": "1.0.29",
@@ -30,6 +40,7 @@
     "axios": "1.8.2",
     "axios-retry": "^4.5.0"
   },
+
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/compression": "^1.7.5",
@@ -44,21 +55,12 @@
     "tsx": "^4.15.0",
     "typescript": "^5.5.0"
   },
+
   "overrides": {
     "axios": "1.8.2"
   },
+
   "engines": {
     "node": ">=18.0.0"
-  },
-  "scripts": {
-    "preflight": "npm run db:verify && npm run env:verify",
-    "env:verify": "node ./scripts/env/verify-env.js",
-    "dev": "ts-node-dev src/server.ts",
-    "build": "tsc",
-    "start": "node dist/server.js",
-    "refresh:icici": "node --env-file=.env ./dist/scripts/refreshIciciSession.js",
-
-    "db:verify": "./scripts/db/verify-db.sh",
-    "db:migrate": "./scripts/db/migrate.sh"
   }
 }
