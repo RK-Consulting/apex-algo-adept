@@ -10,7 +10,7 @@
 
     "env:verify": "node ../scripts/env/verify-env.js backend/.env",
 
-    "db:verify": "bash ../scripts/db/verify-db.sh",
+    "db:verify": "bash ../scripts/db/verify-db-12-2025.sh",
     "db:migrate": "bash ../scripts/db/migrate.sh",
 
     "build": "tsc",
