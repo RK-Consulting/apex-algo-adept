@@ -51,6 +51,8 @@
     "node": ">=18.0.0"
   },
   "scripts": {
+    "preflight": "npm run db:verify && npm run env:verify",
+    "env:verify": "node ./scripts/env/verify-env.js",
     "dev": "ts-node-dev src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
