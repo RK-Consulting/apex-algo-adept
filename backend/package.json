@@ -17,7 +17,7 @@
     "seed": "node --env-file=.env ./dist/scripts/seed.js",
     "refresh:icici": "node --env-file=.env ./dist/scripts/refreshIciciSession.js",
 
-    "db:verify": "./scripts/db/verify-db.sh",
+    "db:verify": "./scripts/db/verify-db-12-2025.sh",
     "db:migrate": "./scripts/db/migrate.sh",
 
     "test": "jest --runInBand"
