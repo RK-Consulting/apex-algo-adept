@@ -7,22 +7,22 @@
 
   "scripts": {
     "preflight": "npm run db:verify && npm run env:verify",
-    "env:verify": "node ../scripts/env/verify-env.js",
 
-    "dev": "tsx watch --env-file=.env ./src/server.ts",
+    "env:verify": "node ../scripts/env/verify-env.js backend/.env",
+
+    "db:verify": "bash ../scripts/db/verify-db.sh",
+    "db:migrate": "bash ../scripts/db/migrate.sh",
+
     "build": "tsc",
     "start": "node --env-file=.env ./dist/server.js",
 
-    "migrate": "node --env-file=.env ./dist/scripts/migrate.js",
-    "seed": "node --env-file=.env ./dist/scripts/seed.js",
-    "refresh:icici": "node --env-file=.env ./dist/scripts/refreshIciciSession.js",
+    "migrate": "npm run build && node --env-file=.env ./dist/scripts/migrate.js",
+    "seed": "npm run build && node --env-file=.env ./dist/scripts/seed.js",
 
-    "db:verify": "bash ../scripts/db/verify-db-12-2025.sh",
-    "db:migrate": "bash ../scripts/db/migrate.sh",
+    "refresh:icici": "node --env-file=.env ./dist/scripts/refreshIciciSession.js",
 
     "test": "jest --runInBand"
   },
-
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "breezeconnect": "1.0.29",
