@@ -6,7 +6,7 @@ set -euo pipefail
 # ============================================================
 
 # Resolve project root safely
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 # SQL verification script (as per your structure)
 SQL_FILE="$ROOT_DIR/database/migrations/verify_identity_and_icici.sql"
