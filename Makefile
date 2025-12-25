@@ -73,6 +73,13 @@ test:
 	cd $(BACKEND_DIR) && npm test
 
 # -----------------------------
+# Environment
+# -----------------------------
+env-verify:
+	@echo "$(GREEN)Verifying environment variables$(NC)"
+	bash $(SCRIPTS_DIR)/env/verify-env.sh
+
+# -----------------------------
 # Database
 # -----------------------------
 db-verify:
@@ -82,9 +89,18 @@ db-verify:
 db-migrate: db-verify
 	@echo "$(GREEN)Running DB migrations$(NC)"
 	bash $(DB_SCRIPTS)/migrate.sh
-
+# -----------------------------
+# ICICI
+# -----------------------------
 icici-verify:
+	@echo "$(GREEN)Verifying ICICI FSM & guard$(NC)"
 	bash scripts/icici/verify-guard-12-2025.sh
+
+# -----------------------------
+# Preflight (HARD GATE)
+# -----------------------------
+preflight: env-verify db-verify icici-verify
+	@echo "$(GREEN)Preflight checks passed$(NC)"
 
 # -----------------------------
 # Deployment
