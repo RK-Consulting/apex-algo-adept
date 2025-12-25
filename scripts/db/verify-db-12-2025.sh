@@ -7,6 +7,18 @@ set -euo pipefail
 
 # Resolve project root safely
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Load backend .env explicitly (audit-safe)
+ENV_FILE="$ROOT_DIR/backend/.env"
+
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  source "$ENV_FILE"
+  set +a
+else
+  echo "❌ Backend .env not found at $ENV_FILE"
+  exit 1
+fi
+
 
 # SQL verification script (as per your structure)
 SQL_FILE="$ROOT_DIR/database/migrations/verify_identity_and_icici.sql"
