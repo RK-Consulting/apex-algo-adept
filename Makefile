@@ -83,6 +83,9 @@ db-migrate: db-verify
 	@echo "$(GREEN)Running DB migrations$(NC)"
 	bash $(DB_SCRIPTS)/migrate.sh
 
+icici-verify:
+	bash scripts/icici/verify-guard-12-2025.sh
+
 # -----------------------------
 # Deployment
 # -----------------------------
