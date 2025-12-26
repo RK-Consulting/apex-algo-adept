@@ -3,7 +3,7 @@
 # ============================================================
 
 .DEFAULT_GOAL := help
-.SHELL := /usr/bin/env bash
+SHELL := /bin/bash
 .SHELLFLAGS := -euo pipefail -c
 
 # ------------------------------------------------------------
@@ -21,11 +21,7 @@ LOG_DIR := logs
 # ------------------------------------------------------------
 NODE_ENV ?= production
 export NODE_ENV
-ENV_FILE := backend/.env
-
-export-env:
-	@echo "Loading environment from $(ENV_FILE)"
-	@set -a && . $(ENV_FILE) && set +a
+ENV_FILE := $(BACKEND_DIR)/.env
 
 # ------------------------------------------------------------
 # Colors
@@ -38,6 +34,7 @@ NC := \033[0m
 # ------------------------------------------------------------
 # Help
 # ------------------------------------------------------------
+.PHONY: help
 help:
 	@echo ""
 	@echo "Usage: make <target>"
@@ -62,6 +59,7 @@ help:
 # ------------------------------------------------------------
 # Permissions (DECLARATIVE — NO MANUAL CHMOD EVER)
 # ------------------------------------------------------------
+.PHONY: set-permissions
 set-permissions:
 	@echo "$(GREEN)Enforcing script permissions$(NC)"
 	@find $(SCRIPTS_DIR) -type f -name "*.sh" -exec chmod +x {} \;
@@ -69,6 +67,7 @@ set-permissions:
 # ------------------------------------------------------------
 # Dependencies
 # ------------------------------------------------------------
+.PHONY: install
 install:
 	@echo "$(GREEN)Installing backend dependencies$(NC)"
 	cd $(BACKEND_DIR) && npm ci
@@ -76,41 +75,48 @@ install:
 # ------------------------------------------------------------
 # Environment
 # ------------------------------------------------------------
-env-verify: export-env
+.PHONY: env-verify
+env-verify:
 	@echo "$(GREEN)Verifying environment variables$(NC)"
-	bash $(ENV_SCRIPTS)/verify-env.sh
+	@set -a && source $(ENV_FILE) && set +a && bash $(ENV_SCRIPTS)/verify-env.sh
 
 # ------------------------------------------------------------
 # Database
 # ------------------------------------------------------------
-db-verify: export-env
+.PHONY: db-verify
+db-verify:
 	@echo "$(GREEN)Verifying database integrity$(NC)"
-	bash $(DB_SCRIPTS)/verify-db-12-2025.sh
+	@set -a && source $(ENV_FILE) && set +a && bash $(DB_SCRIPTS)/verify-db-12-2025.sh
 
+.PHONY: db-migrate
 db-migrate: db-verify
 	@echo "$(GREEN)Running database migrations$(NC)"
-	bash $(DB_SCRIPTS)/migrate.sh
+	@set -a && source $(ENV_FILE) && set +a && bash $(DB_SCRIPTS)/migrate.sh
 
 # ------------------------------------------------------------
 # ICICI
 # ------------------------------------------------------------
-icici-verify: export-env
+.PHONY: icici-verify
+icici-verify:
 	@echo "$(GREEN)Verifying ICICI FSM & guard invariants$(NC)"
-	bash $(ICICI_SCRIPTS)/verify-guard-12-2025.sh
+	@set -a && source $(ENV_FILE) && set +a && bash $(ICICI_SCRIPTS)/verify-guard-12-2025.sh
 
 # ------------------------------------------------------------
 # Preflight (HARD GATE — NOTHING PASSES WITHOUT THIS)
 # ------------------------------------------------------------
+.PHONY: preflight
 preflight: set-permissions env-verify db-verify icici-verify
 	@echo "$(GREEN)ALL PREFLIGHT CHECKS PASSED$(NC)"
 
 # ------------------------------------------------------------
 # Build
 # ------------------------------------------------------------
+.PHONY: clean
 clean:
 	@echo "$(YELLOW)Cleaning build artifacts$(NC)"
 	rm -rf $(BACKEND_DIR)/dist
 
+.PHONY: build
 build: preflight install clean
 	@echo "$(GREEN)Building backend$(NC)"
 	cd $(BACKEND_DIR) && npm run build
@@ -118,12 +124,14 @@ build: preflight install clean
 # ------------------------------------------------------------
 # Testing
 # ------------------------------------------------------------
+.PHONY: test
 test:
-	cd $(BACKEND_DIR) && npm test
+	@cd $(BACKEND_DIR) && npm test
 
 # ------------------------------------------------------------
 # Deployment
 # ------------------------------------------------------------
+.PHONY: deploy-prod
 deploy-prod: build test
 	@echo "$(GREEN)Deploying to production$(NC)"
 	bash $(SCRIPTS_DIR)/deploy/deploy-prod.sh
