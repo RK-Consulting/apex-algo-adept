@@ -1,5 +1,5 @@
 # ============================================================
-# Apex Algo Adept — Authoritative Build, Verify & Deploy
+# Apex Algo Adept — Clean Build, Verify & Deploy Makefile
 # ============================================================
 
 .DEFAULT_GOAL := help
@@ -15,15 +15,11 @@ DB_SCRIPTS  := $(SCRIPTS_DIR)/db
 ICICI_SCRIPTS := $(SCRIPTS_DIR)/icici
 ENV_SCRIPTS := $(SCRIPTS_DIR)/env
 LOG_DIR := logs
-# ------------------------------------------------------------
-# Helpers
-# ------------------------------------------------------------
-BACKEND_NPM := cd $(BACKEND_DIR) && npm
 
 # ------------------------------------------------------------
 # Environment
 # ------------------------------------------------------------
-NODE_ENV ?= production
+NODE_ENV ?= development
 export NODE_ENV
 ENV_FILE := $(BACKEND_DIR)/.env
 
@@ -43,25 +39,25 @@ help:
 	@echo ""
 	@echo "Usage: make <target>"
 	@echo ""
-	@echo "Core:"
-	@echo "  make install        Install dependencies"
-	@echo "  make preflight      Run ALL sanity checks (HARD GATE)"
-	@echo "  make build          Compile backend"
-	@echo "  make test           Run tests"
+	@echo "Development:"
+	@echo "  make install-dev      Install deps (npm install)"
+	@echo "  make build            Build backend (dev)"
+	@echo "  make test             Run tests"
 	@echo ""
-	@echo "Database:"
-	@echo "  make db-verify      Verify DB + FSM invariants"
-	@echo "  make db-migrate     Run migrations"
+	@echo "Verification:"
+	@echo "  make env-verify       Verify environment variables"
+	@echo "  make db-verify        Verify database + FSM invariants"
+	@echo "  make icici-verify     Verify ICICI guards & FSM"
+	@echo "  make preflight        Run ALL verifications"
 	@echo ""
-	@echo "ICICI:"
-	@echo "  make icici-verify   Verify ICICI FSM & guard invariants"
-	@echo ""
-	@echo "Deploy:"
-	@echo "  make deploy-prod    Production deploy"
+	@echo "CI / Production:"
+	@echo "  make install-ci       Clean install (npm ci)"
+	@echo "  make build-ci         Strict CI build"
+	@echo "  make deploy-prod      Production deploy"
 	@echo ""
 
 # ------------------------------------------------------------
-# Permissions (DECLARATIVE — NO MANUAL CHMOD EVER)
+# Permissions
 # ------------------------------------------------------------
 .PHONY: set-permissions
 set-permissions:
@@ -69,15 +65,20 @@ set-permissions:
 	@find $(SCRIPTS_DIR) -type f -name "*.sh" -exec chmod +x {} \;
 
 # ------------------------------------------------------------
-# Dependencies
+# Dependency Installation
 # ------------------------------------------------------------
-.PHONY: install
-install:
-	@echo "$(GREEN)Installing backend dependencies$(NC)"
+.PHONY: install-dev
+install-dev:
+	@echo "$(GREEN)Installing backend dependencies (DEV)$(NC)"
+	cd $(BACKEND_DIR) && npm install
+
+.PHONY: install-ci
+install-ci:
+	@echo "$(GREEN)Installing backend dependencies (CI)$(NC)"
 	cd $(BACKEND_DIR) && npm ci
 
 # ------------------------------------------------------------
-# Environment
+# Environment Verification
 # ------------------------------------------------------------
 .PHONY: env-verify
 env-verify:
@@ -85,7 +86,7 @@ env-verify:
 	@set -a && source $(ENV_FILE) && set +a && bash $(ENV_SCRIPTS)/verify-env.sh
 
 # ------------------------------------------------------------
-# Database
+# Database Verification
 # ------------------------------------------------------------
 .PHONY: db-verify
 db-verify:
@@ -98,7 +99,7 @@ db-migrate: db-verify
 	@set -a && source $(ENV_FILE) && set +a && bash $(DB_SCRIPTS)/migrate.sh
 
 # ------------------------------------------------------------
-# ICICI
+# ICICI Verification
 # ------------------------------------------------------------
 .PHONY: icici-verify
 icici-verify:
@@ -106,7 +107,7 @@ icici-verify:
 	@set -a && source $(ENV_FILE) && set +a && bash $(ICICI_SCRIPTS)/verify-guard-12-2025.sh
 
 # ------------------------------------------------------------
-# Preflight (HARD GATE — NOTHING PASSES WITHOUT THIS)
+# Preflight
 # ------------------------------------------------------------
 .PHONY: preflight
 preflight: set-permissions env-verify db-verify icici-verify
@@ -121,8 +122,13 @@ clean:
 	rm -rf $(BACKEND_DIR)/dist
 
 .PHONY: build
-build: preflight install clean
-	@echo "$(GREEN)Building backend$(NC)"
+build: preflight clean
+	@echo "$(GREEN)Building backend (DEV)$(NC)"
+	cd $(BACKEND_DIR) && npm run build
+
+.PHONY: build-ci
+build-ci: preflight clean install-ci
+	@echo "$(GREEN)Building backend (CI)$(NC)"
 	cd $(BACKEND_DIR) && npm run build
 
 # ------------------------------------------------------------
@@ -136,6 +142,7 @@ test:
 # Deployment
 # ------------------------------------------------------------
 .PHONY: deploy-prod
-deploy-prod: build test
+deploy-prod: NODE_ENV=production
+deploy-prod: build-ci test
 	@echo "$(GREEN)Deploying to production$(NC)"
 	bash $(SCRIPTS_DIR)/deploy/deploy-prod.sh
