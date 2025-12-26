@@ -19,6 +19,7 @@ import { Response, NextFunction } from "express";
 import debug from "debug";
 import { AuthRequest } from "./auth.js";
 import { query } from "../config/database.js";
+import type { IciciGuardMode } from "../types/icici.js";
 import { SessionService } from "../services/sessionService.js";
 
 const log = debug("alphaforge:icici:guard");
