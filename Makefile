@@ -27,9 +27,6 @@ export-env:
 	@echo "Loading environment from $(ENV_FILE)"
 	@set -a && . $(ENV_FILE) && set +a
 
-db-verify: export-env
-	bash scripts/db/verify-db-12-2025.sh
-
 # ------------------------------------------------------------
 # Colors
 # ------------------------------------------------------------
@@ -79,14 +76,14 @@ install:
 # ------------------------------------------------------------
 # Environment
 # ------------------------------------------------------------
-env-verify:
+env-verify: export-env
 	@echo "$(GREEN)Verifying environment variables$(NC)"
 	bash $(ENV_SCRIPTS)/verify-env.sh
 
 # ------------------------------------------------------------
 # Database
 # ------------------------------------------------------------
-db-verify:
+db-verify: export-env
 	@echo "$(GREEN)Verifying database integrity$(NC)"
 	bash $(DB_SCRIPTS)/verify-db-12-2025.sh
 
@@ -97,7 +94,7 @@ db-migrate: db-verify
 # ------------------------------------------------------------
 # ICICI
 # ------------------------------------------------------------
-icici-verify:
+icici-verify: export-env
 	@echo "$(GREEN)Verifying ICICI FSM & guard invariants$(NC)"
 	bash $(ICICI_SCRIPTS)/verify-guard-12-2025.sh
 
