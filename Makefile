@@ -3,7 +3,7 @@
 # ============================================================
 
 .DEFAULT_GOAL := help
-SHELL := /bin/bash
+.SHELL := /bin/bash
 .SHELLFLAGS := -euo pipefail -c
 
 # ------------------------------------------------------------
@@ -15,6 +15,10 @@ DB_SCRIPTS  := $(SCRIPTS_DIR)/db
 ICICI_SCRIPTS := $(SCRIPTS_DIR)/icici
 ENV_SCRIPTS := $(SCRIPTS_DIR)/env
 LOG_DIR := logs
+# ------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------
+BACKEND_NPM := cd $(BACKEND_DIR) && npm
 
 # ------------------------------------------------------------
 # Environment
