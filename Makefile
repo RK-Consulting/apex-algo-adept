@@ -21,6 +21,14 @@ LOG_DIR := logs
 # ------------------------------------------------------------
 NODE_ENV ?= production
 export NODE_ENV
+ENV_FILE := backend/.env
+
+export-env:
+	@echo "Loading environment from $(ENV_FILE)"
+	@set -a && . $(ENV_FILE) && set +a
+
+db-verify: export-env
+	bash scripts/db/verify-db-12-2025.sh
 
 # ------------------------------------------------------------
 # Colors
