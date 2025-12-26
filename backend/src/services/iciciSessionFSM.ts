@@ -2,7 +2,7 @@
 
 import { query } from "../config/database.js";
 import debug from "debug";
-
+import type { IciciState } from "../types/icici.js";
 const log = debug("alphaforge:icici:fsm");
 
 export class IciciSessionFSM {
