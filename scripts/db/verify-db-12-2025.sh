@@ -9,10 +9,7 @@ LOG_FILE="$LOG_DIR/verify_$TIMESTAMP.log"
 
 mkdir -p "$LOG_DIR"
 
-if [[ -z "${DATABASE_URL:-}" ]]; then
-  echo "❌ DATABASE_URL not set"
-  exit 1
-fi
+: "${DATABASE_URL:?❌ DATABASE_URL not set in environment}"
 
 if [[ ! -f "$SQL_FILE" ]]; then
   echo "❌ SQL file missing: $SQL_FILE"
