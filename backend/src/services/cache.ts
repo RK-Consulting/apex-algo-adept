@@ -1,5 +1,5 @@
 // backend/src/services/cache.ts
-import Redis from "ioredis";
+import { Redis } from "ioredis";
 import debug from "debug";
 import type { IciciSession } from "./sessionService.js";
 
