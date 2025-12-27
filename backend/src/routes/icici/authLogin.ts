@@ -28,7 +28,7 @@ const router = Router();
  * Returns ICICI redirect URL (frontend performs navigation)
  */
 router.post(
-  "/auth/login",
+  "/login",
   authenticateToken,
   iciciGuard("LOGIN"),
   async (req: AuthRequest, res) => {
