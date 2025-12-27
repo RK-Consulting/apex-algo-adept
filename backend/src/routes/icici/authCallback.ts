@@ -16,7 +16,7 @@
 
 import { Router } from "express";
 import debug from "debug";
-import { AuthRequest, authenticateToken } from "../../middleware/auth.js";
+import { AuthRequest } from "../../middleware/auth.js";
 import { iciciGuard } from "../../middleware/iciciGuard.js";
 import { iciciLimiter } from "../../middleware/rateLimiter.js";
 import { getCustomerDetails } from "../../services/breezeClient.js";
@@ -28,29 +28,44 @@ const log = debug("alphaforge:icici:callback");
 
 /* ============================================================
    GET /api/icici/auth/callback
-   Legacy flow — direct session_token
+   Legacy flow — browser redirect (NO JWT POSSIBLE)
 ============================================================ */
 router.get(
   "/auth/callback",
   iciciLimiter,
-  authenticateToken,
   iciciGuard("CALLBACK"),
-  async (req: AuthRequest, res) => {
-    const userId = req.user!.userId;
-
+  async (req, res) => {
     try {
-      const {
-        session_token: sessionToken,
-        customer_details: customerDetails,
-      } = req.query;
+      const { session_token, customer_details } = req.query;
 
-      if (!sessionToken || typeof sessionToken !== "string") {
-        log("Invalid session_token in GET callback for user %s", userId);
+      if (!session_token || typeof session_token !== "string") {
         return res.status(400).json({
           success: false,
           error: "Invalid session token from ICICI",
         });
       }
+
+      /* ------------------------------
+         RESOLVE USER FROM FSM CONTEXT
+      ------------------------------ */
+      const fsmResult = await query(
+        `
+        SELECT user_id
+        FROM icici_login_attempts
+        WHERE state = 'LOGIN_INITIATED'
+        ORDER BY updated_at DESC
+        LIMIT 1
+        `
+      );
+
+      if (fsmResult.rowCount === 0) {
+        return res.status(409).json({
+          success: false,
+          error: "No active ICICI login session found",
+        });
+      }
+
+      const userId: string = fsmResult.rows[0].user_id;
 
       /* ------------------------------
          FSM → CALLBACK_RECEIVED
@@ -65,13 +80,21 @@ router.get(
         [userId]
       );
 
+      /* ------------------------------
+         SAFE CUSTOMER DETAILS PARSE
+      ------------------------------ */
+      let parsedCustomerDetails: any = undefined;
+      if (typeof customer_details === "string") {
+        try {
+          parsedCustomerDetails = JSON.parse(customer_details);
+        } catch {
+          log("Non-JSON customer_details for user %s", userId);
+        }
+      }
+
       await SessionService.getInstance().saveSession(userId, {
-        session_token: sessionToken,
-        user_details: customerDetails
-          ? typeof customerDetails === "string"
-            ? JSON.parse(customerDetails)
-            : customerDetails
-          : undefined,
+        session_token,
+        user_details: parsedCustomerDetails,
       });
 
       /* ------------------------------
@@ -88,26 +111,14 @@ router.get(
         [userId]
       );
 
-      log("ICICI session established via GET callback for user %s", userId);
-
       const frontendUrl =
         process.env.FRONTEND_URL || "https://alphaforge.skillsifter.in";
 
       return res.redirect(
         `${frontendUrl}/dashboard?icici_connected=true&flow=direct`
       );
-    } catch (error: any) {
-      log("GET callback error for user %s: %s", userId, error.message);
-
-      await query(
-        `
-        UPDATE icici_login_attempts
-        SET state = 'FAILED',
-            updated_at = now()
-        WHERE user_id = $1
-        `,
-        [userId]
-      );
+    } catch (err: any) {
+      log("GET callback error: %s", err.message);
 
       return res.status(500).json({
         success: false,
@@ -119,12 +130,11 @@ router.get(
 
 /* ============================================================
    POST /api/icici/auth/complete
-   Secure server-side exchange
+   Secure server-side exchange (JWT OK)
 ============================================================ */
 router.post(
   "/auth/complete",
   iciciLimiter,
-  authenticateToken,
   iciciGuard("CALLBACK"),
   async (req: AuthRequest, res) => {
     const userId = req.user!.userId;
@@ -139,9 +149,6 @@ router.post(
         });
       }
 
-      /* ------------------------------
-         FSM → CALLBACK_RECEIVED
-      ------------------------------ */
       await query(
         `
         UPDATE icici_login_attempts
@@ -164,9 +171,6 @@ router.post(
         user_details: cdData?.Success,
       });
 
-      /* ------------------------------
-         FSM → SESSION_ACTIVE
-      ------------------------------ */
       await query(
         `
         UPDATE icici_login_attempts
@@ -178,15 +182,13 @@ router.post(
         [userId]
       );
 
-      log("ICICI Breeze connected successfully for user %s", userId);
-
       return res.json({
         success: true,
         message: "ICICI Breeze connected successfully",
         flow: "complete",
       });
-    } catch (error: any) {
-      log("POST complete error for user %s: %s", userId, error.message);
+    } catch (err: any) {
+      log("POST complete error for user %s: %s", userId, err.message);
 
       await query(
         `
@@ -200,7 +202,7 @@ router.post(
 
       return res.status(500).json({
         success: false,
-        error: error.message || "ICICI connection failed",
+        error: "ICICI connection failed",
       });
     }
   }
