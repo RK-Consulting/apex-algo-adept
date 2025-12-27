@@ -1,5 +1,5 @@
 // backend/src/config/redis.ts
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 
 /**
  * Redis Client for AlphaForge - Handles session caching, stream pub/sub, and rate limiting
