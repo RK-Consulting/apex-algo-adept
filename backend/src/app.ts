@@ -73,8 +73,10 @@ app.get("/health", (_req, res) =>
 
 app.use("/api/auth", authRouter);
 //app.use("/api/icici", iciciAuthRouter);
-app.use("/api/icici/auth/login", iciciAuthLoginRouter);
-app.use("/api/icici/auth/callback", iciciAuthCallbackRouter);
+//app.use("/api/icici/auth/login", iciciAuthLoginRouter);
+//app.use("/api/icici/auth/callback", iciciAuthCallbackRouter);
+app.use("/api/icici/auth", iciciAuthLoginRouter);
+app.use("/api/icici/auth", iciciAuthCallbackRouter);
 // === Rate Limiting ===
 //app.use("/api/auth/login", loginLimiter);
 app.use("/api/auth/register", loginLimiter);
