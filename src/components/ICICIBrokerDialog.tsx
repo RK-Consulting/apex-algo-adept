@@ -30,25 +30,54 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
     "https://api.alphaforge.skillsifter.in";
 
   /* =======================================================
-     START ICICI LOGIN (POPUP)
-     BACKEND FETCHES app_key FROM DB
+     START ICICI LOGIN (SECURE TWO-STEP FLOW)
+     1) Authenticated API call (JWT)
+     2) Popup redirect to ICICI
   ======================================================= */
-  const startICICILogin = () => {
-    setStatus("loading");
+  const startICICILogin = async () => {
+    try {
+      setStatus("loading");
 
-    const popupWindow = window.open(
-      `${backendUrl}/api/icici/auth/login`,
-      "iciciLogin",
-      "width=500,height=700"
-    );
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Authentication required. Please login again.");
+      }
 
-    if (!popupWindow) {
+      const res = await fetch(`${backendUrl}/api/icici/auth/login`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to initiate ICICI login");
+      }
+
+      const { redirectUrl } = await res.json();
+
+      if (!redirectUrl || typeof redirectUrl !== "string") {
+        throw new Error("Invalid ICICI redirect URL");
+      }
+
+      const popupWindow = window.open(
+        redirectUrl,
+        "iciciLogin",
+        "width=500,height=700"
+      );
+
+      if (!popupWindow) {
+        throw new Error("Popup blocked. Please enable popups.");
+      }
+    } catch (err: any) {
       setStatus("error");
-      setMessage("Popup blocked");
+      setMessage(err.message || "ICICI login failed");
 
       toast({
-        title: "Popup Blocked",
-        description: "Please enable popups for ICICI login",
+        title: "ICICI Login Failed",
+        description: err.message,
         variant: "destructive",
       });
     }
@@ -75,11 +104,11 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
 
         /* ------------------------------
            RUNTIME STORAGE (TEMPORARY)
-           - Not a credential
-           - Not persisted DB state
         ------------------------------ */
-        const runtimeApiSession = popupApiSession;
-        localStorage.setItem("icici_runtime_apisession", runtimeApiSession);
+        localStorage.setItem(
+          "icici_runtime_apisession",
+          popupApiSession
+        );
 
         setStatus("success");
         setMessage("ICICI login successful. Finalizing connection…");
