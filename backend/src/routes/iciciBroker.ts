@@ -67,11 +67,12 @@ router.get(
 router.post(
   "/connect",
   authenticateToken,
-  iciciGuard({
+  /* iciciGuard({
     requireProfileComplete: true,
     requireCredentials: true,
     disallowIfSessionActive: true,
-  }),
+  }),*/
+  iciciGuard("CONNECT"),
   async (_req: AuthRequest, res) => {
     /**
      * Frontend flow:
