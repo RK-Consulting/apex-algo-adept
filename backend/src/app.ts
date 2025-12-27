@@ -17,6 +17,8 @@ dotenv.config({ path: "/var/www/apex-algo-adept/backend/.env" });
 import express from "express";
 import helmet from "helmet";
 import compression from "compression";
+import { iciciAuthLoginRouter } from "./routes/icici/authLogin";
+import { iciciAuthCallbackRouter } from "./routes/icici/authCallback";
 import { loginLimiter, apiLimiter, authLimiter } from "./middleware/rateLimiter.js";
 import { authenticateToken } from "./middleware/auth.js";
 import { errorHandler } from "./middleware/errorHandler.js";
@@ -25,7 +27,7 @@ import { requestLogger } from "./middleware/logger.js";
 // === Route Imports (matching actual exports) ===
 import authRouter from "./routes/auth.js";
 import iciciOrderRouter from "./routes/icici/orders.js";
-import { iciciAuthRouter } from "./routes/iciciAuth.js";
+//import { iciciAuthRouter } from "./routes/iciciAuth.js";
 import { iciciBrokerRouter } from "./routes/iciciBroker.js";
 import { iciciStatusRouter } from "./routes/iciciStatus.js";
 import { iciciStreamRouter } from "./routes/icici/stream.js";
@@ -70,7 +72,9 @@ app.get("/health", (_req, res) =>
 );
 
 app.use("/api/auth", authRouter);
-app.use("/api/icici", iciciAuthRouter);
+//app.use("/api/icici", iciciAuthRouter);
+app.use("/api/icici/auth/login", iciciAuthLoginRouter);
+app.use("/api/icici/auth/callback", iciciAuthCallbackRouter);
 // === Rate Limiting ===
 //app.use("/api/auth/login", loginLimiter);
 app.use("/api/auth/register", loginLimiter);
