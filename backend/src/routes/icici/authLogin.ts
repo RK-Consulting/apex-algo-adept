@@ -4,9 +4,10 @@
  * ICICI OAuth Login Initiator
  *
  * Responsibility:
- * - Redirect authenticated user to ICICI login page
+ * - Authenticated initiation of ICICI login
  * - Fetches ONLY app_key from broker_credentials
- * - Does NOT decrypt, store, or expose secrets
+ * - Does NOT handle browser redirect
+ * - Does NOT mutate FSM directly (guard is source of truth)
  *
  * Naming Discipline:
  * - DB layer     → app_key
@@ -23,45 +24,18 @@ const log = debug("alphaforge:icici:login");
 const router = Router();
 
 /**
- * GET /api/icici/auth/login
- * Initiates ICICI Breeze OAuth login
+ * POST /api/icici/auth/login
+ * Returns ICICI redirect URL (frontend performs navigation)
  */
-router.get(
+router.post(
   "/auth/login",
   authenticateToken,
-
-  /* ======================================================
-     ICICI GUARD (FSM-AWARE)
-     - Blocks active sessions
-     - Blocks parallel login attempts
-  ====================================================== */
   iciciGuard("LOGIN"),
-
   async (req: AuthRequest, res) => {
+    const serverUserId = req.user!.userId;
+    const serverBrokerName = "ICICI";
+
     try {
-      /* ------------------------------
-         SERVER CONTEXT
-      ------------------------------ */
-      const serverUserId = req.user!.userId;
-      const serverBrokerName = "ICICI";
-
-      /* ------------------------------
-         FSM: MARK LOGIN INITIATED
-      ------------------------------ */
-      await query(
-        `
-        INSERT INTO icici_login_attempts (user_id, state, attempts, last_attempt_at)
-        VALUES ($1, 'LOGIN_INITIATED', 1, now())
-        ON CONFLICT (user_id)
-        DO UPDATE SET
-          state = 'LOGIN_INITIATED',
-          attempts = icici_login_attempts.attempts + 1,
-          last_attempt_at = now(),
-          updated_at = now()
-        `,
-        [serverUserId]
-      );
-
       /* ------------------------------
          DB LOOKUP (NO SECRETS)
       ------------------------------ */
@@ -89,26 +63,20 @@ router.get(
       const serverAppKey: string = dbResult.rows[0].app_key;
 
       /* ------------------------------
-         REDIRECT TO ICICI
+         ICICI LOGIN URL CONSTRUCTION
       ------------------------------ */
-      const loginUrl =
+      const redirectUrl =
         "https://api.icicidirect.com/apiuser/login?api_key=" +
         encodeURIComponent(serverAppKey);
 
-      log("Redirecting user %s to ICICI login", serverUserId);
-      return res.redirect(loginUrl);
-    } catch (err: any) {
-      log("ICICI login init failed: %s", err.message);
+      log("ICICI login initiated for user %s", serverUserId);
 
-      // FSM failure fallback
-      await query(
-        `
-        UPDATE icici_login_attempts
-        SET state = 'FAILED', updated_at = now()
-        WHERE user_id = $1
-        `,
-        [req.user?.userId]
-      );
+      return res.json({
+        success: true,
+        redirectUrl,
+      });
+    } catch (err: any) {
+      log("ICICI login init failed for user %s: %s", serverUserId, err.message);
 
       return res.status(500).json({
         success: false,
