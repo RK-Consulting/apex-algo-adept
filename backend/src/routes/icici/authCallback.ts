@@ -31,7 +31,7 @@ const log = debug("alphaforge:icici:callback");
    Legacy flow — browser redirect (NO JWT POSSIBLE)
 ============================================================ */
 router.get(
-  "/auth/callback",
+  "/callback",
   iciciLimiter,
   iciciGuard("CALLBACK"),
   async (req, res) => {
@@ -133,7 +133,7 @@ router.get(
    Secure server-side exchange (JWT OK)
 ============================================================ */
 router.post(
-  "/auth/complete",
+  "/complete",
   iciciLimiter,
   iciciGuard("CALLBACK"),
   async (req: AuthRequest, res) => {
