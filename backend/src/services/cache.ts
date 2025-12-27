@@ -1,11 +1,13 @@
 // backend/src/services/cache.ts
-import { Redis } from "ioredis";
+import Redis from "ioredis";
 import debug from "debug";
 import type { IciciSession } from "./sessionService.js";
 
+const RedisClient = (Redis as any).default ?? Redis;
+
 const log = debug("alphaforge:cache");
 
-const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
+const redis = new RedisClient(process.env.REDIS_URL || "redis://localhost:6379", {
   maxRetriesPerRequest: null,
   enableReadyCheck: true,
 });
