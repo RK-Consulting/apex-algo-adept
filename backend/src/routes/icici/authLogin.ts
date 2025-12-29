@@ -29,7 +29,7 @@ const router = Router();
 router.post(
   "/login",
   authenticateToken,
-  iciciGuard("LOGIN"),
+  //iciciGuard("LOGIN"),
   async (req: AuthRequest, res) => {
     const userId = req.user!.userId;
 
