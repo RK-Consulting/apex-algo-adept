@@ -32,7 +32,7 @@ export const authenticateToken = (
   res: Response,
   next: NextFunction
 ) => {
-  const authHeader =
+  /*const authHeader =
     (req.headers["authorization"] as string) ||
     (req.headers["Authorization"] as string);
 
@@ -46,6 +46,22 @@ export const authenticateToken = (
 
   if (!token) {
     return res.status(401).json({ error: "Authorization token missing" });
+  }
+  */
+  const authHeader =
+  (req.headers["authorization"] as string) ||
+  (req.headers["Authorization"] as string);
+
+  const queryToken =
+    typeof req.query.token === "string" ? req.query.token : undefined;
+
+  const token =
+    authHeader?.startsWith("Bearer ")
+      ? authHeader.slice(7)
+      : authHeader || queryToken;
+
+  if (!token) {
+     return res.status(401).json({ error: "Authorization token missing" });
   }
 
   const rawSecret = process.env.JWT_SECRET || "";
