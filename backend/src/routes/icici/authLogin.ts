@@ -60,6 +60,6 @@ router.post(
   }
 );
 
-export default router;
-//export const iciciAuthLoginRouter = router;
+//export default router;
+export const iciciAuthLoginRouter = router;
 
