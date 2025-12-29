@@ -83,15 +83,14 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
     }
   };
 */
-  const startICICILogin = () => {
-  setStatus("loading");
+  const token = localStorage.getItem("token");
 
   const popup = window.open(
-    `${backendUrl}/api/icici/auth/login`,
+    `${backendUrl}/api/icici/auth/login?token=${encodeURIComponent(token || "")}`,
     "iciciLogin",
     "width=500,height=700"
   );
-
+  
   if (!popup) {
     setStatus("error");
     setMessage("Popup blocked. Please enable popups.");
