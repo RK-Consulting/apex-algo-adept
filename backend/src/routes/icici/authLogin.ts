@@ -22,12 +22,16 @@ import debug from "debug";
 const log = debug("alphaforge:icici:login");
 const router = Router();
 
+/**
+ * POST /api/icici/auth/login
+ * Returns ICICI redirect URL
+ */
 router.post(
-  "/",
+  "/login",
   authenticateToken,
   iciciGuard("LOGIN"),
   async (req: AuthRequest, res) => {
-    const serverUserId = req.user!.userId;
+    const userId = req.user!.userId;
 
     const dbResult = await query(
       `
@@ -37,20 +41,25 @@ router.post(
         AND broker_name = 'ICICI'
         AND is_active = true
       `,
-      [serverUserId]
+      [userId]
     );
 
     if (dbResult.rowCount === 0) {
-      return res.status(400).json({ error: "ICICI API key not configured" });
+      return res.status(400).json({
+        error: "ICICI API key not configured",
+      });
     }
 
     const redirectUrl =
       "https://api.icicidirect.com/apiuser/login?api_key=" +
       encodeURIComponent(dbResult.rows[0].app_key);
 
+    log("ICICI login initiated for user %s", userId);
+
     return res.json({ redirectUrl });
   }
 );
 
-export const iciciAuthLoginRouter = router;
 export default router;
+//export const iciciAuthLoginRouter = router;
+
