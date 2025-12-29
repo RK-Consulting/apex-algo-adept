@@ -1,4 +1,4 @@
-// /backend/src/routes/icici/authLogin.ts
+// backend/src/routes/icici/authLogin.ts
 
 /**
  * ICICI OAuth Login Initiator
@@ -6,8 +6,7 @@
  * Responsibility:
  * - Authenticated initiation of ICICI login
  * - Fetches ONLY app_key from broker_credentials
- * - Does NOT handle browser redirect
- * - Does NOT mutate FSM directly (guard is source of truth)
+ * - Performs SERVER-SIDE redirect to ICICI
  *
  * Naming Discipline:
  * - DB layer     → app_key
@@ -24,10 +23,10 @@ const log = debug("alphaforge:icici:login");
 const router = Router();
 
 /**
- * POST /api/icici/auth/login
- * Returns ICICI redirect URL (frontend performs navigation)
+ * GET /api/icici/auth/login
+ * Redirects browser to ICICI login page
  */
-router.post(
+router.get(
   "/login",
   authenticateToken,
   iciciGuard("LOGIN"),
@@ -63,18 +62,15 @@ router.post(
       const serverAppKey: string = dbResult.rows[0].app_key;
 
       /* ------------------------------
-         ICICI LOGIN URL CONSTRUCTION
+         ICICI LOGIN REDIRECT
       ------------------------------ */
-      const redirectUrl =
+      const loginUrl =
         "https://api.icicidirect.com/apiuser/login?api_key=" +
         encodeURIComponent(serverAppKey);
 
-      log("ICICI login initiated for user %s", serverUserId);
+      log("Redirecting user %s to ICICI login", serverUserId);
 
-      return res.json({
-        success: true,
-        redirectUrl,
-      });
+      return res.redirect(loginUrl);
     } catch (err: any) {
       log("ICICI login init failed for user %s: %s", serverUserId, err.message);
 
