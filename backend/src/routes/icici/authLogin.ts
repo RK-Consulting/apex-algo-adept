@@ -23,7 +23,7 @@ const log = debug("alphaforge:icici:login");
 const router = Router();
 
 router.post(
-  "/login",
+  "/",
   authenticateToken,
   iciciGuard("LOGIN"),
   async (req: AuthRequest, res) => {
