@@ -30,11 +30,11 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
     "https://api.alphaforge.skillsifter.in";
 
   /* =======================================================
-     START ICICI LOGIN (SECURE TWO-STEP FLOW)
-     1) Authenticated API call (JWT)
-     2) Popup redirect to ICICI
+     START ICICI LOGIN (CORRECT TWO-STEP FLOW)
+     1) Authenticated backend call (JWT)
+     2) Popup opens ICICI URL directly
   ======================================================= */
- /* const startICICILogin = async () => {
+  const startICICILogin = async () => {
     try {
       setStatus("loading");
 
@@ -62,13 +62,13 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
         throw new Error("Invalid ICICI redirect URL");
       }
 
-      const popupWindow = window.open(
+      const popup = window.open(
         redirectUrl,
         "iciciLogin",
         "width=500,height=700"
       );
 
-      if (!popupWindow) {
+      if (!popup) {
         throw new Error("Popup blocked. Please enable popups.");
       }
     } catch (err: any) {
@@ -82,26 +82,6 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
       });
     }
   };
-*/
-  const token = localStorage.getItem("token");
-
-  const popup = window.open(
-    `${backendUrl}/api/icici/auth/login?token=${encodeURIComponent(token || "")}`,
-    "iciciLogin",
-    "width=500,height=700"
-  );
-  
-  if (!popup) {
-    setStatus("error");
-    setMessage("Popup blocked. Please enable popups.");
-
-    toast({
-      title: "Popup Blocked",
-      description: "Please allow popups and try again",
-      variant: "destructive",
-    });
-  }
-};
 
   /* =======================================================
      RECEIVE RESULT FROM POPUP (RUNTIME ONLY)
@@ -110,9 +90,6 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
     (event: MessageEvent) => {
       if (!event.data || typeof event.data !== "object") return;
 
-      /* ------------------------------
-         SUCCESS PATH
-      ------------------------------ */
       if (event.data.type === "ICICI_LOGIN") {
         const popupApiSession: string | undefined = event.data.apisession;
 
@@ -122,9 +99,6 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
           return;
         }
 
-        /* ------------------------------
-           RUNTIME STORAGE (TEMPORARY)
-        ------------------------------ */
         localStorage.setItem(
           "icici_runtime_apisession",
           popupApiSession
@@ -142,9 +116,6 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
         setTimeout(() => onOpenChange(false), 1200);
       }
 
-      /* ------------------------------
-         ERROR PATH
-      ------------------------------ */
       if (event.data.type === "ICICI_LOGIN_ERROR") {
         setStatus("error");
         setMessage(event.data.error || "ICICI login failed");
