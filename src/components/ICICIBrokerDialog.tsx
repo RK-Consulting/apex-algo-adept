@@ -34,54 +34,41 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
      1) Authenticated backend call (JWT)
      2) Popup opens ICICI URL directly
   ======================================================= */
-  const startICICILogin = async () => {
-    try {
-      setStatus("loading");
+ const startICICILogin = async () => {
+  try {
+    setStatus("loading");
 
-      const token = localStorage.getItem("token");
-      if (!token) {
-        throw new Error("Authentication required. Please login again.");
-      }
+    const token = localStorage.getItem("token");
+    if (!token) throw new Error("Not authenticated");
 
-      const res = await fetch(`${backendUrl}/api/icici/auth/login`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+    const res = await fetch(`${backendUrl}/api/icici/auth/login`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Failed to initiate ICICI login");
-      }
+    const data = await res.json();
 
-      const { redirectUrl } = await res.json();
-
-      if (!redirectUrl || typeof redirectUrl !== "string") {
-        throw new Error("Invalid ICICI redirect URL");
-      }
-
-      const popup = window.open(
-        redirectUrl,
-        "iciciLogin",
-        "width=500,height=700"
-      );
-
-      if (!popup) {
-        throw new Error("Popup blocked. Please enable popups.");
-      }
-    } catch (err: any) {
-      setStatus("error");
-      setMessage(err.message || "ICICI login failed");
-
-      toast({
-        title: "ICICI Login Failed",
-        description: err.message,
-        variant: "destructive",
-      });
+    if (!data.redirectUrl) {
+      throw new Error("No redirect URL received");
     }
-  };
+
+    const popup = window.open(
+      data.redirectUrl,
+      "iciciLogin",
+      "width=500,height=700"
+    );
+
+    if (!popup) {
+      throw new Error("Popup blocked");
+    }
+  } catch (err: any) {
+    setStatus("error");
+    setMessage(err.message);
+  }
+};
 
   /* =======================================================
      RECEIVE RESULT FROM POPUP (RUNTIME ONLY)
