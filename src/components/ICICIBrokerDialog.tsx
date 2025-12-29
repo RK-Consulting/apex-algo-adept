@@ -34,7 +34,7 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
      1) Authenticated API call (JWT)
      2) Popup redirect to ICICI
   ======================================================= */
-  const startICICILogin = async () => {
+ /* const startICICILogin = async () => {
     try {
       setStatus("loading");
 
@@ -82,6 +82,27 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
       });
     }
   };
+*/
+  const startICICILogin = () => {
+  setStatus("loading");
+
+  const popup = window.open(
+    `${backendUrl}/api/icici/auth/login`,
+    "iciciLogin",
+    "width=500,height=700"
+  );
+
+  if (!popup) {
+    setStatus("error");
+    setMessage("Popup blocked. Please enable popups.");
+
+    toast({
+      title: "Popup Blocked",
+      description: "Please allow popups and try again",
+      variant: "destructive",
+    });
+  }
+};
 
   /* =======================================================
      RECEIVE RESULT FROM POPUP (RUNTIME ONLY)
