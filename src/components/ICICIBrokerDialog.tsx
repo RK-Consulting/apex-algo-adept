@@ -21,23 +21,21 @@ type Status = "idle" | "loading" | "success" | "error";
 export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState("");
-  const [forcedReconnect, setForcedReconnect] = useState(false);
   const { toast } = useToast();
 
   const backendUrl =
     import.meta.env.VITE_BACKEND_URL ||
-    import.meta.env.VITE_API_URL ||
     "https://api.alphaforge.skillsifter.in";
 
   /* =======================================================
-     STEP 1: START ICICI LOGIN (JWT → BACKEND → REDIRECT URL)
+     STEP 1: INITIATE LOGIN (JWT → redirectUrl)
   ======================================================= */
   const startICICILogin = async () => {
     try {
       setStatus("loading");
 
       const token = localStorage.getItem("token");
-      if (!token) throw new Error("Authentication required");
+      if (!token) throw new Error("Not authenticated");
 
       const res = await fetch(`${backendUrl}/api/icici/auth/login`, {
         method: "POST",
@@ -47,9 +45,8 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
       });
 
       const data = await res.json();
-
-      if (!res.ok || !data.redirectUrl) {
-        throw new Error(data.error || "Failed to initiate ICICI login");
+      if (!data.redirectUrl) {
+        throw new Error("Missing redirect URL");
       }
 
       const popup = window.open(
@@ -59,12 +56,11 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
       );
 
       if (!popup) {
-        throw new Error("Popup blocked. Please allow popups.");
+        throw new Error("Popup blocked");
       }
     } catch (err: any) {
       setStatus("error");
       setMessage(err.message);
-
       toast({
         title: "ICICI Login Failed",
         description: err.message,
@@ -74,58 +70,59 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
   };
 
   /* =======================================================
-     STEP 2: RECEIVE apisession FROM POPUP
-             → FINALIZE LOGIN (JWT REQUIRED)
+     STEP 2: RECEIVE apisession FROM CALLBACK
   ======================================================= */
   const handleMessage = useCallback(
     async (event: MessageEvent) => {
-      if (!event.data || event.data.type !== "ICICI_LOGIN") return;
-
-      const apisession: string | undefined = event.data.apisession;
-      if (!apisession) {
-        setStatus("error");
-        setMessage("Missing apisession from ICICI");
+      if (
+        !event.data ||
+        typeof event.data !== "object" ||
+        event.data.type !== "ICICI_LOGIN"
+      ) {
         return;
       }
 
+      const apisession = event.data.apisession;
+      if (!apisession) return;
+
       try {
         const token = localStorage.getItem("token");
-        if (!token) throw new Error("Authentication expired");
+        if (!token) throw new Error("JWT missing");
 
+        /* ===================================================
+           STEP 3: FINALIZE LOGIN (THIS WAS NEVER FIRING)
+        =================================================== */
         const res = await fetch(
           `${backendUrl}/api/icici/auth/complete`,
           {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${token}`,
               "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify({ apisession }),
           }
         );
 
         const data = await res.json();
-
         if (!res.ok) {
-          throw new Error(data.error || "ICICI finalization failed");
+          throw new Error(data.error || "Finalization failed");
         }
 
         setStatus("success");
-        setMessage("ICICI Breeze connected successfully");
+        setMessage("ICICI connected successfully");
 
         toast({
           title: "ICICI Connected",
-          description: "Broker connection established",
+          description: "Broker session established",
         });
 
-        setForcedReconnect(false);
         setTimeout(() => onOpenChange(false), 1200);
       } catch (err: any) {
         setStatus("error");
         setMessage(err.message);
-
         toast({
-          title: "ICICI Connection Failed",
+          title: "ICICI Finalization Failed",
           description: err.message,
           variant: "destructive",
         });
@@ -139,43 +136,16 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
     return () => window.removeEventListener("message", handleMessage);
   }, [handleMessage]);
 
-  /* =======================================================
-     SESSION EXPIRY / FORCED RECONNECT
-  ======================================================= */
-  useEffect(() => {
-    function handleReconnectEvent() {
-      setForcedReconnect(true);
-      setStatus("idle");
-      setMessage("");
-      onOpenChange(true);
-    }
-
-    window.addEventListener(
-      "SHOW_ICICI_RECONNECT_DIALOG",
-      handleReconnectEvent
-    );
-
-    return () =>
-      window.removeEventListener(
-        "SHOW_ICICI_RECONNECT_DIALOG",
-        handleReconnectEvent
-      );
-  }, [onOpenChange]);
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="space-y-4 max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            {forcedReconnect
-              ? "Reconnect ICICI Direct"
-              : "Connect ICICI Direct (Breeze)"}
-          </DialogTitle>
+          <DialogTitle>Connect ICICI Direct (Breeze)</DialogTitle>
         </DialogHeader>
 
         {status === "idle" && (
           <Button className="w-full" onClick={startICICILogin}>
-            {forcedReconnect ? "Reconnect ICICI Direct" : "Connect ICICI Direct"}
+            Connect ICICI
           </Button>
         )}
 
@@ -187,11 +157,11 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
         )}
 
         {status === "success" && (
-          <div className="text-green-600 font-medium">{message}</div>
+          <div className="text-green-600">{message}</div>
         )}
 
         {status === "error" && (
-          <div className="text-red-600 font-medium">{message}</div>
+          <div className="text-red-600">{message}</div>
         )}
       </DialogContent>
     </Dialog>
