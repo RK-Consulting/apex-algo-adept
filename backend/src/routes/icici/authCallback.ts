@@ -149,3 +149,4 @@ router.post(
 );
 
 export default router;
+export const iciciAuthCallbackRouter = router;
