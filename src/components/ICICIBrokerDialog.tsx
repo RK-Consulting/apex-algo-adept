@@ -80,13 +80,49 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
     async (event: MessageEvent) => {
       if (!event.data || typeof event.data !== "object") return;
 
-      if (event.data.type === "ICICI_LOGIN") {
+      /* if (event.data.type === "ICICI_LOGIN") {
         const apisession: string | undefined = event.data.apisession;
         if (!apisession) {
           setStatus("error");
           setMessage("Missing apisession from ICICI");
           return;
+        } */
+      if (event.data.type === "ICICI_LOGIN") {
+          const popupApiSession = event.data.apisession;
+          if (!popupApiSession) return;
+        
+          const token = localStorage.getItem("token");
+          if (!token) {
+            setStatus("error");
+            setMessage("Authentication expired. Please login again.");
+            return;
+          }
+        
+          // 🔑 FINALIZE LOGIN (JWT REQUIRED)
+          fetch(`${backendUrl}/api/icici/auth/complete`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ apisession: popupApiSession }),
+          })
+            .then((res) => {
+              if (!res.ok) throw new Error("ICICI finalization failed");
+              return res.json();
+            })
+            .then(() => {
+              setStatus("success");
+              setMessage("ICICI connected successfully");
+              setForcedReconnect(false);
+              setTimeout(() => onOpenChange(false), 1000);
+            })
+            .catch((err) => {
+              setStatus("error");
+              setMessage(err.message);
+            });
         }
+
 
         try {
           const token = localStorage.getItem("token");
