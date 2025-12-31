@@ -77,10 +77,6 @@ app.use("/api/auth/register", loginLimiter);
 app.use("/api/icici/auth", iciciAuthLoginRouter);
 app.use("/api/icici/auth", iciciAuthCallbackRouter);
 
-// =======================================================
-// GENERIC API RATE LIMITER (AFTER AUTH CALLBACK)
-// =======================================================
-app.use("/api", apiLimiter);
 
 // =======================================================
 // JWT-PROTECTED ROUTES
@@ -102,5 +98,9 @@ app.use("/api/icici", authenticateToken, iciciOrderRouter);
 
 // === Global Error Handler ===
 app.use(errorHandler);
+// =======================================================
+// GENERIC API RATE LIMITER (AFTER AUTH CALLBACK)
+// =======================================================
+app.use("/api", apiLimiter);
 
 export default app;
