@@ -33,46 +33,34 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
   /* =======================================================
      STEP 1: INITIATE ICICI LOGIN (JWT REQUIRED)
   ======================================================= */
-  const startICICILogin = async () => {
-    try {
-      setStatus("loading");
+ const startICICILogin = async () => {
+  try {
+    setStatus("loading");
 
-      const token = localStorage.getItem("token");
-      if (!token) throw new Error("Authentication required");
+    const token = localStorage.getItem("token");
+    if (!token) throw new Error("Not authenticated");
 
-      const res = await fetch(`${backendUrl}/api/icici/auth/login`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+    const res = await fetch(`${backendUrl}/api/icici/auth/login`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
 
-      const data = await res.json();
+    const { redirectUrl } = await res.json();
+    if (!redirectUrl) throw new Error("No redirect URL");
 
-      if (!res.ok || !data.redirectUrl) {
-        throw new Error(data.error || "Failed to initiate ICICI login");
-      }
+    window.open(
+      redirectUrl,
+      "iciciLogin",
+      "width=500,height=700"
+    );
+  } catch (err: any) {
+    setStatus("error");
+    setMessage(err.message);
+  }
+};
 
-      const popup = window.open(
-        data.redirectUrl,
-        "iciciLogin",
-        "width=500,height=700"
-      );
-
-      if (!popup) {
-        throw new Error("Popup blocked. Please allow popups.");
-      }
-    } catch (err: any) {
-      setStatus("error");
-      setMessage(err.message);
-
-      toast({
-        title: "ICICI Login Failed",
-        description: err.message,
-        variant: "destructive",
-      });
-    }
-  };
 
   /* =======================================================
      STEP 2: RECEIVE APSESSION FROM BACKEND CALLBACK
