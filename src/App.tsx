@@ -20,7 +20,7 @@ import NotFound from "./pages/NotFound";
 import StockDetails from "./pages/StockDetails";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
-import ICICICallback from "./pages/ICICICallback";
+//import ICICICallback from "./pages/ICICICallback";
 
 const queryClient = new QueryClient();
 
@@ -70,7 +70,7 @@ const App = () => {
             {/* ---------- PUBLIC ROUTES ---------- */}
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
-            <Route path="/icici-callback" element={<ICICICallback />} />
+           // <Route path="/icici-callback" element={<ICICICallback />} />
 
             {/* ---------- PROTECTED ROUTES ---------- */}
             <Route
