@@ -45,23 +45,68 @@ router.get(
       });
     }
 
-    const frontendUrl =
-      process.env.FRONTEND_URL || "https://alphaforge.skillsifter.in";
+    try {
+      /* ----------------------------------
+         Resolve user from login attempt
+      ---------------------------------- */
+      const result = await query(
+        `
+        SELECT user_id
+        FROM icici_login_attempts
+        WHERE state = 'LOGIN_INITIATED'
+        ORDER BY updated_at DESC
+        LIMIT 1
+        `
+      );
 
-    // Pass apisession to frontend popup safely
-    return res.send(`
-      <html>
-        <body>
-          <script>
-            window.opener.postMessage(
-              { type: "ICICI_LOGIN", apisession: "${apisession}" },
-              "${frontendUrl}"
-            );
-            window.close();
-          </script>
-        </body>
-      </html>
-    `);
+      if (result.rowCount === 0) {
+        throw new Error("No active ICICI login session");
+      }
+
+      const userId = result.rows[0].user_id;
+
+      /* ----------------------------------
+         IMMEDIATE Breeze Exchange (CRITICAL)
+      ---------------------------------- */
+      const cdData = await getCustomerDetails(userId, apisession);
+      const sessionToken = cdData?.Success?.session_token;
+
+      if (!sessionToken) {
+        throw new Error("Failed to obtain session_token");
+      }
+
+      await SessionService.getInstance().saveSession(userId, {
+        session_token: sessionToken,
+        user_details: cdData.Success,
+      });
+
+      /* ----------------------------------
+         FSM → SESSION_ACTIVE
+      ---------------------------------- */
+      await query(
+        `
+        UPDATE icici_login_attempts
+        SET state = 'SESSION_ACTIVE',
+            attempts = 0,
+            updated_at = now()
+        WHERE user_id = $1
+        `,
+        [userId]
+      );
+
+      const frontendUrl =
+        process.env.FRONTEND_URL || "https://alphaforge.skillsifter.in";
+
+      return res.redirect(
+        `${frontendUrl}/dashboard?icici_connected=true`
+      );
+    } catch (err: any) {
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/dashboard?icici_connected=false&error=${encodeURIComponent(
+          err.message
+        )}`
+      );
+    }
   }
 );
 
