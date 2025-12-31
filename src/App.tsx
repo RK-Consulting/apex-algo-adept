@@ -70,8 +70,7 @@ const App = () => {
             {/* ---------- PUBLIC ROUTES ---------- */}
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
-           // <Route path="/icici-callback" element={<ICICICallback />} />
-
+            
             {/* ---------- PROTECTED ROUTES ---------- */}
             <Route
               path="/"
