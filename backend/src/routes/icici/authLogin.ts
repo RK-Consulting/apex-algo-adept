@@ -37,7 +37,7 @@ const router = Router();
       `
       SELECT app_key
       FROM broker_credentials
-      WHERE user_id = $1
+      WHERE user_id = $1::uuid
         AND broker_name = 'ICICI'
         AND is_active = true
       `,
@@ -79,7 +79,7 @@ router.get(  // ← GET, not POST
     // Get API key
     const dbResult = await query(
       `SELECT app_key FROM broker_credentials
-       WHERE user_id = $1 AND broker_name = 'ICICI' AND is_active = true`,
+       WHERE user_id = $1::uuid AND broker_name = 'ICICI' AND is_active = true`,
       [userId]
     );
 
