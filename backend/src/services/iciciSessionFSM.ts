@@ -17,7 +17,7 @@ export class IciciSessionFSM {
         expires_at,
         locked_until
       FROM icici_sessions
-      WHERE user_id = $1
+      WHERE user_id = $1::uuid
       `,
       [userId]
     );
@@ -87,7 +87,7 @@ export class IciciSessionFSM {
         `
         UPDATE icici_sessions
         SET auth_started_at = now()
-        WHERE user_id = $1
+        WHERE user_id = $1::uuid
         `,
         [userId]
       );
@@ -102,7 +102,7 @@ export class IciciSessionFSM {
           expires_at = $3,
           locked_until = NULL,
           updated_at = now()
-        WHERE user_id = $1
+        WHERE user_id = $1::uuid
         `,
         [userId, options.sessionToken, options.expiresAt]
       );
@@ -114,7 +114,7 @@ export class IciciSessionFSM {
         UPDATE icici_sessions
         SET session_token = NULL,
             updated_at = now()
-        WHERE user_id = $1
+        WHERE user_id = $1::uuid
         `,
         [userId]
       );
@@ -126,7 +126,7 @@ export class IciciSessionFSM {
         `
         UPDATE icici_sessions
         SET locked_until = now() + interval '${lockMinutes} minutes'
-        WHERE user_id = $1
+        WHERE user_id = $1::uuid
         `,
         [userId]
       );
