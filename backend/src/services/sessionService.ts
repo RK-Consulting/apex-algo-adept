@@ -65,7 +65,7 @@ export class SessionService {
       `
       SELECT app_key, app_secret
       FROM broker_credentials
-      WHERE user_id = $1
+      WHERE user_id = $1::uuid
         AND broker_name = 'ICICI'
         AND is_active = true
       `,
@@ -223,7 +223,7 @@ export class SessionService {
       FROM icici_sessions s
       JOIN broker_credentials c
         ON c.user_id = s.idirect_userid
-      WHERE s.idirect_userid = $1
+      WHERE s.idirect_userid = $1::uuid
         AND c.broker_name = 'ICICI'
         AND c.is_active = true
       `,
@@ -256,7 +256,7 @@ export class SessionService {
 
     await invalidateSessionCache(serverUserId);
     await pool.query(
-      "DELETE FROM icici_sessions WHERE idirect_userid = $1",
+      "DELETE FROM icici_sessions WHERE idirect_userid = $1::uuid",
       [serverUserId]
     );
 
