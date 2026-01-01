@@ -40,8 +40,8 @@ router.get(
       `
       SELECT is_active, last_connected, created_at
       FROM broker_credentials
-      WHERE user_id = $1
-        AND broker_name = $2
+      WHERE user_id = $1::uuid
+        AND broker_name = $2::uuid
       `,
       [serverUserId, serverBrokerName]
     );
