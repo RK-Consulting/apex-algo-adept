@@ -92,8 +92,8 @@ router.get(
 
       // Save session
       await SessionService.getInstance().saveSession(userId, {
-        api_key: app_key,
-        api_secret: app_secret,
+        //api_key: app_key,
+       //api_secret: app_secret,
         session_token: sessionToken,
         user_details: cdData.Success,
       });
@@ -182,8 +182,8 @@ router.post(
       }
 
       await SessionService.getInstance().saveSession(userId, {
-        api_key: app_key,
-        api_secret: app_secret,
+        //api_key: app_key,
+        //api_secret: app_secret,
         session_token: sessionToken,
         user_details: cdData.Success,
       });
