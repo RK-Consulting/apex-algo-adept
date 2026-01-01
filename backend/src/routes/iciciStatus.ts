@@ -43,8 +43,8 @@ iciciStatusRouter.get("/", authenticateToken, async (req: AuthRequest, res) => {
       `
       SELECT 1
       FROM broker_credentials
-      WHERE user_id = $1
-        AND broker_name = $2
+      WHERE user_id = $1::uuid
+        AND broker_name = $2::uuid
         AND is_active = true
       `,
       [serverUserId, serverBrokerName]
