@@ -72,7 +72,7 @@ router.get(
       const credsResult = await query(
         `SELECT app_key, app_secret
          FROM broker_credentials
-         WHERE user_id = $1 AND broker_name = 'ICICI' AND is_active = true`,
+         WHERE user_id = $1::uuid AND broker_name = 'ICICI' AND is_active = true`,
         [userId]
       );
 
@@ -102,7 +102,7 @@ router.get(
       await query(
         `UPDATE icici_login_attempts
          SET state = 'SESSION_ACTIVE', attempts = 0, updated_at = NOW()
-         WHERE user_id = $1`,
+         WHERE user_id = $1::uuid`,
         [userId]
       );
 
@@ -139,7 +139,7 @@ router.get(
    POST /api/icici/auth/complete
    JWT REQUIRED — FINALIZES LOGIN
 ============================================================ */
-router.post(
+/* router.post(
   "/complete",
   iciciLimiter,
   authenticateToken,
@@ -160,7 +160,7 @@ router.post(
       const credsResult = await query(
         `SELECT app_key, app_secret
          FROM broker_credentials
-         WHERE user_id = $1 AND broker_name = 'ICICI' AND is_active = true`,
+         WHERE user_id = $1::uuid AND broker_name = 'ICICI' AND is_active = true`,
         [userId]
       );
 
@@ -191,7 +191,7 @@ router.post(
       await query(
         `UPDATE icici_login_attempts
          SET state = 'SESSION_ACTIVE', attempts = 0, updated_at = NOW()
-         WHERE user_id = $1`,
+         WHERE user_id = $1::uuid`,
         [userId]
       );
 
@@ -205,7 +205,7 @@ router.post(
       await query(
         `UPDATE icici_login_attempts
          SET state = 'FAILED', updated_at = NOW()
-         WHERE user_id = $1`,
+         WHERE user_id = $1::uuid`,
         [userId]
       );
 
@@ -215,6 +215,6 @@ router.post(
       });
     }
   }
-);
+); */
 export default router;
 export const iciciAuthCallbackRouter = router;
