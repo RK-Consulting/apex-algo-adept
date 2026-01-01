@@ -1,7 +1,4 @@
 // src/components/ICICIBrokerDialog.tsx
-
-// src/components/ICICIBrokerDialog.tsx
-
 import { useState, useEffect, useCallback } from "react";
 import {
   Dialog,
@@ -34,30 +31,31 @@ export function ICICIBrokerDialog({ open, onOpenChange }: Props) {
      STEP 1: INITIATE ICICI LOGIN (JWT REQUIRED)
   ======================================================= */
  const startICICILogin = async () => {
-  try {
-    setStatus("loading");
-
-    const token = localStorage.getItem("token");
-    if (!token) throw new Error("Not authenticated");
-
-    const res = await fetch(`${backendUrl}/api/icici/auth/login`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const { redirectUrl } = await res.json();
-    if (!redirectUrl) throw new Error("No redirect URL");
-
-    window.open(
-      redirectUrl,
-      "iciciLogin",
-      "width=500,height=700"
-    );
-  } catch (err: any) {
+  setStatus("loading");
+  
+  const token = localStorage.getItem("token");
+  if (!token) {
     setStatus("error");
-    setMessage(err.message);
+    setMessage("Not authenticated");
+    return;
+  }
+
+  // Open popup directly to backend GET endpoint
+  // Backend will redirect to ICICI
+  const popup = window.open(
+    `${backendUrl}/api/icici/auth/login?token=${token}`,
+    "iciciLogin",
+    "width=500,height=700,scrollbars=yes"
+  );
+
+  if (!popup) {
+    setStatus("error");
+    setMessage("Popup blocked - please enable popups");
+    toast({
+      title: "Popup Blocked",
+      description: "Please enable popups for ICICI login",
+      variant: "destructive",
+    });
   }
 };
 
