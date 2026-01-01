@@ -198,12 +198,60 @@ export function getBreezeLoginUrl(runtimeAppKey: string): string {
 
 /* ======================================================
    CUSTOMER DETAILS HELPER (AUTH FLOW ONLY)
+   SPECIAL: Does NOT use session (called during login)
 ====================================================== */
 export async function getCustomerDetails(
-  userId: string,
-  reqApiSession: string
+  appKey: string,
+  appSecret: string, 
+  apisession: string
 ) {
-  return breezeRequest(userId, "POST", "/api/v1/customerdetails", {
-    SessionToken: reqApiSession,
-  });
+  const requestId = crypto.randomUUID();
+  
+  try {
+    const response = await iciciCircuitBreaker.execute(() =>
+      retryWithBackoff(() =>
+        breezeAxios.post(
+          "/api/v1/customerdetails",
+          {
+            SessionToken: apisession,
+            AppKey: appKey,
+          },
+          {
+            timeout: 15000, // 15 second timeout
+            headers: {
+              "X-Request-ID": requestId,
+            }
+          }
+        )
+      )
+    );
+
+    if (response.data?.Status !== 200) {
+      throw new Error(
+        `CustomerDetails error: ${response.data?.Error || "Unknown"}`
+      );
+    }
+
+    return response.data;
+  } catch (error: unknown) {
+    const axiosError = error as AxiosError;
+    
+    if (axios.isAxiosError(axiosError)) {
+      if (axiosError.code === 'ECONNABORTED') {
+        throw new Error("ICICI API timeout - request took too long");
+      }
+      
+      const status = axiosError.response?.status;
+      if (status === 403) {
+        throw new Error(
+          "ICICI access denied. Check:\n" +
+          "• API key is correct\n" +
+          "• Server IP is whitelisted\n" +
+          "• Apisession is valid"
+        );
+      }
+    }
+    
+    throw error;
+  }
 }
