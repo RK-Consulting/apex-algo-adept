@@ -49,8 +49,7 @@ export const iciciGuard =
         `
         SELECT is_verified, is_locked
         FROM user_profiles
-        WHERE user_id = $1
-        `,
+        WHERE user_id = $1::uuid`,
         [userId]
       );
 
@@ -79,7 +78,7 @@ export const iciciGuard =
         `
         SELECT id
         FROM broker_credentials
-        WHERE user_id = $1
+        WHERE user_id = $1::uuid
           AND broker_name = 'ICICI'
           AND is_active = true
         `,
@@ -101,8 +100,7 @@ export const iciciGuard =
         `
         SELECT state, attempts, locked_until
         FROM icici_login_attempts
-        WHERE user_id = $1
-        `,
+        WHERE user_id = $1::uuid`,
         [userId]
       );
 
@@ -129,8 +127,7 @@ export const iciciGuard =
           `
           UPDATE icici_login_attempts
           SET state = 'FAILED', updated_at = now()
-          WHERE user_id = $1
-          `,
+          WHERE user_id = $1::uuid`,
           [userId]
         );
       }
