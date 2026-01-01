@@ -139,7 +139,7 @@ router.get(
    POST /api/icici/auth/complete
    JWT REQUIRED — FINALIZES LOGIN
 ============================================================ */
-/* router.post(
+router.post(
   "/complete",
   iciciLimiter,
   authenticateToken,
@@ -215,6 +215,6 @@ router.get(
       });
     }
   }
-); */
+);
 export default router;
 export const iciciAuthCallbackRouter = router;
