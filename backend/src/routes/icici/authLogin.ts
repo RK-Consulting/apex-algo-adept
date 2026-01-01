@@ -26,7 +26,7 @@ const router = Router();
  * POST /api/icici/auth/login
  * Returns ICICI redirect URL
  */
-router.post(
+/* router.post(
   "/login",
   authenticateToken,
   //iciciGuard("LOGIN"),
@@ -57,6 +57,39 @@ router.post(
     log("ICICI login initiated for user %s", userId);
 
     return res.json({ redirectUrl });
+  }
+); */
+
+// backend/src/routes/icici/authLogin.ts
+router.get(  // ← GET, not POST
+  "/login",
+  authenticateToken,  // ← Will read token from query param
+  async (req: AuthRequest, res) => {
+    const userId = req.user!.userId;
+
+    // Insert login attempt
+    await query(
+      `INSERT INTO icici_login_attempts (user_id, state, updated_at)
+       VALUES ($1, 'LOGIN_INITIATED', NOW())
+       ON CONFLICT (user_id) DO UPDATE 
+       SET state = 'LOGIN_INITIATED', updated_at = NOW()`,
+      [userId]
+    );
+
+    // Get API key
+    const dbResult = await query(
+      `SELECT app_key FROM broker_credentials
+       WHERE user_id = $1 AND broker_name = 'ICICI' AND is_active = true`,
+      [userId]
+    );
+
+    if (dbResult.rowCount === 0) {
+      return res.status(400).send("ICICI credentials not configured");
+    }
+
+    // Redirect directly to ICICI
+    const iciciUrl = `https://api.icicidirect.com/apiuser/login?api_key=${encodeURIComponent(dbResult.rows[0].app_key)}`;
+    return res.redirect(iciciUrl);
   }
 );
 
