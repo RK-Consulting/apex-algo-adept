@@ -176,6 +176,8 @@ export class SessionService {
   async saveSession(
     userId: string,
     sessionData: {
+      api_key: string;
+      api_secret: string;
       session_token: string;
       user_details?: any;
     }
