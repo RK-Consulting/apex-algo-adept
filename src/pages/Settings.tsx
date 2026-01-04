@@ -28,7 +28,6 @@ import {
 import Profile from "./settings/Profile";
 import ApiKeys from "./settings/ApiKeys";
 import { BrokerConnectionDialog } from "@/components/BrokerConnectionDialog";
-// DELETED: import { ICICIBrokerDialog } from "@/components/ICICIBrokerDialog";
 import { useProfile } from "@/context/ProfileContext";
 import { useToast } from "@/hooks/use-toast";
 
@@ -198,8 +197,7 @@ const Settings = () => {
         onOpenChange={setBrokerDialogOpen}
         brokerName={selectedBroker}
       />
-
-      {/* DELETED: ICICIBrokerDialog component */}
+     
     </SidebarProvider>
   );
 };
