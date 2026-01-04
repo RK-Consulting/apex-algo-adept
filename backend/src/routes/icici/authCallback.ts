@@ -2,24 +2,11 @@
 
 /**
  * ICICI Breeze Authentication Callback Handler
- *
- * Supports Dual Flows:
- * 1. GET /auth/callback  → legacy / direct session_token
- * 2. POST /auth/complete → secure apisession exchange
- *
- * Security:
- * - JWT protected
- * - Rate limited
- * - FSM guarded
- * - No secrets exposed to frontend
+ * OPTION 2: Single redirect flow - deterministic, production-safe
  */
-
-// backend/src/routes/icici/authCallback.ts
 
 import { Router } from "express";
 import debug from "debug";
-import { authenticateToken, AuthRequest } from "../../middleware/auth.js";
-import { iciciGuard } from "../../middleware/iciciGuard.js";
 import { iciciLimiter } from "../../middleware/rateLimiter.js";
 import { getCustomerDetails } from "../../services/breezeClient.js";
 import { SessionService } from "../../services/sessionService.js";
@@ -30,10 +17,8 @@ const log = debug("alphaforge:icici:callback");
 
 /* ============================================================
    GET /api/icici/auth/callback
-   Browser redirect ONLY — NO JWT, NO DB writes
+   OPTION 2: Single source of truth, NO JWT required
 ============================================================ */
-// backend/src/routes/icici/authCallback.ts
-
 router.get(
   "/callback",
   iciciLimiter,
@@ -41,21 +26,13 @@ router.get(
     const { apisession } = req.query;
 
     if (!apisession || typeof apisession !== "string") {
-      return res.status(400).send(`
-        <html><body>
-          <script>
-            window.opener?.postMessage(
-              { type: "ICICI_LOGIN_ERROR", error: "Missing apisession" },
-              "*"
-            );
-            window.close();
-          </script>
-        </body></html>
-      `);
+      return res.redirect(
+        `${process.env.FRONTEND_ORIGIN}/dashboard?icici_error=missing_apisession`
+      );
     }
 
     try {
-      // Get user from latest login attempt
+      // 1. Resolve user from latest LOGIN_INITIATED attempt
       const loginAttempt = await query(
         `SELECT user_id FROM icici_login_attempts
          WHERE state = 'LOGIN_INITIATED'
@@ -63,16 +40,19 @@ router.get(
       );
 
       if (loginAttempt.rowCount === 0) {
-        throw new Error("No active login session");
+        throw new Error("No active ICICI login session found");
       }
 
       const userId = loginAttempt.rows[0].user_id;
+      log("Processing callback for user:", userId);
 
-      // Get credentials from DB
+      // 2. Fetch credentials from DB
       const credsResult = await query(
         `SELECT app_key, app_secret
          FROM broker_credentials
-         WHERE user_id = $1::uuid AND broker_name = 'ICICI' AND is_active = true`,
+         WHERE user_id = $1::uuid 
+           AND broker_name = 'ICICI' 
+           AND is_active = true`,
         [userId]
       );
 
@@ -82,58 +62,64 @@ router.get(
 
       const { app_key, app_secret } = credsResult.rows[0];
 
-      // Call ICICI with credentials (not session)
-      const cdData = await getCustomerDetails(app_key, app_secret, apisession);
-      
+      // 3. Exchange apisession for session_token (with timeout)
+      const cdData = await Promise.race([
+        getCustomerDetails(app_key, app_secret, apisession),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("ICICI API timeout")), 15000)
+        ),
+      ]);
+
       const sessionToken = cdData?.Success?.session_token;
       if (!sessionToken) {
-        throw new Error("No session_token from ICICI");
+        throw new Error("No session_token returned from ICICI");
       }
 
-      // Save session
+      // 4. Save session to Redis + DB
       await SessionService.getInstance().saveSession(userId, {
-        //api_key: app_key,
-       //api_secret: app_secret,
+        api_key: app_key,
+        api_secret: app_secret,
         session_token: sessionToken,
         user_details: cdData.Success,
       });
 
-      // Update FSM
+      // 5. Update FSM: LOGIN_INITIATED → SESSION_ACTIVE
       await query(
         `UPDATE icici_login_attempts
-         SET state = 'SESSION_ACTIVE', attempts = 0, updated_at = NOW()
+         SET state = 'SESSION_ACTIVE', 
+             attempts = 0, 
+             updated_at = NOW()
          WHERE user_id = $1::uuid`,
         [userId]
       );
 
-      const frontendUrl = process.env.FRONTEND_ORIGIN || "https://alphaforge.skillsifter.in";
+      log("ICICI connection successful for user:", userId);
 
-      return res.send(`
-        <html><body>
-          <script>
-            window.opener?.postMessage(
-              { type: "ICICI_LOGIN", success: true },
-              "${frontendUrl}"
-            );
-            window.close();
-          </script>
-        </body></html>
-      `);
+      // 6. Redirect to frontend dashboard
+      return res.redirect(
+        `${process.env.FRONTEND_ORIGIN}/dashboard?icici_connected=true`
+      );
+
     } catch (err: any) {
       log("Callback error:", err.message);
-      return res.send(`
-        <html><body>
-          <script>
-            window.opener?.postMessage(
-              { type: "ICICI_LOGIN_ERROR", error: "${err.message}" },
-              "*"
-            );
-            window.close();
-          </script>
-        </body></html>
-      `);
+
+      // Update FSM to FAILED
+      try {
+        await query(
+          `UPDATE icici_login_attempts
+           SET state = 'FAILED', updated_at = NOW()
+           WHERE state = 'LOGIN_INITIATED'`
+        );
+      } catch (fsmErr) {
+        log("FSM update failed:", fsmErr);
+      }
+
+      return res.redirect(
+        `${process.env.FRONTEND_ORIGIN}/dashboard?icici_error=${encodeURIComponent(err.message)}`
+      );
     }
   }
 );
+
 export default router;
 export const iciciAuthCallbackRouter = router;
