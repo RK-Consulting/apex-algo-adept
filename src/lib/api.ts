@@ -84,48 +84,24 @@ export const api = {
 // ICICI WRAPPER (ALIGNED WITH FINAL BACKEND)
 // -----------------------------------------------------------
 export const ICICI = {
-  /**
-   * Returns connection status + metadata
-   * (frontend derives state from this)
-   */
+  // Option 2: Redirect to backend
+  connect: () => {
+    const API_ROOT = (import.meta.env.VITE_API_URL as string) || "/api";
+    window.location.href = `${API_ROOT}/icici/connect`;
+  },
+
+  // Read-only endpoints
   status: () => api.get("/icici/status"),
-
-  /**
-   * Completes ICICI OAuth
-   * Server exchanges apisession → session_token
-   * Frontend receives only success/failure
-   */
-  complete: (payload: { apisession: string }) =>
-    api.post("/icici/auth/complete", payload),
-
-  /**
-   * Initiates ICICI login (redirect handled server-side)
-   */
-  connect: () => api.post("/icici/connect"),
-
-  /**
-   * Current ICICI user/session info (sanitized)
-   */
   me: () => api.get("/icici/me"),
-
-  // -----------------------------
-  // Orders & Portfolio
-  // -----------------------------
   orders: () => api.get("/icici/orders"),
   holdings: () => api.get("/icici/portfolio/holdings"),
   positions: () => api.get("/icici/portfolio/positions"),
   funds: () => api.get("/icici/portfolio/funds"),
   summary: () => api.get("/icici/portfolio/summary"),
-
-  // -----------------------------
-  // Market Data
-  // -----------------------------
+  
   quote: (symbol: string, exchange = "NSE") =>
     api.get(`/icici/market/quote?symbol=${symbol}&exchange=${exchange}`),
-
-  ohlc: (payload: any) =>
-    api.post("/icici/market/ohlc", payload),
-
+  ohlc: (payload: any) => api.post("/icici/market/ohlc", payload),
   ltp: (symbol: string, exchange = "NSE") =>
     api.get(`/icici/market/ltp?symbol=${symbol}&exchange=${exchange}`),
 };
