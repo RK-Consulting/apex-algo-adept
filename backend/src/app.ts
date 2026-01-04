@@ -17,7 +17,6 @@ import express from "express";
 import helmet from "helmet";
 import compression from "compression";
 
-import iciciAuthLoginRouter from "./routes/icici/authLogin.js";
 import iciciAuthCallbackRouter from "./routes/icici/authCallback.js";
 
 import { loginLimiter, apiLimiter } from "./middleware/rateLimiter.js";
@@ -74,7 +73,6 @@ app.use("/api/auth/register", loginLimiter);
 // =======================================================
 // ICICI AUTH ROUTES (⚠️ MUST BE JWT-FREE)
 // =======================================================
-app.use("/api/icici/auth", iciciAuthLoginRouter);
 app.use("/api/icici/auth", iciciAuthCallbackRouter);
 
 // =======================================================
