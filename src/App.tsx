@@ -1,5 +1,4 @@
 // FRONTEND /src/App.tsx 
-import { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -24,39 +23,7 @@ import Signup from "./pages/Signup";
 const queryClient = new QueryClient();
 
 const App = () => {
-  /* -------------------------------------------------------
-   * GLOBAL ICICI SESSION EXPIRY + MISSING HANDLER
-   * -----------------------------------------------------*/
-  useEffect(() => {
-    function handleExpired() {
-      console.log("⚠️ ICICI session expired");
-      localStorage.removeItem("icici_connected");
-
-      window.dispatchEvent(
-        new CustomEvent("SHOW_ICICI_RECONNECT_DIALOG", {
-          detail: { expired: true },
-        })
-      );
-    }
-
-    function handleMissing() {
-      console.log("⚠️ ICICI session missing");
-
-      window.dispatchEvent(
-        new CustomEvent("SHOW_ICICI_RECONNECT_DIALOG", {
-          detail: { missing: true },
-        })
-      );
-    }
-
-    window.addEventListener("ICICI_SESSION_EXPIRED", handleExpired);
-    window.addEventListener("ICICI_SESSION_MISSING", handleMissing);
-
-    return () => {
-      window.removeEventListener("ICICI_SESSION_EXPIRED", handleExpired);
-      window.removeEventListener("ICICI_SESSION_MISSING", handleMissing);
-    };
-  }, []);
+  // DELETED: All Option 1 ICICI event listeners
 
   return (
     <QueryClientProvider client={queryClient}>
