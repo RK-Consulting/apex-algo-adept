@@ -67,26 +67,46 @@ router.get(
 router.post(
   "/connect",
   authenticateToken,
-  /* iciciGuard({
-    requireProfileComplete: true,
-    requireCredentials: true,
-    disallowIfSessionActive: true,
-  }),*/
   iciciGuard("CONNECT"),
-  async (_req: AuthRequest, res) => {
-    /**
-     * Frontend flow:
-     * 1. Ensure credentials saved via /api/credentials/store
-     * 2. Call /api/icici/auth/login
-     */
-    log("ICICI connect preconditions satisfied");
+  async (req: AuthRequest, res) => {
+    const userId = req.user!.userId;
 
-    return res.json({
-      success: true,
-      message: "Proceed to ICICI OAuth via /api/icici/auth/login",
-    });
+    try {
+      // Get ICICI credentials
+      const credsResult = await query(
+        `SELECT app_key FROM broker_credentials
+         WHERE user_id = $1::uuid 
+           AND broker_name = 'ICICI' 
+           AND is_active = true`,
+        [userId]
+      );
+
+      if (credsResult.rowCount === 0) {
+        return res.status(400).json({
+          error: "ICICI API key not configured",
+        });
+      }
+
+      // Insert login attempt (FSM: IDLE → LOGIN_INITIATED)
+      await query(
+        `INSERT INTO icici_login_attempts (user_id, state, updated_at)
+         VALUES ($1::uuid, 'LOGIN_INITIATED', NOW())
+         ON CONFLICT (user_id) 
+         DO UPDATE SET state = 'LOGIN_INITIATED', updated_at = NOW()`,
+        [userId]
+      );
+
+      // Redirect to ICICI
+      const iciciUrl = `https://api.icicidirect.com/apiuser/login?api_key=${encodeURIComponent(credsResult.rows[0].app_key)}`;
+      
+      log("Redirecting user %s to ICICI", userId);
+      return res.redirect(iciciUrl);
+      
+    } catch (err: any) {
+      log("Connect error:", err);
+      return res.status(500).json({ error: "Connection failed" });
+    }
   }
 );
-
 export { router as iciciBrokerRouter };
 export default router;
