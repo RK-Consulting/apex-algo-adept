@@ -20,7 +20,6 @@ import NotFound from "./pages/NotFound";
 import StockDetails from "./pages/StockDetails";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
-//import ICICICallback from "./pages/ICICICallback";
 
 const queryClient = new QueryClient();
 
