@@ -156,7 +156,7 @@ export class SessionService {
   }
 
   // If you need a more specific error with status code for Express:
-  async getSessionOrThrow(userId: string): Promise<Session> {
+  async getSessionOrThrow(userId: string): Promise<IciciSession> {
     const session = await this.getSession(userId);
     
     if (!session) {
