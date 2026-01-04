@@ -28,7 +28,7 @@ import {
 import Profile from "./settings/Profile";
 import ApiKeys from "./settings/ApiKeys";
 import { BrokerConnectionDialog } from "@/components/BrokerConnectionDialog";
-import { ICICIBrokerDialog } from "@/components/ICICIBrokerDialog";
+// DELETED: import { ICICIBrokerDialog } from "@/components/ICICIBrokerDialog";
 import { useProfile } from "@/context/ProfileContext";
 import { useToast } from "@/hooks/use-toast";
 
@@ -40,29 +40,46 @@ const Settings = () => {
   const { toast } = useToast();
 
   /* ======================================================
-     BROKER DIALOG STATE (ORCHESTRATION ONLY)
+     BROKER DIALOG STATE (FOR NON-ICICI BROKERS)
   ====================================================== */
   const [brokerDialogOpen, setBrokerDialogOpen] = useState(false);
-  const [iciciBrokerDialogOpen, setIciciBrokerDialogOpen] = useState(false);
+  // DELETED: const [iciciBrokerDialogOpen, setIciciBrokerDialogOpen] = useState(false);
   const [selectedBroker, setSelectedBroker] = useState("");
 
   /* ======================================================
-     BROKER CONNECT HANDLER (GATED)
+     BROKER CONNECT HANDLER - OPTION 2 IMPLEMENTATION
   ====================================================== */
   const handleConnectBroker = (brokerName: string) => {
     if (!isComplete) {
       toast({
         title: "Profile incomplete",
-        description:
-          "Please complete your profile before connecting a broker.",
+        description: "Please complete your profile before connecting a broker.",
         variant: "destructive",
       });
       return;
     }
 
     if (brokerName === "ICICIDIRECT") {
-      setIciciBrokerDialogOpen(true);
+      // OPTION 2: Full page redirect to backend
+      const backendUrl = 
+        import.meta.env.VITE_BACKEND_URL ||
+        import.meta.env.VITE_API_URL ||
+        "https://api.alphaforge.skillsifter.in";
+      
+      const token = localStorage.getItem("token");
+      if (!token) {
+        toast({
+          title: "Session expired",
+          description: "Please login again",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Redirect to backend connect endpoint
+      window.location.href = `${backendUrl}/api/icici/connect`;
     } else {
+      // Other brokers use dialog
       setSelectedBroker(brokerName);
       setBrokerDialogOpen(true);
     }
@@ -175,17 +192,14 @@ const Settings = () => {
         </main>
       </div>
 
-      {/* ================= BROKER DIALOGS ================= */}
+      {/* ================= BROKER DIALOG (NON-ICICI ONLY) ================= */}
       <BrokerConnectionDialog
         open={brokerDialogOpen}
         onOpenChange={setBrokerDialogOpen}
         brokerName={selectedBroker}
       />
 
-      <ICICIBrokerDialog
-        open={iciciBrokerDialogOpen}
-        onOpenChange={setIciciBrokerDialogOpen}
-      />
+      {/* DELETED: ICICIBrokerDialog component */}
     </SidebarProvider>
   );
 };
