@@ -48,7 +48,10 @@ const Settings = () => {
   /* ======================================================
      BROKER CONNECT HANDLER - OPTION 2 IMPLEMENTATION
   ====================================================== */
-  const handleConnectBroker = (brokerName: string) => {
+ // ONLY REPLACE lines 48-83 (the handleConnectBroker function)
+// Everything else stays the same
+
+  const handleConnectBroker = async (brokerName: string) => {
     if (!isComplete) {
       toast({
         title: "Profile incomplete",
@@ -59,7 +62,6 @@ const Settings = () => {
     }
 
     if (brokerName === "ICICIDIRECT") {
-      // OPTION 2: Full page redirect to backend
       const backendUrl = 
         import.meta.env.VITE_BACKEND_URL ||
         import.meta.env.VITE_API_URL ||
@@ -75,8 +77,40 @@ const Settings = () => {
         return;
       }
 
-      // Redirect to backend connect endpoint
-      window.location.href = `${backendUrl}/api/icici/connect`;
+      try {
+        // Make authenticated API call instead of redirect
+        const response = await fetch(`${backendUrl}/api/icici/connect`, {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+          }
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to connect to ICICI");
+        }
+
+        const data = await response.json();
+        
+        // If backend returns a redirect URL, open it
+        if (data.redirectUrl) {
+          window.location.href = data.redirectUrl;
+        } else {
+          toast({
+            title: "Success",
+            description: data.message || "ICICI connection initiated",
+          });
+        }
+        
+      } catch (error: any) {
+        toast({
+          title: "Connection failed",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
     } else {
       // Other brokers use dialog
       setSelectedBroker(brokerName);
