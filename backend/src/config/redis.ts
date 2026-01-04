@@ -1,4 +1,7 @@
 // backend/src/config/redis.ts
+import dotenv from 'dotenv';
+// Load env vars immediately, before using them
+dotenv.config({ path: '/var/www/apex-algo-adept/backend/.env' });
 import Redis from 'ioredis';
 
 /**
