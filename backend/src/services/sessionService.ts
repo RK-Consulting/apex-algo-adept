@@ -155,6 +155,19 @@ export class SessionService {
     }
   }
 
+  // If you need a more specific error with status code for Express:
+  async getSessionOrThrow(userId: string): Promise<Session> {
+    const session = await this.getSession(userId);
+    
+    if (!session) {
+      const error = new Error(`No active session found for user: ${userId}`);
+      (error as any).statusCode = 401; // Unauthorized
+      throw error;
+    }
+    
+    return session;
+  }
+  
   /* =====================================================
      INVALIDATE SESSION (REDIS + DB)
   ===================================================== */
