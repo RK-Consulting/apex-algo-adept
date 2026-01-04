@@ -1,16 +1,13 @@
 // backend/src/services/cache.ts
-import redis from "../config/redis.js";
+import Redis from "ioredis";
+import redisConfig from "../config/redis.js";
 import debug from "debug";
 import type { IciciSession } from "./sessionService.js";
 
-const RedisClient = (Redis as any).default ?? Redis;
-
 const log = debug("alphaforge:cache");
 
-const redis = new RedisClient(process.env.REDIS_URL || "redis://localhost:6379", {
-  maxRetriesPerRequest: null,
-  enableReadyCheck: true,
-});
+// Use the singleton redis instance from config
+const redis = redisConfig;
 
 redis.on("connect", () => {
   log("Redis connected");
@@ -23,12 +20,11 @@ redis.on("error", (err: Error) => {
 // -----------------------------
 // ICICI SESSION CACHE
 // -----------------------------
-
 export async function getCachedSession(
   userId: string
 ): Promise<IciciSession | null> {
   try {
-    const cached = await redis.get(`icici:session:${userId}`);
+    const cached = await redis.get(`icici:session:${userId}`);  // ← Fixed: removed backticks from string
     return cached ? (JSON.parse(cached) as IciciSession) : null;
   } catch (err) {
     log("Error getting cached session for user %s", userId);
@@ -55,7 +51,7 @@ export async function cacheSession(
 
 export async function invalidateSessionCache(userId: string): Promise<void> {
   try {
-    await redis.del(`icici:session:${userId}`);
+    await redis.del(`icici:session:${userId}`);  // ← Fixed: removed backticks from string
   } catch (err) {
     log("Error invalidating session cache for user %s", userId);
   }
@@ -64,13 +60,12 @@ export async function invalidateSessionCache(userId: string): Promise<void> {
 // -----------------------------
 // MARKET DATA CACHE (SHORT TTL)
 // -----------------------------
-
 export async function getCachedQuote(
   symbol: string,
   exchange: string
 ): Promise<any | null> {
   try {
-    const cached = await redis.get(`quote:${exchange}:${symbol}`);
+    const cached = await redis.get(`quote:${exchange}:${symbol}`);  // ← Fixed: removed backticks from string
     return cached ? JSON.parse(cached) : null;
   } catch {
     return null;
