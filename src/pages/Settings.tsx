@@ -28,6 +28,7 @@ import {
 import Profile from "./settings/Profile";
 import ApiKeys from "./settings/ApiKeys";
 import { BrokerConnectionDialog } from "@/components/BrokerConnectionDialog";
+import { ICICIConnectionDialog } from "@/components/ICICIConnectionDialog";
 import { useProfile } from "@/context/ProfileContext";
 import { useToast } from "@/hooks/use-toast";
 
@@ -39,15 +40,16 @@ const Settings = () => {
   const { toast } = useToast();
 
   /* ======================================================
-     BROKER DIALOG STATE (FOR NON-ICICI BROKERS)
+     BROKER DIALOG STATE
   ====================================================== */
   const [brokerDialogOpen, setBrokerDialogOpen] = useState(false);
+  const [iciciDialogOpen, setIciciDialogOpen] = useState(false);
   const [selectedBroker, setSelectedBroker] = useState("");
 
   /* ======================================================
-     BROKER CONNECT HANDLER - FIXED FOR AUTHENTICATION
+     BROKER CONNECT HANDLER
   ====================================================== */
-  const handleConnectBroker = async (brokerName: string) => {
+  const handleConnectBroker = (brokerName: string) => {
     if (!isComplete) {
       toast({
         title: "Profile incomplete",
@@ -58,57 +60,8 @@ const Settings = () => {
     }
 
     if (brokerName === "ICICIDIRECT") {
-      const backendUrl = 
-        import.meta.env.VITE_BACKEND_URL ||
-        import.meta.env.VITE_API_URL ||
-        "https://api.alphaforge.skillsifter.in";
-      
-      const token = localStorage.getItem("token");
-      if (!token) {
-        toast({
-          title: "Session expired",
-          description: "Please login again",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      try {
-        // Make authenticated API call with Authorization header
-        const response = await fetch(`${backendUrl}/api/icici/connect`, {
-          method: "GET",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json"
-          }
-        });
-
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || "Failed to connect to ICICI");
-        }
-
-        const data = await response.json();
-        
-        // If backend returns a redirect URL, navigate to it
-        if (data.redirectUrl) {
-          window.location.href = data.redirectUrl;
-        } else {
-          toast({
-            title: "Success",
-            description: data.message || "ICICI connection initiated",
-          });
-        }
-        
-      } catch (error: any) {
-        toast({
-          title: "Connection failed",
-          description: error.message,
-          variant: "destructive",
-        });
-      }
+      setIciciDialogOpen(true);
     } else {
-      // Other brokers use dialog
       setSelectedBroker(brokerName);
       setBrokerDialogOpen(true);
     }
@@ -221,11 +174,16 @@ const Settings = () => {
         </main>
       </div>
 
-      {/* ================= BROKER DIALOG (NON-ICICI ONLY) ================= */}
+      {/* ================= BROKER DIALOGS ================= */}
       <BrokerConnectionDialog
         open={brokerDialogOpen}
         onOpenChange={setBrokerDialogOpen}
         brokerName={selectedBroker}
+      />
+      
+      <ICICIConnectionDialog
+        open={iciciDialogOpen}
+        onOpenChange={setIciciDialogOpen}
       />
      
     </SidebarProvider>
