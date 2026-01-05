@@ -42,15 +42,11 @@ const Settings = () => {
      BROKER DIALOG STATE (FOR NON-ICICI BROKERS)
   ====================================================== */
   const [brokerDialogOpen, setBrokerDialogOpen] = useState(false);
-  // DELETED: const [iciciBrokerDialogOpen, setIciciBrokerDialogOpen] = useState(false);
   const [selectedBroker, setSelectedBroker] = useState("");
 
   /* ======================================================
-     BROKER CONNECT HANDLER - OPTION 2 IMPLEMENTATION
+     BROKER CONNECT HANDLER - FIXED FOR AUTHENTICATION
   ====================================================== */
- // ONLY REPLACE lines 48-83 (the handleConnectBroker function)
-// Everything else stays the same
-
   const handleConnectBroker = async (brokerName: string) => {
     if (!isComplete) {
       toast({
@@ -78,7 +74,7 @@ const Settings = () => {
       }
 
       try {
-        // Make authenticated API call instead of redirect
+        // Make authenticated API call with Authorization header
         const response = await fetch(`${backendUrl}/api/icici/connect`, {
           method: "GET",
           headers: {
@@ -94,7 +90,7 @@ const Settings = () => {
 
         const data = await response.json();
         
-        // If backend returns a redirect URL, open it
+        // If backend returns a redirect URL, navigate to it
         if (data.redirectUrl) {
           window.location.href = data.redirectUrl;
         } else {
