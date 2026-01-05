@@ -1,4 +1,4 @@
-// CREATE THIS NEW FILE: src/components/ICICIConnectionDialog.tsx
+// src/components/ICICIConnectionDialog.tsx
 
 import { useState } from "react";
 import {
@@ -95,7 +95,7 @@ export function ICICIConnectionDialog({ open, onOpenChange }: Props) {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`${backendUrl}/api/icici/connect`, {
+      const response = await fetch(`${backendUrl}/api/icici/broker/connect-with-credentials`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
