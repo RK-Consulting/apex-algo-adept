@@ -1,7 +1,6 @@
 // /src/pages/Settings.tsx
-// SIMPLIFIED VERSION - Uses existing stored credentials
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import {
@@ -46,7 +45,42 @@ const Settings = () => {
   const [selectedBroker, setSelectedBroker] = useState("");
 
   /* ======================================================
-     BROKER CONNECT HANDLER - USES STORED CREDENTIALS
+     LISTEN FOR ICICI POPUP SUCCESS MESSAGE
+  ====================================================== */
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      const allowedOrigin = 
+        import.meta.env.VITE_BACKEND_URL ||
+        import.meta.env.VITE_API_URL ||
+        "https://api.alphaforge.skillsifter.in";
+      
+      // Accept messages from backend domain
+      if (!event.origin.includes(new URL(allowedOrigin).hostname)) {
+        return;
+      }
+      
+      if (event.data.type === 'ICICI_CONNECTED') {
+        if (event.data.success) {
+          toast({
+            title: "Success",
+            description: "ICICI Direct connected successfully",
+          });
+        } else {
+          toast({
+            title: "Connection Failed",
+            description: event.data.error || "Failed to connect to ICICI",
+            variant: "destructive",
+          });
+        }
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [toast]);
+
+  /* ======================================================
+     BROKER CONNECT HANDLER - OPENS ICICI IN POPUP
   ====================================================== */
   const handleConnectBroker = async (brokerName: string) => {
     if (!isComplete) {
@@ -75,7 +109,7 @@ const Settings = () => {
       }
 
       try {
-        // Call backend which will use stored credentials and redirect
+        // Get ICICI login URL from backend
         const response = await fetch(`${backendUrl}/api/icici/broker/connect`, {
           method: "POST",
           headers: {
@@ -84,25 +118,32 @@ const Settings = () => {
           }
         });
 
-        // If backend returns redirect URL, follow it
-        if (response.redirected) {
-          window.location.href = response.url;
-          return;
-        }
-
         const data = await response.json();
         
         if (!response.ok) {
           throw new Error(data.error || "Failed to connect to ICICI");
         }
 
-        // If there's a redirect URL in the response
+        // Open ICICI login in POPUP window
         if (data.redirectUrl) {
-          window.location.href = data.redirectUrl;
-        } else {
+          const popup = window.open(
+            data.redirectUrl, 
+            'ICICI_Login',
+            'width=600,height=700,scrollbars=yes,resizable=yes,location=no,menubar=no,status=no,toolbar=no'
+          );
+          
+          if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+            toast({
+              title: "Popup Blocked",
+              description: "Please allow popups for this site and try again",
+              variant: "destructive",
+            });
+            return;
+          }
+
           toast({
-            title: "Success",
-            description: data.message || "ICICI connection initiated",
+            title: "ICICI Login Opened",
+            description: "Complete your login in the popup window",
           });
         }
         
