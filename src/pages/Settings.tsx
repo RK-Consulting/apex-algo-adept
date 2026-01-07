@@ -1,4 +1,5 @@
 // /src/pages/Settings.tsx
+// SIMPLIFIED VERSION - Uses existing stored credentials
 
 import { useState } from "react";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -28,7 +29,6 @@ import {
 import Profile from "./settings/Profile";
 import ApiKeys from "./settings/ApiKeys";
 import { BrokerConnectionDialog } from "@/components/BrokerConnectionDialog";
-import { ICICIConnectionDialog } from "@/components/ICICIConnectionDialog";
 import { useProfile } from "@/context/ProfileContext";
 import { useToast } from "@/hooks/use-toast";
 
@@ -40,16 +40,15 @@ const Settings = () => {
   const { toast } = useToast();
 
   /* ======================================================
-     BROKER DIALOG STATE
+     BROKER DIALOG STATE (FOR NON-ICICI BROKERS)
   ====================================================== */
   const [brokerDialogOpen, setBrokerDialogOpen] = useState(false);
-  const [iciciDialogOpen, setIciciDialogOpen] = useState(false);
   const [selectedBroker, setSelectedBroker] = useState("");
 
   /* ======================================================
-     BROKER CONNECT HANDLER
+     BROKER CONNECT HANDLER - USES STORED CREDENTIALS
   ====================================================== */
-  const handleConnectBroker = (brokerName: string) => {
+  const handleConnectBroker = async (brokerName: string) => {
     if (!isComplete) {
       toast({
         title: "Profile incomplete",
@@ -60,8 +59,62 @@ const Settings = () => {
     }
 
     if (brokerName === "ICICIDIRECT") {
-      setIciciDialogOpen(true);
+      const backendUrl = 
+        import.meta.env.VITE_BACKEND_URL ||
+        import.meta.env.VITE_API_URL ||
+        "https://api.alphaforge.skillsifter.in";
+      
+      const token = localStorage.getItem("token");
+      if (!token) {
+        toast({
+          title: "Session expired",
+          description: "Please login again",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      try {
+        // Call backend which will use stored credentials and redirect
+        const response = await fetch(`${backendUrl}/api/icici/broker/connect`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+          }
+        });
+
+        // If backend returns redirect URL, follow it
+        if (response.redirected) {
+          window.location.href = response.url;
+          return;
+        }
+
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to connect to ICICI");
+        }
+
+        // If there's a redirect URL in the response
+        if (data.redirectUrl) {
+          window.location.href = data.redirectUrl;
+        } else {
+          toast({
+            title: "Success",
+            description: data.message || "ICICI connection initiated",
+          });
+        }
+        
+      } catch (error: any) {
+        toast({
+          title: "Connection failed",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
     } else {
+      // Other brokers use dialog
       setSelectedBroker(brokerName);
       setBrokerDialogOpen(true);
     }
@@ -174,16 +227,11 @@ const Settings = () => {
         </main>
       </div>
 
-      {/* ================= BROKER DIALOGS ================= */}
+      {/* ================= BROKER DIALOG (NON-ICICI ONLY) ================= */}
       <BrokerConnectionDialog
         open={brokerDialogOpen}
         onOpenChange={setBrokerDialogOpen}
         brokerName={selectedBroker}
-      />
-      
-      <ICICIConnectionDialog
-        open={iciciDialogOpen}
-        onOpenChange={setIciciDialogOpen}
       />
      
     </SidebarProvider>
