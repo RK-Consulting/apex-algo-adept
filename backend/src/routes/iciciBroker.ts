@@ -5,15 +5,13 @@
  * Responsibilities:
  * - ICICI-specific broker checks
  * - Connection readiness validation
- * - Store and validate ICICI credentials with session token
+ * - Uses credentials stored in broker_credentials table
  */
 import { Router } from "express";
 import debug from "debug";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 import { iciciGuard } from "../middleware/iciciGuard.js";
 import { query } from "../config/database.js";
-import { encryptCredentials } from "../utils/encryption.js";
-import BreezeConnect from "breezeconnect";
 
 const router = Router();
 const log = debug("alphaforge:icici:broker");
@@ -51,65 +49,7 @@ router.get(
 );
 
 /* ======================================================
-   2) STORE CREDENTIALS AND CONNECT (NEW - FOR DIALOG FLOW)
-   ====================================================== */
-router.post(
-  "/connect-with-credentials",
-  authenticateToken,
-  async (req: AuthRequest, res) => {
-    const userId = req.user!.userId;
-    const { api_key, api_secret, session_token } = req.body;
-
-    try {
-      // Validation
-      if (!api_key || !api_secret || !session_token) {
-        return res.status(400).json({
-          error: "API Key, API Secret, and Session Token are required"
-        });
-      }
-
-      // Test connection with Breeze
-      const breeze = new BreezeConnect({ appKey: api_key });
-      breeze.generateSession(api_secret, session_token);
-
-      // Encrypt credentials
-      const encryptedKey = encryptCredentials(api_key);
-      const encryptedSecret = encryptCredentials(api_secret);
-      const encryptedSession = encryptCredentials(session_token);
-
-      // Store in database
-      await query(
-        `INSERT INTO broker_credentials 
-         (user_id, broker_name, app_key, app_secret, session_token, is_active, last_connected)
-         VALUES ($1::uuid, 'ICICI', $2, $3, $4, true, NOW())
-         ON CONFLICT (user_id, broker_name)
-         DO UPDATE SET 
-           app_key = $2,
-           app_secret = $3,
-           session_token = $4,
-           is_active = true,
-           last_connected = NOW()`,
-        [userId, encryptedKey, encryptedSecret, encryptedSession]
-      );
-
-      log("✅ ICICI credentials stored for user:", userId);
-
-      return res.json({
-        success: true,
-        message: "ICICI Direct connected successfully"
-      });
-
-    } catch (err: any) {
-      log("❌ Connect error:", err);
-      return res.status(500).json({
-        error: err.message || "Failed to connect to ICICI Direct"
-      });
-    }
-  }
-);
-
-/* ======================================================
-   3) ORIGINAL CONNECT ENTRYPOINT (REDIRECT FLOW - KEEP FOR BACKWARD COMPATIBILITY)
+   2) CONNECT - REDIRECTS TO ICICI USING STORED CREDENTIALS
    ====================================================== */
 router.post(
   "/connect",
@@ -118,7 +58,7 @@ router.post(
   async (req: AuthRequest, res) => {
     const userId = req.user!.userId;
     try {
-      // Get ICICI credentials
+      // Get ICICI credentials from database
       const credsResult = await query(
         `SELECT app_key FROM broker_credentials
          WHERE user_id = $1::uuid 
@@ -126,12 +66,14 @@ router.post(
            AND is_active = true`,
         [userId]
       );
+      
       if (credsResult.rowCount === 0) {
         return res.status(400).json({
-          error: "ICICI API key not configured",
+          error: "ICICI credentials not found. Please contact support to set up your API credentials.",
         });
       }
-      // Insert login attempt (FSM: IDLE → LOGIN_INITIATED)
+
+      // Insert/update login attempt (FSM: IDLE → LOGIN_INITIATED)
       await query(
         `INSERT INTO icici_login_attempts (user_id, state, updated_at)
          VALUES ($1::uuid, 'LOGIN_INITIATED', NOW())
@@ -139,15 +81,24 @@ router.post(
          DO UPDATE SET state = 'LOGIN_INITIATED', updated_at = NOW()`,
         [userId]
       );
-      // Redirect to ICICI
+
+      // Build ICICI login URL
       const iciciUrl = `https://api.icicidirect.com/apiuser/login?api_key=${encodeURIComponent(credsResult.rows[0].app_key)}`;
       
-      log("Redirecting user %s to ICICI", userId);
-      return res.redirect(iciciUrl);
+      log("✅ Redirecting user %s to ICICI login", userId);
+      
+      // Return redirect URL to frontend
+      return res.json({
+        success: true,
+        redirectUrl: iciciUrl,
+        message: "Redirecting to ICICI Direct login"
+      });
       
     } catch (err: any) {
-      log("Connect error:", err);
-      return res.status(500).json({ error: "Connection failed" });
+      log("❌ Connect error:", err);
+      return res.status(500).json({ 
+        error: "Connection failed. Please try again." 
+      });
     }
   }
 );
