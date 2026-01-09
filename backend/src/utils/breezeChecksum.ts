@@ -34,9 +34,14 @@ export function calculateChecksum(
   return crypto.createHash("sha256").update(checksumInput).digest("hex");
 }
 
-/**
- * Timestamp must be ISO 8601 with .000Z
- */
+
 export function getTimestamp(): string {
-  return new Date().toISOString().split(".")[0] + ".000Z";
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const now = new Date();
+  const date = now.getDate().toString().padStart(2, '0');
+  const month = months[now.getMonth()];
+  const year = now.getFullYear();
+  const time = now.toTimeString().split(' ')[0]; // HH:mm:ss
+  
+  return `${date}-${month}-${year} ${time}`;
 }
