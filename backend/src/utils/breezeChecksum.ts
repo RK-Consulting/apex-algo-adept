@@ -5,6 +5,10 @@ import crypto from "crypto";
  * Produces deterministic, compact JSON for ICICI Breeze checksum.
  */
 function stableStringify(obj: Record<string, any>): string {
+  // If the object is empty, ICICI expects an empty string, not "{}"
+  if (Object.keys(obj).length === 0) {
+    return "";
+  }
   const sorted = Object.keys(obj)
     .sort()
     .reduce((acc, key) => {
