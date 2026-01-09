@@ -13,30 +13,27 @@ import { query } from "../../config/database.js";
 const router = Router();
 const log = debug("alphaforge:icici:callback");
 
-/* ============================================================
-   GET /api/icici/auth/callback
-   Receives: ?apisession=XXXXX from ICICI
-   NO JWT REQUIRED - This is a direct redirect from ICICI
-============================================================ */
-router.get(
+
+router.all(
   "/callback",
   iciciLimiter,
   async (req, res) => {
-    const { apisession } = req.query;
-    
-    if (!apisession || typeof apisession !== "string") {
-      log("❌ Missing apisession parameter");
-      return res.send(getErrorPage("Missing session parameter from ICICI"));
-    }
-
     try {
-      // 1. Resolve user from latest LOGIN_INITIATED attempt
+      const apisession = (req.method === "GET"
+        ? req.query.apisession
+        : req.body?.apisession) as string;
+
+      if (!apisession) {
+        log("❌ Missing apisession parameter");
+        return res.send(getErrorPage("Missing session parameter from ICICI"));
+      }
+
+      // 1) Resolve user from latest LOGIN_INITIATED attempt
       const loginAttempt = await query(
-        `SELECT user_id FROM icici_login_attempts
-         WHERE state = 'LOGIN_INITIATED'
+        `SELECT user_id FROM icici_login_attempts WHERE state = 'LOGIN_INITIATED' 
          ORDER BY updated_at DESC LIMIT 1`
       );
-      
+
       if (loginAttempt.rowCount === 0) {
         throw new Error("No active ICICI login session found");
       }
@@ -44,72 +41,55 @@ router.get(
       const userId = loginAttempt.rows[0].user_id;
       log("✅ Processing callback for user:", userId);
 
-      // 2. Fetch credentials from DB
+      // 2) Fetch credentials
       const credsResult = await query(
-        `SELECT app_key, app_secret
-         FROM broker_credentials
-         WHERE user_id = $1::uuid 
-           AND broker_name = 'ICICI' 
-           AND is_active = true`,
+        `SELECT app_key, app_secret FROM broker_credentials 
+         WHERE user_id = $1::uuid AND broker_name = 'ICICI' AND is_active = true`,
         [userId]
       );
-      
+
       if (credsResult.rowCount === 0) {
         throw new Error("ICICI credentials not found");
       }
 
       const { app_key, app_secret } = credsResult.rows[0];
-      log("✅ Credentials found, calling getCustomerDetails...");
 
-      // 3. Exchange apisession for session_token (with timeout)
-      const cdData = await Promise.race([
-        getCustomerDetails(app_key, app_secret, apisession),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("ICICI API timeout")), 15000)
-        ),
-      ]);
+      log("✅ Calling generate session...");
+      const sessionToken = await generateIciciSession(
+        userId,
+        app_key,
+        app_secret,
+        apisession
+      );
 
-      const sessionToken = cdData?.Success?.session_token;
-      
       if (!sessionToken) {
         throw new Error("No session_token returned from ICICI");
       }
 
       log("✅ Session token received:", sessionToken.substring(0, 5) + "...");
 
-      // 4. Save session to Redis + DB
+      // 3) Save session and update FSM
       await SessionService.getInstance().saveSession(userId, {
         api_key: app_key,
         api_secret: app_secret,
-        session_token: sessionToken,
-        user_details: cdData.Success,
+        session_token: sessionToken
       });
 
-      log("✅ Session saved to Redis and DB");
-
-      // 5. Update FSM: LOGIN_INITIATED → SESSION_ACTIVE
       await query(
-        `UPDATE icici_login_attempts
-         SET state = 'SESSION_ACTIVE', 
-             attempts = 0, 
-             updated_at = NOW()
+        `UPDATE icici_login_attempts SET state = 'SESSION_ACTIVE', attempts = 0, updated_at = NOW()
          WHERE user_id = $1::uuid`,
         [userId]
       );
 
       log("✅ ICICI connection successful for user:", userId);
 
-      // 6. Return success page that closes popup and notifies parent
       return res.send(getSuccessPage());
-      
     } catch (err: any) {
       log("❌ Callback error:", err.message);
-      
-      // Update FSM to FAILED
+
       try {
         await query(
-          `UPDATE icici_login_attempts
-           SET state = 'FAILED', updated_at = NOW()
+          `UPDATE icici_login_attempts SET state = 'FAILED', updated_at = NOW()
            WHERE state = 'LOGIN_INITIATED'`
         );
       } catch (fsmErr) {
