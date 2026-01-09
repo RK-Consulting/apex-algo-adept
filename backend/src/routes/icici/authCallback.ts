@@ -1,4 +1,3 @@
-// backend/src/routes/icici/authCallback.ts
 /**
  * ICICI Breeze Authentication Callback Handler
  * Handles callback in POPUP window - closes popup after success
@@ -12,6 +11,63 @@ import { query } from "../../config/database.js";
 
 const router = Router();
 const log = debug("alphaforge:icici:callback");
+
+/**
+ * Success page HTML - closes popup and notifies parent window
+ */
+function getSuccessPage(): string {
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>ICICI Connected</title>
+        <meta charset="utf-8" />
+      </head>
+      <body>
+        <h2>ICICI Connected Successfully</h2>
+        <script>
+          console.log('ICICI callback success');
+          if (window.opener && !window.opener.closed) {
+            window.opener.postMessage(
+              { type: 'ICICI_CONNECTED', success: true },
+              '${process.env.FRONTEND_ORIGIN || "https://alphaforge.skillsifter.in"}'
+            );
+          }
+          setTimeout(() => window.close(), 1500);
+        </script>
+      </body>
+    </html>
+  `;
+}
+
+/**
+ * Error page HTML - shows error and closes popup
+ */
+function getErrorPage(errorMessage: string): string {
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>ICICI Connection Failed</title>
+        <meta charset="utf-8" />
+      </head>
+      <body>
+        <h2>ICICI Connection Failed</h2>
+        <pre>${errorMessage}</pre>
+        <script>
+          console.error('ICICI callback failed:', '${errorMessage.replace(/'/g, "\\'")}');
+          if (window.opener && !window.opener.closed) {
+            window.opener.postMessage(
+              { type: 'ICICI_CONNECTED', success: false, error: '${errorMessage.replace(/'/g, "\\'")}' },
+              '${process.env.FRONTEND_ORIGIN || "https://alphaforge.skillsifter.in"}'
+            );
+          }
+          setTimeout(() => window.close(), 3000);
+        </script>
+      </body>
+    </html>
+  `;
+}
 
 router.all(
   "/callback",
@@ -35,48 +91,46 @@ router.all(
         return res.send(getErrorPage("Missing session parameter from ICICI"));
       }
 
-      console.log("🟢 Looking up LOGIN_INITIATED attempt");
+      console.log("🟢 Fetching LOGIN_INITIATED state");
 
-      // 1) Resolve user from latest LOGIN_INITIATED attempt
       const loginAttempt = await query(
-        `SELECT user_id FROM icici_login_attempts 
-         WHERE state = 'LOGIN_INITIATED' 
-         ORDER BY updated_at DESC 
+        `SELECT user_id
+         FROM icici_login_attempts
+         WHERE state = 'LOGIN_INITIATED'
+         ORDER BY updated_at DESC
          LIMIT 1`
       );
 
-      console.log("➡️ loginAttempt.rowCount =", loginAttempt.rowCount);
+      console.log("➡️ loginAttempt.rowCount:", loginAttempt.rowCount);
 
       if (loginAttempt.rowCount === 0) {
         throw new Error("No active ICICI login session found");
       }
 
       const userId = loginAttempt.rows[0].user_id;
-      console.log("🟢 Processing callback for user:", userId);
+      console.log("🟢 Callback mapped to user:", userId);
 
-      // 2) Fetch credentials
       console.log("🟢 Fetching ICICI credentials");
 
       const credsResult = await query(
-        `SELECT app_key, app_secret 
-         FROM broker_credentials 
-         WHERE user_id = $1::uuid 
-           AND broker_name = 'ICICI' 
+        `SELECT app_key, app_secret
+         FROM broker_credentials
+         WHERE user_id = $1::uuid
+           AND broker_name = 'ICICI'
            AND is_active = true`,
         [userId]
       );
 
-      console.log("➡️ credsResult.rowCount =", credsResult.rowCount);
+      console.log("➡️ credsResult.rowCount:", credsResult.rowCount);
 
       if (credsResult.rowCount === 0) {
         throw new Error("ICICI credentials not found");
       }
 
       const { app_key, app_secret } = credsResult.rows[0];
-      console.log("🟢 Credentials loaded (app_key present)");
+      console.log("🟢 Credentials loaded");
 
       console.log("🟡 Calling generateIciciSession()");
-
       const sessionToken = await generateIciciSession(
         userId,
         app_key,
@@ -90,13 +144,7 @@ router.all(
         throw new Error("No session_token returned from ICICI");
       }
 
-      console.log(
-        "🟢 Session token received:",
-        sessionToken.substring(0, 6) + "..."
-      );
-
-      // 3) Save session and update FSM
-      console.log("🟢 Saving session via SessionService");
+      console.log("🟢 Saving session");
 
       await SessionService.getInstance().saveSession(userId, {
         api_key: app_key,
@@ -107,9 +155,9 @@ router.all(
       console.log("🟢 Updating FSM → SESSION_ACTIVE");
 
       await query(
-        `UPDATE icici_login_attempts 
-         SET state = 'SESSION_ACTIVE', 
-             attempts = 0, 
+        `UPDATE icici_login_attempts
+         SET state = 'SESSION_ACTIVE',
+             attempts = 0,
              updated_at = NOW()
          WHERE user_id = $1::uuid`,
         [userId]
@@ -123,10 +171,9 @@ router.all(
 
       try {
         console.log("🟡 Updating FSM → FAILED");
-
         await query(
-          `UPDATE icici_login_attempts 
-           SET state = 'FAILED', 
+          `UPDATE icici_login_attempts
+           SET state = 'FAILED',
                updated_at = NOW()
            WHERE state = 'LOGIN_INITIATED'`
         );
