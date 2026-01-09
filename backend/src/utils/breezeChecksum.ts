@@ -26,13 +26,22 @@ function stableStringify(obj: Record<string, any>): string {
 export function calculateChecksum(
   timestamp: string,
   //payload: Record<string, any>,
-  payload: string,
+  payload: string | Record<string, any>,
   secretKey: string
 ): string {
+  let checksumPayload = "";
+
+  if (typeof payload === 'string') {
+    // Case 1: Caller manually stringified the data (e.g. getCustomerDetails)
+    checksumPayload = payload;
+  } else {
+    // Case 2: Standard API call passing an object -> use stable stringify
+    checksumPayload = stableStringify(payload);
+  }
   // ICICI Formula: Time Stamp + JSONPostData + secret_key
   // const compactPayload = stableStringify(payload);
   // const checksumInput = timestamp + compactPayload + secretKey;
-  const checksumInput = timestamp + payload + secretKey;
+  const checksumInput = timestamp + checksumPayload + secretKey;
 
   return crypto.createHash("sha256").update(checksumInput).digest("hex");
 }
