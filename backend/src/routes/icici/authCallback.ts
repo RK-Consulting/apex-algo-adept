@@ -80,9 +80,10 @@ router.all(
 
     try {
       const apisession =
-        (req.method === "GET"
-          ? req.query.apisession
-          : req.body?.apisession) as string;
+        (req.query.apisession ||
+         req.body?.apisession ||
+         req.query.api_session ||
+         req.body?.api_session) as string;
 
       console.log("➡️ Extracted apisession:", apisession);
 
