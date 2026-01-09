@@ -267,58 +267,26 @@ export function getBreezeLoginUrl(runtimeAppKey: string): string {
    CUSTOMER DETAILS HELPER (AUTH FLOW ONLY)
    SPECIAL: Does NOT use session (called during login)
 ====================================================== */
+/* ======================================================
+   CUSTOMER DETAILS HELPER (FIXED)
+   Now uses the real session_token, not the apisession
+====================================================== */
 export async function getCustomerDetails(
   appKey: string,
-  appSecret: string, 
-  apisession: string
+  sessionToken: string // <--- Changed from apisession
 ) {
   const requestId = crypto.randomUUID();
   
-  try {
-    const response = await iciciCircuitBreaker.execute(() =>
-      retryWithBackoff(() =>
-        breezeAxios.post(
-          "/api/v1/customerdetails",
-          {
-            SessionToken: apisession,
-            AppKey: appKey,
-          },
-          {
-            timeout: 15000, // 15 second timeout
-            headers: {
-              "X-Request-ID": requestId,
-            }
-          }
-        )
-      )
-    );
-
-    if (response.data?.Status !== 200) {
-      throw new Error(
-        `CustomerDetails error: ${response.data?.Error || "Unknown"}`
-      );
+  // Note: CustomerDetails is one of the few endpoints that 
+  // expects credentials in the BODY, not just headers.
+  return await breezeAxios.post(
+    "/api/v1/customerdetails",
+    {
+      SessionToken: sessionToken,
+      AppKey: appKey,
+    },
+    {
+      headers: { "X-Request-ID": requestId }
     }
-
-    return response.data;
-  } catch (error: unknown) {
-    const axiosError = error as AxiosError;
-    
-    if (axios.isAxiosError(axiosError)) {
-      if (axiosError.code === 'ECONNABORTED') {
-        throw new Error("ICICI API timeout - request took too long");
-      }
-      
-      const status = axiosError.response?.status;
-      if (status === 403) {
-        throw new Error(
-          "ICICI access denied. Check:\n" +
-          "• API key is correct\n" +
-          "• Server IP is whitelisted\n" +
-          "• Apisession is valid"
-        );
-      }
-    }
-    
-    throw error;
-  }
+  );
 }
