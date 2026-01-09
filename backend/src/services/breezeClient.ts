@@ -187,6 +187,39 @@ export async function breezeRequest<T = any>(
   }
 }
 
+export async function generateIciciSession(
+  userId: string,
+  appKey: string,
+  appSecret: string,
+  apisession: string
+) {
+  const timestamp = getTimestamp();
+  const payload = { api_session: apisession };
+
+  const checksum = calculateChecksum(timestamp, payload, appSecret);
+
+  const response = await breezeAxios.post(
+    "/api/v1/session",
+    payload,
+    {
+      headers: {
+        "X-Timestamp": timestamp,
+        "X-AppKey": appKey,
+        "X-Checksum": `token ${checksum}`,
+        "X-Request-ID": crypto.randomUUID()
+      }
+    }
+  );
+
+  if (response.data?.Status !== 200) {
+    throw new Error(response.data?.Error || "Session generation failed");
+  }
+
+  return response.data?.Success?.session_token;
+}
+
+
+
 /* ======================================================
    LOGIN URL (PURE API CONTRACT)
 ====================================================== */
