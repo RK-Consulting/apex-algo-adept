@@ -21,7 +21,7 @@ import { iciciCircuitBreaker } from "../utils/circuitBreaker.js";
 /* ======================================================
    CONSTANTS
 ====================================================== */
-const ICICI_BASE_URL = "https://api.icicidirect.com/breezeapi";
+const ICICI_BASE_URL = "https://api.icicidirect.com";
 
 /* ======================================================
    HTTPS AGENT (LOW LATENCY, KEEP-ALIVE)
