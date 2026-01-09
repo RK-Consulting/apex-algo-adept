@@ -267,10 +267,32 @@ export function getBreezeLoginUrl(runtimeAppKey: string): string {
    CUSTOMER DETAILS HELPER (AUTH FLOW ONLY)
    SPECIAL: Does NOT use session (called during login)
 ====================================================== */
-/* ======================================================
-   CUSTOMER DETAILS HELPER (FIXED)
-   Now uses the real session_token, not the apisession
-====================================================== */
+
+export async function getCustomerDetails(appKey: string, appSecret: string, apisession: string) {
+  const timestamp = getTimestamp(); // Now in DD-Mon-yyyy format
+  
+  // 1. Prepare the inner data and stringify it manually
+  const innerData = JSON.stringify({
+    // UserID: "YOUR_USER_ID", // This must be known or passed
+    UserID: "NAGARROU",
+    API_Session: apisession,
+    APPKey: appKey
+  });
+
+  // 2. Calculate checksum using the stringified version
+  const checksum = calculateChecksum(timestamp, innerData, appSecret);
+
+  // 3. Send to ICICI
+  const response = await breezeAxios.post("/customer/customerdetails", {
+    AppKey: appKey,
+    time_stamp: timestamp,
+    JSONPostData: innerData, // Sending the string, not the object
+    Checksum: checksum
+  });
+  
+  return response.data;
+}
+/*  =====================================================
 export async function getCustomerDetails(
   appKey: string,
   sessionToken: string // <--- Changed from apisession
@@ -289,4 +311,4 @@ export async function getCustomerDetails(
       headers: { "X-Request-ID": requestId }
     }
   );
-}
+} */
