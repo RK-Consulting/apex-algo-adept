@@ -74,7 +74,7 @@ export class ICICIRealtimeService {
     ------------------------------ */
     const ws = new WebSocket(this.WS_URL, {
       headers: {
-        "X-AppKey": runtimeAppKey,              // runtime → network
+        "X-App-Key": runtimeAppKey,              // runtime → network
         "X-SessionToken": runtimeSessionToken,  // runtime → network
       },
     });
