@@ -127,7 +127,7 @@ export async function breezeRequest<T = any>(
       "X-Timestamp": timestamp,
       "X-App-Key": runtimeAppKey,
       "X-SessionToken": runtimeSessionToken,
-      "X-Checksum": `token ${checksum}`,
+      "X-Checksum": checksum,
       "X-Request-ID": requestId,
     };
 
@@ -219,7 +219,7 @@ export async function generateIciciSession(
         headers: {
           "X-Timestamp": timestamp,
           "X-App-Key": appKey,
-          "X-Checksum": `token ${checksum}`,
+          "X-Checksum": checksum,
           "X-Request-ID": crypto.randomUUID()
         }
       }
