@@ -6,7 +6,7 @@
 import { Router } from "express";
 import debug from "debug";
 import { iciciLimiter } from "../../middleware/rateLimiter.js";
-import { getCustomerDetails } from "../../services/breezeClient.js";
+import { generateIciciSession } from "../../services/breezeClient.js";
 import { SessionService } from "../../services/sessionService.js";
 import { query } from "../../config/database.js";
 
