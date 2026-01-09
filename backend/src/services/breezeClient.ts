@@ -193,29 +193,63 @@ export async function generateIciciSession(
   appSecret: string,
   apisession: string
 ) {
+  console.log("🟡 generateIciciSession() ENTER");
+  console.log("➡️ userId:", userId);
+  console.log("➡️ appKey present:", !!appKey);
+  console.log("➡️ appSecret present:", !!appSecret);
+  console.log("➡️ apisession:", apisession);
+
   const timestamp = getTimestamp();
   const payload = { api_session: apisession };
 
+  console.log("➡️ timestamp:", timestamp);
+  console.log("➡️ payload:", payload);
+
   const checksum = calculateChecksum(timestamp, payload, appSecret);
 
-  const response = await breezeAxios.post(
-    "/api/v1/session",
-    payload,
-    {
-      headers: {
-        "X-Timestamp": timestamp,
-        "X-AppKey": appKey,
-        "X-Checksum": `token ${checksum}`,
-        "X-Request-ID": crypto.randomUUID()
+  console.log("➡️ checksum:", checksum);
+
+  try {
+    console.log("🟡 Calling ICICI /api/v1/session");
+
+    const response = await breezeAxios.post(
+      "/api/v1/session",
+      payload,
+      {
+        headers: {
+          "X-Timestamp": timestamp,
+          "X-AppKey": appKey,
+          "X-Checksum": `token ${checksum}`,
+          "X-Request-ID": crypto.randomUUID()
+        }
       }
+    );
+
+    console.log("🟢 ICICI session API RESPONSE:");
+    console.log("➡️ status:", response.status);
+    console.log("➡️ data:", JSON.stringify(response.data, null, 2));
+
+    if (response.data?.Status !== 200) {
+      console.error("❌ ICICI returned non-200 Status");
+      throw new Error(response.data?.Error || "Session generation failed");
     }
-  );
 
-  if (response.data?.Status !== 200) {
-    throw new Error(response.data?.Error || "Session generation failed");
+    const sessionToken = response.data?.Success?.session_token;
+
+    console.log("➡️ Extracted session_token:", sessionToken);
+
+    return sessionToken;
+  } catch (err: any) {
+    console.error("❌ generateIciciSession ERROR");
+
+    if (err.response) {
+      console.error("➡️ ICICI ERROR STATUS:", err.response.status);
+      console.error("➡️ ICICI ERROR DATA:", err.response.data);
+    }
+
+    console.error("➡️ Error message:", err.message);
+    throw err;
   }
-
-  return response.data?.Success?.session_token;
 }
 
 
