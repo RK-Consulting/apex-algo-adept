@@ -200,7 +200,7 @@ export async function generateIciciSession(
   console.log("➡️ apisession:", apisession);
 
   const timestamp = getTimestamp();
-  const payload = { api_session: apisession };
+  const payload = { SessionToken: apisession }; // FIXED: Changed from api_session to SessionToken
 
   console.log("➡️ timestamp:", timestamp);
   console.log("➡️ payload:", payload);
@@ -219,7 +219,8 @@ export async function generateIciciSession(
         headers: {
           "X-Timestamp": timestamp,
           "X-App-Key": appKey,
-          "X-Checksum": checksum,
+          "X-SessionToken": apisession,        // FIXED: Added X-SessionToken header
+          "X-Checksum": `token ${checksum}`,   // FIXED: Added "token " prefix
           "X-Request-ID": crypto.randomUUID()
         }
       }
