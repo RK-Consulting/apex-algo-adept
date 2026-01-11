@@ -219,7 +219,7 @@ export async function generateIciciSession(
         headers: {
           "X-Timestamp": timestamp,
           "X-App-Key": appKey,
-          "X-SessionToken": api_session,        // FIXED: Added X-SessionToken header
+          "api_session": apisession,     // "X-SessionToken": apisession,        // FIXED: Added X-SessionToken header
           "X-Checksum": `${checksum}`,          // `token ${checksum}`,   // FIXED: Added "token " prefix
           "X-Request-ID": crypto.randomUUID()
         }
