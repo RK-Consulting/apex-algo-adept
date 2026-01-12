@@ -17,7 +17,7 @@ export function useICICIRealtimeTickers(symbols: { symbol: string; exchange: str
     if (!token) return;
 
     const ws = new WebSocket(
-      `${import.meta.env.VITE_WS_URL || "ws://localhost:3000"}/ws/icici?token=${token}`
+      `${import.meta.env.VITE_WS_URL || "ws://localhost:3000"}/ws/icici/stream?token=${token}`
     );
 
     wsRef.current = ws;
