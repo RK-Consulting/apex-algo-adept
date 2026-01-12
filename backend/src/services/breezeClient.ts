@@ -187,7 +187,7 @@ export async function breezeRequest<T = any>(
   }
 }
 
-export async function generateIciciSession(
+/* export async function generateIciciSession(
   userId: string,
   appKey: string,
   appSecret: string,
@@ -239,6 +239,44 @@ export async function generateIciciSession(
     throw err;
   }
 }
+*/
+export async function generateIciciSession(
+  userId: string,
+  appKey: string,
+  appSecret: string,
+  apisession: string
+) {
+  const timestamp = getTimestamp();
+
+  const payload = {
+    api_session: apisession
+  };
+
+  const checksum = calculateChecksum(
+    timestamp,
+    payload,
+    appSecret
+  );
+
+  const response = await breezeAxios.post(
+    "/apiuser/session",
+    payload,
+    {
+      headers: {
+        "X-AppKey": appKey,
+        "X-Timestamp": timestamp,
+        "X-Checksum": checksum
+      }
+    }
+  );
+
+  if (response.data?.Status !== 200) {
+    throw new Error(response.data?.Error || "Session generation failed");
+  }
+
+  return response.data.Success.session_token;
+}
+
 
 
 /* ======================================================
