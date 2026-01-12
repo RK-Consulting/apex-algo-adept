@@ -34,7 +34,7 @@ export function useIciciStream(symbols: { symbol: string; exchange?: string }[] 
     // Construct WS URL
     const wsUrl = `${
       (import.meta.env.VITE_WS_URL || "").replace("https://", "wss://")
-    }/ws/icici?token=${token}`;
+    }/ws/icici/stream?token=${token}`;
 
     console.log("🔌 Connecting ICICI WS:", wsUrl);
 
