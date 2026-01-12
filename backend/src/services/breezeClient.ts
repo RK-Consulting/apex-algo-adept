@@ -207,7 +207,7 @@ export async function generateIciciSession(
   try {
     console.log("🟡 Calling ICICI /api/v1/session");
     const response = await breezeAxios.post(
-      "/api/v1/session",
+      "/customer/customerdetails",
       payload,
       {
         headers: {
