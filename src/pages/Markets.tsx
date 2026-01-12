@@ -46,13 +46,21 @@ export default function Markets() {
   const reconnectTimer = useRef<number | null>(null);
   const reconnectAttempts = useRef(0);
 
-  const token = localStorage.getItem("authToken") || localStorage.getItem("token");
-  const iciciConnected = localStorage.getItem("icici_connected") === "true";
+  const token =
+    localStorage.getItem("authToken") ||
+    localStorage.getItem("token");
 
+  const iciciConnected =
+    localStorage.getItem("icici_connected") === "true";
+
+  /* ------------------ format helpers ------------------ */
   const formatPrice = (p?: number) =>
     p == null
       ? "..."
-      : p.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      : p.toLocaleString("en-IN", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
 
   const formatVolume = (v?: number) =>
     typeof v !== "number"
@@ -63,6 +71,7 @@ export default function Markets() {
           ? `${(v / 1000).toFixed(1)}K`
           : String(v);
 
+  /* ------------------ control plane ------------------ */
   async function controlSubscribe(symbol: string, exchange = "NSE") {
     if (!token) return;
     try {
@@ -95,14 +104,29 @@ export default function Markets() {
     }
   }
 
+  /* ------------------ WebSocket lifecycle ------------------ */
   useEffect(() => {
-    if (!token || !iciciConnected) return;
+    if (!token) return;
+
+    /** 🔒 HARD GUARD — NO ICICI, NO WS, NO RECONNECT */
+    if (!iciciConnected) {
+      console.warn("ICICI not connected → skipping realtime WS init");
+      reconnectAttempts.current = 0;
+      return;
+    }
 
     const wsScheme = backendUrl.startsWith("https") ? "wss" : "ws";
     const host = new URL(backendUrl).host;
-    const wsUrl = `${wsScheme}://${host}/ws/icici/stream?token=${encodeURIComponent(token)}`;
+    const wsUrl = `${wsScheme}://${host}/ws/icici?token=${encodeURIComponent(token)}`;
 
-    const ws = new WebSocket(wsUrl);
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch (err) {
+      console.error("Failed to create WebSocket:", err);
+      return;
+    }
+
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -112,46 +136,79 @@ export default function Markets() {
     };
 
     ws.onmessage = evt => {
-      const payload = JSON.parse(evt.data) as Tick;
-      const symbol = (payload.stockCode || payload.symbol || "").toUpperCase();
-      if (!symbol) return;
+      try {
+        const payload = JSON.parse(evt.data) as Tick;
+        const symbol = (payload.stockCode || payload.symbol || "").toUpperCase();
+        if (!symbol) return;
 
-      const tick: Tick = {
-        stockCode: symbol,
-        ltp: payload.ltp ?? payload.last,
-        percentChange: payload.percentChange ?? payload.percent_change,
-        ...payload,
-      };
+        const tick: Tick = {
+          stockCode: symbol,
+          ltp: payload.ltp ?? payload.last,
+          high: payload.high,
+          low: payload.low,
+          change: payload.change,
+          percentChange: payload.percentChange ?? payload.percent_change,
+          volume: payload.volume,
+          ...payload,
+        };
 
-      if (indexSymbols.some(i => i.symbol === symbol)) {
-        setIndexMap(prev => ({ ...prev, [symbol]: tick }));
-      } else if (stockSymbols.some(s => s.symbol === symbol)) {
-        setStockMap(prev => ({ ...prev, [symbol]: tick }));
+        if (indexSymbols.some(i => i.symbol === symbol)) {
+          setIndexMap(prev => ({ ...prev, [symbol]: tick }));
+        } else if (stockSymbols.some(s => s.symbol === symbol)) {
+          setStockMap(prev => ({ ...prev, [symbol]: tick }));
+        }
+      } catch (e) {
+        console.error("WS message parse error", e);
       }
     };
 
+    ws.onerror = e => {
+      console.error("ICICI WS error", e);
+    };
+
     ws.onclose = () => {
-      reconnectAttempts.current++;
-      reconnectTimer.current = window.setTimeout(
-        () => window.location.reload(),
-        Math.min(30_000, 1000 * Math.pow(1.8, reconnectAttempts.current))
+      /** 🔒 DO NOT RECONNECT IF ICICI NOT CONNECTED */
+      if (!iciciConnected) {
+        console.warn("WS closed but ICICI not connected — no reconnect");
+        return;
+      }
+
+      reconnectAttempts.current += 1;
+      const delay = Math.min(
+        30_000,
+        1000 * Math.pow(1.8, reconnectAttempts.current)
       );
+
+      reconnectTimer.current = window.setTimeout(() => {
+        window.location.reload();
+      }, delay);
     };
 
     return () => {
-      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      if (reconnectTimer.current) {
+        clearTimeout(reconnectTimer.current);
+        reconnectTimer.current = null;
+      }
+
       indexSymbols.forEach(i => controlUnsubscribe(i.symbol, i.exchange));
       stockSymbols.forEach(s => controlUnsubscribe(s.symbol, s.exchange));
-      ws.close();
+
+      try {
+        ws.close();
+      } catch {}
+      wsRef.current = null;
     };
   }, [token, iciciConnected]);
 
+  /* ------------------ render models ------------------ */
   const indexData = indexSymbols.map(i => {
     const d = indexMap[i.symbol] || {};
     return {
       symbol: i.symbol,
       name: i.name,
       price: d.ltp ?? d.last ?? null,
+      high: d.high ?? null,
+      low: d.low ?? null,
       change: d.change ?? 0,
       change_percent: d.percentChange ?? 0,
     };
@@ -163,6 +220,8 @@ export default function Markets() {
       symbol: s.symbol,
       name: s.name,
       price: d.ltp ?? d.last ?? null,
+      high: d.high ?? null,
+      low: d.low ?? null,
       change: d.change ?? 0,
       change_percent: d.percentChange ?? 0,
       volume: d.volume ?? 0,
@@ -170,23 +229,59 @@ export default function Markets() {
     };
   });
 
+  /* ------------------ UI ------------------ */
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
         <AppSidebar />
         <main className="flex-1 overflow-auto">
-          <div className="container mx-auto p-4 space-y-6">
-            <h1 className="text-3xl font-bold">Market Watch</h1>
+          <div className="container mx-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold">Market Watch</h1>
+                <p className="text-muted-foreground text-sm">
+                  Real-time market data and indices
+                </p>
+              </div>
+              <div className="relative flex-1 sm:w-80">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input placeholder="Search..." className="pl-10 bg-card border-border" />
+              </div>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {indexData.map(d => (
-                <Card key={d.symbol}>
-                  <CardContent className="pt-6">
-                    <h3 className="font-semibold">{d.name}</h3>
-                    <div className="text-2xl font-mono">{formatPrice(d.price as number)}</div>
-                  </CardContent>
-                </Card>
-              ))}
+              {indexData.map(d => {
+                const trend = (d.change || 0) >= 0 ? "up" : "down";
+                return (
+                  <Card key={d.symbol}>
+                    <CardContent className="pt-6">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-semibold text-sm">{d.name}</h3>
+                        <div
+                          className={`w-2 h-2 rounded-full ${
+                            trend === "up" ? "bg-success" : "bg-destructive"
+                          } animate-pulse`}
+                        />
+                      </div>
+                      <div className="text-2xl font-mono font-bold">
+                        {formatPrice(d.price as number)}
+                      </div>
+                      <div
+                        className={`flex items-center gap-1 text-sm font-medium ${
+                          trend === "up" ? "text-success" : "text-destructive"
+                        }`}
+                      >
+                        {trend === "up" ? (
+                          <TrendingUp className="w-4 h-4" />
+                        ) : (
+                          <TrendingDown className="w-4 h-4" />
+                        )}
+                        <span>{(d.change || 0).toFixed(2)}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
 
             <Tabs defaultValue="stocks">
@@ -199,21 +294,70 @@ export default function Markets() {
               <TabsContent value="stocks">
                 <Card>
                   <CardHeader>
-                    <CardTitle>
-                      Top Stocks <Badge variant="outline">NSE</Badge>
+                    <CardTitle className="flex items-center justify-between">
+                      <span>Top Stocks</span>
+                      <Badge variant="outline">NSE</Badge>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <table className="w-full">
+                      <thead>
+                        <tr className="text-xs text-muted-foreground bg-muted/30">
+                          <th className="text-left p-3">Symbol</th>
+                          <th className="text-left p-3">Company</th>
+                          <th className="text-right p-3">Price</th>
+                          <th className="text-right p-3">Change</th>
+                          <th className="text-right p-3">Volume</th>
+                          <th className="text-right p-3">Mkt Cap</th>
+                          <th className="text-right p-3">Action</th>
+                        </tr>
+                      </thead>
                       <tbody>
-                        {stockData.map(d => (
-                          <tr key={d.symbol}>
-                            <td>{d.symbol}</td>
-                            <td>{d.name}</td>
-                            <td>₹{formatPrice(d.price as number)}</td>
-                            <td>{formatVolume(d.volume)}</td>
-                          </tr>
-                        ))}
+                        {stockData.map(d => {
+                          const trend = (d.change || 0) >= 0 ? "up" : "down";
+                          return (
+                            <tr
+                              key={d.symbol}
+                              className="border-b border-border hover:bg-muted/20"
+                            >
+                              <td className="p-3 font-mono font-semibold">{d.symbol}</td>
+                              <td className="p-3 text-muted-foreground">{d.name}</td>
+                              <td className="p-3 text-right font-mono font-semibold">
+                                ₹{formatPrice(d.price as number)}
+                              </td>
+                              <td className="p-3 text-right">
+                                <div
+                                  className={`flex justify-end items-center gap-1 text-sm font-medium ${
+                                    trend === "up" ? "text-success" : "text-destructive"
+                                  }`}
+                                >
+                                  {trend === "up" ? (
+                                    <TrendingUp className="w-3 h-3" />
+                                  ) : (
+                                    <TrendingDown className="w-3 h-3" />
+                                  )}
+                                  <span>{(d.change || 0).toFixed(2)}</span>
+                                </div>
+                              </td>
+                              <td className="p-3 text-right font-mono text-sm">
+                                {formatVolume(d.volume)}
+                              </td>
+                              <td className="p-3 text-right text-muted-foreground">
+                                {d.marketCap}
+                              </td>
+                              <td className="p-3 text-right">
+                                <div className="flex justify-end gap-2">
+                                  <Button size="sm" variant="ghost">
+                                    <Star className="w-3 h-3" />
+                                  </Button>
+                                  <Button size="sm" variant="ghost">
+                                    <Plus className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </CardContent>
