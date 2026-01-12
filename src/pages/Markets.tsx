@@ -100,7 +100,7 @@ export default function Markets() {
 
     const wsScheme = backendUrl.startsWith("https") ? "wss" : "ws";
     const host = new URL(backendUrl).host;
-    const wsUrl = `${wsScheme}://${host}/ws/icici?token=${encodeURIComponent(token)}`;
+    const wsUrl = `${wsScheme}://${host}/ws/icici/stream?token=${encodeURIComponent(token)}`;
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
