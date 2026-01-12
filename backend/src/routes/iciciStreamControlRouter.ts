@@ -21,6 +21,28 @@ import debug from "debug";
 const router = Router();
 const log = debug("alphaforge:icici:stream:control");
 
+/* ======================================================
+   CORS (REQUIRED — browser calls this router)
+====================================================== */
+router.use((req, res, next) => {
+  res.header(
+    "Access-Control-Allow-Origin",
+    process.env.FRONTEND_ORIGIN || "https://alphaforge.skillsifter.in"
+  );
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+  );
+  res.header("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+  res.header("Access-Control-Allow-Credentials", "true");
+
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+
+  next();
+});
+
 /**
  * Health check
  */
