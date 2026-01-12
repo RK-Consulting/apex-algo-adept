@@ -5,7 +5,7 @@
 import { Router } from "express";
 import debug from "debug";
 import { iciciLimiter } from "../../middleware/rateLimiter.js";
-import { generateIciciSession } from "../../services/breezeClient.js";
+// import { generateIciciSession } from "../../services/breezeClient.js";
 import { SessionService } from "../../services/sessionService.js";
 import { query } from "../../config/database.js";
 
@@ -131,19 +131,20 @@ router.all(
       const { app_key, app_secret } = credsResult.rows[0];
       console.log("🟢 Credentials loaded");
 
-      console.log("🟡 Calling generateIciciSession()");
-      const sessionToken = await generateIciciSession(
+      // console.log("🟡 Calling generateIciciSession()");
+      /* const sessionToken = await generateIciciSession(
         userId,
         app_key,
         app_secret,
         apisession
-      );
+      ); 
 
       console.log("➡️ generateIciciSession returned:", sessionToken);
 
       if (!sessionToken) {
         throw new Error("No session_token returned from ICICI");
-      }
+      } */
+      const sessionToken = apisession;
 
       console.log("🟢 Saving session");
 
