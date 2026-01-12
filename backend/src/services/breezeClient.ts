@@ -125,7 +125,7 @@ export async function breezeRequest<T = any>(
     -------------------------------------------------- */
     const headers = {
       "X-Timestamp": timestamp,
-      "X-App-Key": runtimeAppKey,
+      "X-AppKey": runtimeAppKey,
       "X-SessionToken": runtimeSessionToken,
       "X-Checksum": checksum,
       "X-Request-ID": requestId,
@@ -212,8 +212,8 @@ export async function generateIciciSession(
       {
         headers: {
           "X-Timestamp": timestamp,
-          "X-App-Key": appKey,
-          "X-SessionToken": apisession,     // CHANGED: Use X-SessionToken (standard header name)
+          "X-AppKey": appKey,
+          //"X-SessionToken": apisession,     // CHANGED: Use X-SessionToken (standard header name)
           "X-Checksum": checksum,           // CHANGED: Remove backticks and template literal
           "X-Request-ID": crypto.randomUUID()
         }
