@@ -239,7 +239,7 @@ export async function breezeRequest<T = any>(
     throw err;
   }
 }
-*/
+
 export async function generateIciciSession(
   userId: string,
   appKey: string,
@@ -275,6 +275,39 @@ export async function generateIciciSession(
   }
 
   return response.data.Success.session_token;
+} */
+export async function generateIciciSession(
+  userId: string,      // Your ICICI Trading ID (e.g., "NAGARROU")
+  appKey: string,
+  appSecret: string,
+  apisession: string   // The token received from the redirect URL
+) {
+  const timestamp = getTimestamp(); // MUST BE "DD-Mon-yyyy hh:mm:ss"
+
+  // 1. Manually stringify the inner data (Case Sensitive!)
+  const innerData = JSON.stringify({
+    UserID: userId,
+    API_Session: apisession,
+    APPKey: appKey
+  });
+
+  // 2. Checksum = timestamp + innerData (the string) + secret
+  const checksum = calculateChecksum(timestamp, innerData, appSecret);
+
+  // 3. Send the request
+  const response = await breezeAxios.post("/customer/customerdetails", {
+    AppKey: appKey,
+    time_stamp: timestamp,
+    JSONPostData: innerData, // Sending the string here
+    Checksum: checksum
+  });
+
+  if (response.data?.Status !== 200) {
+    throw new Error(response.data?.Error || "Session generation failed");
+  }
+
+  // NOTE: This returns 'SessionToken', which is what you use for all future calls
+  return response.data.Success.SessionToken;
 }
 
 
