@@ -29,7 +29,7 @@ const Profile = () => {
   const [profileLocked, setProfileLocked] = useState(false);
 
   /* ================= LOAD PROFILE ================= */
-  useEffect(() => {
+/*  useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) return;
 
@@ -57,7 +57,7 @@ const Profile = () => {
         });
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, []); */
 
   /* ================= SAVE PROFILE (FIRST TIME ONLY) ================= */
   const handleSave = async () => {
