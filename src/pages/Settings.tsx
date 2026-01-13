@@ -33,41 +33,52 @@ import { useToast } from "@/hooks/use-toast";
 
 const Settings = () => {
   /* ======================================================
-     PROFILE STATE (GLOBAL, READ-ONLY)
+      PROFILE STATE (GLOBAL, READ-ONLY)
   ====================================================== */
   const { isComplete } = useProfile();
   const { toast } = useToast();
 
   /* ======================================================
-     BROKER DIALOG STATE (FOR NON-ICICI BROKERS)
+      BROKER DIALOG STATE (FOR NON-ICICI BROKERS)
   ====================================================== */
   const [brokerDialogOpen, setBrokerDialogOpen] = useState(false);
   const [selectedBroker, setSelectedBroker] = useState("");
 
   /* ======================================================
-     LISTEN FOR ICICI POPUP SUCCESS MESSAGE
+      LISTEN FOR ICICI POPUP SUCCESS MESSAGE
   ====================================================== */
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
+      // 1. Resolve Allowed Origin
       const allowedOrigin =
         import.meta.env.VITE_BACKEND_URL ||
         import.meta.env.VITE_API_URL ||
         "https://api.alphaforge.skillsifter.in";
 
-      if (!event.origin.includes(new URL(allowedOrigin).hostname)) {
+      // 2. Security Check: Validate Origin
+      try {
+        const allowedHostname = new URL(allowedOrigin).hostname;
+        if (!event.origin.includes(allowedHostname)) return;
+      } catch (e) {
+        console.error("Invalid Origin URL configuration");
         return;
       }
 
+      // 3. FSM Listener Logic
+      // Only react to terminal states ('success' or 'error')
       if (event.data?.type === "ICICI_CONNECTED") {
         if (event.data.success) {
           toast({
-            title: "Success",
-            description: "ICICI Direct connected successfully",
+            title: "Broker Connected",
+            description: "ICICI Direct session is now active.",
           });
+          // Optional: Trigger a state refresh from your API here
+          // window.location.reload(); 
         } else {
+          // Failure State
           toast({
             title: "Connection Failed",
-            description: event.data.error || "Failed to connect to ICICI",
+            description: event.data.error || "ICICI login was unsuccessful.",
             variant: "destructive",
           });
         }
@@ -79,7 +90,7 @@ const Settings = () => {
   }, [toast]);
 
   /* ======================================================
-     BROKER CONNECT HANDLER — SURGICAL FIX
+      BROKER CONNECT HANDLER — SURGICAL FIX
   ====================================================== */
   const handleConnectBroker = async (brokerName: string) => {
     if (brokerName === "ICICIDIRECT" && !isComplete) {
@@ -110,11 +121,11 @@ const Settings = () => {
         return;
       }
 
-      /* 🔥 POPUP MUST OPEN BEFORE AWAIT 🔥 */
+      /* 🔥 POPUP PRE-OPEN (Browser Anti-Popup-Blocker measure) 🔥 */
       const popup = window.open(
         "about:blank",
         "ICICI_Login",
-        "width=600,height=700,scrollbars=yes,resizable=yes,location=no,menubar=no,status=no,toolbar=no"
+        "width=600,height=700,scrollbars=yes,resizable=yes"
       );
 
       if (!popup) {
@@ -142,20 +153,20 @@ const Settings = () => {
 
         if (!response.ok || !data.redirectUrl) {
           popup.close();
-          throw new Error(data.error || "Failed to connect to ICICI");
+          throw new Error(data.error || "Failed to initialize broker connection.");
         }
 
-        /* ✅ NAVIGATE EXISTING POPUP */
+        /* ✅ NAVIGATE POPUP TO BROKER LOGIN */
         popup.location.href = data.redirectUrl;
 
         toast({
-          title: "ICICI Login Opened",
-          description: "Complete your login in the popup window",
+          title: "Connecting to ICICI...",
+          description: "Please complete the authentication in the login window.",
         });
       } catch (error: any) {
-        popup.close();
+        if (popup) popup.close();
         toast({
-          title: "Connection failed",
+          title: "Initialization failed",
           description: error.message,
           variant: "destructive",
         });
@@ -209,7 +220,7 @@ const Settings = () => {
                         >
                           <div className="flex gap-3 items-center">
                             <Wallet className="w-5 h-5" />
-                            <div>{b}</div>
+                            <div className="font-medium">{b}</div>
                           </div>
                           <Button
                             variant="outline"
@@ -232,11 +243,11 @@ const Settings = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="flex justify-between">
+                    <div className="flex justify-between items-center">
                       <span>Trade Executions</span>
                       <Switch defaultChecked />
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between items-center">
                       <span>Strategy Alerts</span>
                       <Switch defaultChecked />
                     </div>
