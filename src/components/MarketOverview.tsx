@@ -82,8 +82,8 @@ export function MarketOverview() {
           }),
         }).catch(err => {
           console.warn("Index subscribe failed:", i.symbol, err);
+        });
       });
-    };
 
     ws.onmessage = (evt) => {
       try {
