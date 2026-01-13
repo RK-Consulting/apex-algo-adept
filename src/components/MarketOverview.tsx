@@ -116,47 +116,44 @@ export function MarketOverview() {
     };
 
     ws.onclose = () => {
-      if (!iciciConnected) {
-        console.warn("[MarketOverview] WS closed — ICICI not connected, stopping");
-        return;
-      }
-      reconnectAttempts.current += 1;
-      const delay = Math.min(
-        20000,
-        1500 * Math.pow(reconnectAttempts.current, 1.5)
-      );
+  if (!iciciConnected) {
+    console.warn(
+      "[MarketOverview] WS closed — ICICI not connected, stopping"
+    );
+    return;
+  }
 
-      reconnectTimer.current = window.setTimeout(() => {
-        console.warn("[MarketOverview] reconnect suppressed — manual refresh only");
-        //reconnectAttempts.current--;
-      }, delay);
-    };
+  reconnectAttempts.current += 1;
 
-    ws.onerror = (err) => console.error("[MarketOverview] WS error", err);
+  const delay = Math.min(
+    20000,
+    1500 * Math.pow(reconnectAttempts.current, 1.5)
+  );
 
-    return () => {
-      if (reconnectTimer.current) {
-        clearTimeout(reconnectTimer.current);
-        reconnectTimer.current = null;
-      }
+  reconnectTimer.current = window.setTimeout(() => {
+    console.warn(
+      "[MarketOverview] reconnect suppressed — manual refresh only"
+    );
+  }, delay);
+};
 
-      // Unsubscribe on unmount
-     /* indexSymbols.forEach(async (i) => {
-        await fetch(`${backendUrl}/api/icici/stream/unsubscribe`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ symbol: i.symbol, exchange: i.exchange }),
-        });
-      });*/
+ws.onerror = (err) =>
+  console.error("[MarketOverview] WS error", err);
 
-      try {
-        ws.close();
-      } catch (e) {}
-    };
-  }, [token, iciciConnected]);
+return () => {
+  if (reconnectTimer.current) {
+    clearTimeout(reconnectTimer.current);
+    reconnectTimer.current = null;
+  }
+
+  try {
+    ws.close();
+  } catch (e) {
+    // intentionally ignored
+  }
+};
+}, [token, iciciConnected]);
+
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
