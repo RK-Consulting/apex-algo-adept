@@ -123,7 +123,7 @@ export function MarketOverview() {
       reconnectAttempts.current += 1;
       const delay = Math.min(
         20000,
-        1500 * reconnectAttempts.current ** 1.5
+        1500 * Math.pow(reconnectAttempts.current, 1.5)
       );
 
       reconnectTimer.current = window.setTimeout(() => {
