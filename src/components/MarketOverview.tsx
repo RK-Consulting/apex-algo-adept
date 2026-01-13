@@ -70,7 +70,7 @@ export function MarketOverview() {
 
       // Subscribe only to indices
       indexSymbols.forEach(i => {
-        await fetch(`${backendUrl}/api/icici/stream/subscribe`, {
+        fetch(`${backendUrl}/api/icici/stream/subscribe`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -80,7 +80,8 @@ export function MarketOverview() {
             symbol: i.symbol,
             exchange: i.exchange,
           }),
-        }).catch(() => {});
+        }).catch(err => {
+          console.warn("Index subscribe failed:", i.symbol, err);
       });
     };
 
