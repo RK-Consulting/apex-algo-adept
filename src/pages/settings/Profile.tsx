@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { User, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useProfile } from "@/context/ProfileContext";
 
 const backendUrl =
   import.meta.env.VITE_BACKEND_URL ||
@@ -27,8 +28,24 @@ const Profile = () => {
   const [saving, setSaving] = useState(false);
 
   const [profileLocked, setProfileLocked] = useState(false);
+  const { profile: ctxProfile, isComplete, loading } = useProfile();
 
   /* ================= LOAD PROFILE ================= */
+  useEffect(() => {
+    if (!ctxProfile) return;
+  
+    setProfile({
+      full_name: ctxProfile.full_name || "",
+      email: ctxProfile.email || "",
+      phone: ctxProfile.phone || "",
+      pan: ctxProfile.pan || "",
+    });
+  
+    if (isComplete) {
+      setProfileLocked(true);
+    }
+  }, [ctxProfile, isComplete]);
+
 /*  useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) return;
