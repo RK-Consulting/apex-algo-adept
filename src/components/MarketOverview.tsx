@@ -153,7 +153,7 @@ export function MarketOverview() {
       });*/
 
       try {
-        ws?.close();
+        ws.close();
       } catch {}
     };
   }, [token, iciciConnected]);
