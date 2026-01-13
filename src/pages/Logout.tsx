@@ -1,32 +1,26 @@
 // /src/pages/Logout.tsx
 
 import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 
 const Logout = () => {
-  const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
-    const logout = async () => {
-      // ❌ Not using Supabase anymore → Remove supabase.auth.signOut()
+    // 🔥 HARD LOGOUT — kill entire React tree
+    localStorage.removeItem("token");
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("icici_connected");
 
-      // ✅ Clear backend JWT token
-      localStorage.removeItem("token");
-      localStorage.removeItem("authToken"); // in case some pages still used this
+    toast({
+      title: "Logged out",
+      description: "You've been successfully logged out",
+    });
 
-      toast({
-        title: "Logged out",
-        description: "You've been successfully logged out",
-      });
-
-      navigate("/login");
-    };
-
-    logout();
-  }, [navigate, toast]);
+    // ⚠️ MUST be replace — NOT navigate()
+    window.location.replace("/login");
+  }, [toast]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
