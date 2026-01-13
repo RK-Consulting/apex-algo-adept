@@ -154,7 +154,7 @@ export function MarketOverview() {
 
       try {
         ws.close();
-      } catch {}
+      } catch (e) {}
     };
   }, [token, iciciConnected]);
 
