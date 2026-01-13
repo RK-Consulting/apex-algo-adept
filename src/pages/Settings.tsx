@@ -83,7 +83,7 @@ const Settings = () => {
      BROKER CONNECT HANDLER - OPENS ICICI IN POPUP
   ====================================================== */
   const handleConnectBroker = async (brokerName: string) => {
-    if (!isComplete) {
+    if (brokerName == "ICICIDIRECT" && !isComplete) {
       toast({
         title: "Profile incomplete",
         description: "Please complete your profile before connecting a broker.",
