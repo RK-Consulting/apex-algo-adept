@@ -9,11 +9,6 @@ import { User, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useProfile } from "@/context/ProfileContext";
 
-const backendUrl =
-  import.meta.env.VITE_BACKEND_URL ||
-  import.meta.env.VITE_API_URL ||
-  "https://api.alphaforge.skillsifter.in";
-
 const Profile = () => {
   const { toast } = useToast();
 
@@ -24,57 +19,30 @@ const Profile = () => {
     pan: "",
   });
 
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
   const [profileLocked, setProfileLocked] = useState(false);
-  const { profile: ctxProfile, isComplete, loading } = useProfile();
 
-  /* ================= LOAD PROFILE ================= */
+  const {
+    profile: ctxProfile,
+    isComplete,
+    loading: profileLoading,
+  } = useProfile();
+
+  /* ================= LOAD PROFILE FROM CONTEXT ================= */
   useEffect(() => {
     if (!ctxProfile) return;
-  
+
     setProfile({
       full_name: ctxProfile.full_name || "",
       email: ctxProfile.email || "",
       phone: ctxProfile.phone || "",
       pan: ctxProfile.pan || "",
     });
-  
+
     if (isComplete) {
       setProfileLocked(true);
     }
   }, [ctxProfile, isComplete]);
-
-/*  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
-
-    fetch(`${backendUrl}/api/profile`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.exists) {
-          setProfile(data.profile);
-
-          // 🔒 Lock profile if already complete
-          if (data.isComplete) {
-            setProfileLocked(true);
-          }
-        }
-      })
-      .catch(() => {
-        toast({
-          title: "Error",
-          description: "Failed to load profile",
-          variant: "destructive",
-        });
-      })
-      .finally(() => setLoading(false));
-  }, []); */
 
   /* ================= SAVE PROFILE (FIRST TIME ONLY) ================= */
   const handleSave = async () => {
@@ -92,18 +60,25 @@ const Profile = () => {
 
     setSaving(true);
     try {
-      const res = await fetch(`${backendUrl}/api/profile`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          full_name: profile.full_name,
-          phone: profile.phone,
-          pan: profile.pan,
-        }),
-      });
+      const res = await fetch(
+        `${
+          import.meta.env.VITE_BACKEND_URL ||
+          import.meta.env.VITE_API_URL ||
+          "https://api.alphaforge.skillsifter.in"
+        }/api/profile`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            full_name: profile.full_name,
+            phone: profile.phone,
+            pan: profile.pan,
+          }),
+        }
+      );
 
       if (!res.ok) throw new Error();
 
@@ -113,7 +88,6 @@ const Profile = () => {
           "Profile submitted successfully. Contact admin for any changes.",
       });
 
-      // 🔒 Lock UI after successful save
       setProfileLocked(true);
     } catch {
       toast({
@@ -165,7 +139,7 @@ const Profile = () => {
           <Input
             value={profile.phone}
             readOnly={profileLocked}
-            disabled={loading}
+            disabled={profileLoading}
             onChange={(e) =>
               setProfile({ ...profile, phone: e.target.value })
             }
@@ -177,7 +151,7 @@ const Profile = () => {
           <Input
             value={profile.pan}
             readOnly={profileLocked}
-            disabled={loading}
+            disabled={profileLoading}
             onChange={(e) =>
               setProfile({ ...profile, pan: e.target.value })
             }
@@ -188,7 +162,7 @@ const Profile = () => {
           <Button
             className="md:col-span-2"
             onClick={handleSave}
-            disabled={loading || saving}
+            disabled={profileLoading || saving}
           >
             Submit & Lock Profile
           </Button>
