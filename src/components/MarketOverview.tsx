@@ -21,6 +21,7 @@ type Tick = {
   low?: number;
   change?: number;
   percentChange?: number;
+  change_percent?: number; // Added to fix TS error
 };
 
 export function MarketOverview() {
@@ -69,7 +70,7 @@ export function MarketOverview() {
       reconnectAttempts.current = 0;
 
       // Subscribe only to indices
-      indexSymbols.forEach(i => {
+      indexSymbols.forEach((i) => {
         fetch(`${backendUrl}/api/icici/stream/subscribe`, {
           method: "POST",
           headers: {
@@ -80,10 +81,11 @@ export function MarketOverview() {
             symbol: i.symbol,
             exchange: i.exchange,
           }),
-        }).catch(err => {
+        }).catch((err) => {
           console.warn("Index subscribe failed:", i.symbol, err);
         });
       });
+    }; // FIX: Added closing brace for onopen here
 
     ws.onmessage = (evt) => {
       try {
@@ -116,44 +118,42 @@ export function MarketOverview() {
     };
 
     ws.onclose = () => {
-  if (!iciciConnected) {
-    console.warn(
-      "[MarketOverview] WS closed — ICICI not connected, stopping"
-    );
-    return;
-  }
+      if (!iciciConnected) {
+        console.warn(
+          "[MarketOverview] WS closed — ICICI not connected, stopping"
+        );
+        return;
+      }
 
-  reconnectAttempts.current += 1;
+      reconnectAttempts.current += 1;
 
-  const delay = Math.min(
-    20000,
-    1500 * Math.pow(reconnectAttempts.current, 1.5)
-  );
+      const delay = Math.min(
+        20000,
+        1500 * Math.pow(reconnectAttempts.current, 1.5)
+      );
 
-  reconnectTimer.current = window.setTimeout(() => {
-    console.warn(
-      "[MarketOverview] reconnect suppressed — manual refresh only"
-    );
-  }, delay);
-};
+      reconnectTimer.current = window.setTimeout(() => {
+        console.warn(
+          "[MarketOverview] reconnect suppressed — manual refresh only"
+        );
+      }, delay);
+    };
 
-ws.onerror = (err) =>
-  console.error("[MarketOverview] WS error", err);
+    ws.onerror = (err) => console.error("[MarketOverview] WS error", err);
 
-return () => {
-  if (reconnectTimer.current) {
-    clearTimeout(reconnectTimer.current);
-    reconnectTimer.current = null;
-  }
+    return () => {
+      if (reconnectTimer.current) {
+        clearTimeout(reconnectTimer.current);
+        reconnectTimer.current = null;
+      }
 
-  try {
-    ws.close();
-  } catch (e) {
-    // intentionally ignored
-  }
-};
-}, [token, iciciConnected]);
-
+      try {
+        ws.close();
+      } catch (e) {
+        // intentionally ignored
+      }
+    };
+  }, [token, iciciConnected]);
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
