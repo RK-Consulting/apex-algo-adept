@@ -49,17 +49,16 @@ const Settings = () => {
   ====================================================== */
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      const allowedOrigin = 
+      const allowedOrigin =
         import.meta.env.VITE_BACKEND_URL ||
         import.meta.env.VITE_API_URL ||
         "https://api.alphaforge.skillsifter.in";
-      
-      // Accept messages from backend domain
+
       if (!event.origin.includes(new URL(allowedOrigin).hostname)) {
         return;
       }
-      
-      if (event.data.type === 'ICICI_CONNECTED') {
+
+      if (event.data?.type === "ICICI_CONNECTED") {
         if (event.data.success) {
           toast({
             title: "Success",
@@ -75,15 +74,15 @@ const Settings = () => {
       }
     };
 
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
   }, [toast]);
 
   /* ======================================================
-     BROKER CONNECT HANDLER - OPENS ICICI IN POPUP
+     BROKER CONNECT HANDLER — SURGICAL FIX
   ====================================================== */
   const handleConnectBroker = async (brokerName: string) => {
-    if (brokerName == "ICICIDIRECT" && !isComplete) {
+    if (brokerName === "ICICIDIRECT" && !isComplete) {
       toast({
         title: "Profile incomplete",
         description: "Please complete your profile before connecting a broker.",
@@ -93,12 +92,15 @@ const Settings = () => {
     }
 
     if (brokerName === "ICICIDIRECT") {
-      const backendUrl = 
+      const backendUrl =
         import.meta.env.VITE_BACKEND_URL ||
         import.meta.env.VITE_API_URL ||
         "https://api.alphaforge.skillsifter.in";
-      
-      const token = localStorage.getItem("authToken") || localStorage.getItem("token");
+
+      const token =
+        localStorage.getItem("authToken") ||
+        localStorage.getItem("token");
+
       if (!token) {
         toast({
           title: "Session expired",
@@ -108,46 +110,50 @@ const Settings = () => {
         return;
       }
 
-      try {
-        // Get ICICI login URL from backend
-        const response = await fetch(`${backendUrl}/api/icici/broker/connect`, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json"
-          }
+      /* 🔥 POPUP MUST OPEN BEFORE AWAIT 🔥 */
+      const popup = window.open(
+        "about:blank",
+        "ICICI_Login",
+        "width=600,height=700,scrollbars=yes,resizable=yes,location=no,menubar=no,status=no,toolbar=no"
+      );
+
+      if (!popup) {
+        toast({
+          title: "Popup blocked",
+          description: "Please allow popups for this site and try again",
+          variant: "destructive",
         });
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `${backendUrl}/api/icici/broker/connect`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
 
         const data = await response.json();
-        
-        if (!response.ok) {
+
+        if (!response.ok || !data.redirectUrl) {
+          popup.close();
           throw new Error(data.error || "Failed to connect to ICICI");
         }
 
-        // Open ICICI login in POPUP window
-        if (data.redirectUrl) {
-          const popup = window.open(
-            data.redirectUrl, 
-            'ICICI_Login',
-            'width=600,height=700,scrollbars=yes,resizable=yes,location=no,menubar=no,status=no,toolbar=no'
-          );
-          
-          if (!popup || popup.closed || typeof popup.closed === 'undefined') {
-            toast({
-              title: "Popup Blocked",
-              description: "Please allow popups for this site and try again",
-              variant: "destructive",
-            });
-            return;
-          }
+        /* ✅ NAVIGATE EXISTING POPUP */
+        popup.location.href = data.redirectUrl;
 
-          toast({
-            title: "ICICI Login Opened",
-            description: "Complete your login in the popup window",
-          });
-        }
-        
+        toast({
+          title: "ICICI Login Opened",
+          description: "Complete your login in the popup window",
+        });
       } catch (error: any) {
+        popup.close();
         toast({
           title: "Connection failed",
           description: error.message,
@@ -155,7 +161,6 @@ const Settings = () => {
         });
       }
     } else {
-      // Other brokers use dialog
       setSelectedBroker(brokerName);
       setBrokerDialogOpen(true);
     }
@@ -184,12 +189,10 @@ const Settings = () => {
                 <TabsTrigger value="api">API Keys</TabsTrigger>
               </TabsList>
 
-              {/* ================= PROFILE ================= */}
               <TabsContent value="profile">
                 <Profile />
               </TabsContent>
 
-              {/* ================= BROKER ================= */}
               <TabsContent value="broker">
                 <Card>
                   <CardHeader>
@@ -221,7 +224,6 @@ const Settings = () => {
                 </Card>
               </TabsContent>
 
-              {/* ================= NOTIFICATIONS ================= */}
               <TabsContent value="notifications">
                 <Card>
                   <CardHeader>
@@ -242,7 +244,6 @@ const Settings = () => {
                 </Card>
               </TabsContent>
 
-              {/* ================= SECURITY ================= */}
               <TabsContent value="security">
                 <Card>
                   <CardHeader>
@@ -259,7 +260,6 @@ const Settings = () => {
                 </Card>
               </TabsContent>
 
-              {/* ================= API KEYS ================= */}
               <TabsContent value="api">
                 <ApiKeys />
               </TabsContent>
@@ -268,13 +268,11 @@ const Settings = () => {
         </main>
       </div>
 
-      {/* ================= BROKER DIALOG (NON-ICICI ONLY) ================= */}
       <BrokerConnectionDialog
         open={brokerDialogOpen}
         onOpenChange={setBrokerDialogOpen}
         brokerName={selectedBroker}
       />
-     
     </SidebarProvider>
   );
 };
