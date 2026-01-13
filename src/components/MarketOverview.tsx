@@ -44,12 +44,13 @@ export function MarketOverview() {
   useEffect(() => {
     if (!token || !iciciConnected) {
       console.warn("ICICI not connected → skipping WS MarketOverview");
+      reconnectAttempts.current = 0;
       return;
     }
 
     const wsScheme = backendUrl.startsWith("https") ? "wss" : "ws";
     const host = new URL(backendUrl).host;
-    const wsUrl = `${wsScheme}://${host}/ws/icici/stream?token=${encodeURIComponent(
+    const wsUrl = `${wsScheme}://${host}/ws/icici?token=${encodeURIComponent(
       token
     )}`;
 
@@ -68,7 +69,7 @@ export function MarketOverview() {
       reconnectAttempts.current = 0;
 
       // Subscribe only to indices
-      indexSymbols.forEach(async (i) => {
+      indexSymbols.forEach(i => {
         await fetch(`${backendUrl}/api/icici/stream/subscribe`, {
           method: "POST",
           headers: {
@@ -79,7 +80,7 @@ export function MarketOverview() {
             symbol: i.symbol,
             exchange: i.exchange,
           }),
-        });
+        }).catch(() => {});
       });
     };
 
@@ -114,21 +115,19 @@ export function MarketOverview() {
     };
 
     ws.onclose = () => {
-      console.warn("[MarketOverview] WS closed");
-      reconnectAttempts.current++;
+      if (!iciciConnected) {
+        console.warn("[MarketOverview] WS closed — ICICI not connected, stopping");
+        return;
+      }
+      reconnectAttempts.current += 1;
       const delay = Math.min(
         20000,
         1500 * reconnectAttempts.current ** 1.5
       );
 
       reconnectTimer.current = window.setTimeout(() => {
-        console.log("[MarketOverview] reconnecting…");
-        reconnectAttempts.current--;
-        try {
-          wsRef.current = new WebSocket(wsUrl);
-        } catch {
-          setTimeout(() => window.location.reload(), 2000);
-        }
+        console.warn("[MarketOverview] reconnect suppressed — manual refresh only");
+        //reconnectAttempts.current--;
       }, delay);
     };
 
@@ -141,7 +140,7 @@ export function MarketOverview() {
       }
 
       // Unsubscribe on unmount
-      indexSymbols.forEach(async (i) => {
+     /* indexSymbols.forEach(async (i) => {
         await fetch(`${backendUrl}/api/icici/stream/unsubscribe`, {
           method: "POST",
           headers: {
@@ -150,7 +149,7 @@ export function MarketOverview() {
           },
           body: JSON.stringify({ symbol: i.symbol, exchange: i.exchange }),
         });
-      });
+      });*/
 
       try {
         ws?.close();
