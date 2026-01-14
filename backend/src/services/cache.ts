@@ -1,33 +1,36 @@
 // backend/src/services/cache.ts
-import Redis from "ioredis";
 import redisConfig from "../config/redis.js";
 import debug from "debug";
 import type { IciciSession } from "./sessionService.js";
+import type { MarketTick } from "../types/marketTick.js"; // Standardize your types
 
 const log = debug("alphaforge:cache");
-
-// Use the singleton redis instance from config
 const redis = redisConfig;
 
-redis.on("connect", () => {
-  log("Redis connected");
-});
-
-redis.on("error", (err: Error) => {
-  log("Redis error: %s", err.message);
-});
-
-// -----------------------------
-// ICICI SESSION CACHE
-// -----------------------------
-export async function getCachedSession(
-  userId: string
-): Promise<IciciSession | null> {
+/* ======================================================
+   HEALTH & DIAGNOSTICS
+====================================================== */
+export async function isCacheAvailable(): Promise<boolean> {
   try {
-    const cached = await redis.get(`icici:session:${userId}`);  // ← Fixed: removed backticks from string
+    const ping = await redis.ping();
+    return ping === "PONG";
+  } catch {
+    return false;
+  }
+}
+
+/* ======================================================
+   ICICI SESSION CACHE
+   Note: Used by SessionService to maintain "Source of Truth"
+====================================================== */
+const SESSION_PREFIX = "icici:session:";
+
+export async function getCachedSession(userId: string): Promise<IciciSession | null> {
+  try {
+    const cached = await redis.get(`${SESSION_PREFIX}${userId}`);
     return cached ? (JSON.parse(cached) as IciciSession) : null;
   } catch (err) {
-    log("Error getting cached session for user %s", userId);
+    log("❌ Cache Read Error [User: %s]: %o", userId, err);
     return null;
   }
 }
@@ -35,38 +38,42 @@ export async function getCachedSession(
 export async function cacheSession(
   userId: string,
   session: IciciSession,
-  ttlSeconds: number
+  ttlSeconds: number = 86400 // Default 24h
 ): Promise<void> {
   try {
     await redis.set(
-      `icici:session:${userId}`,
+      `${SESSION_PREFIX}${userId}`,
       JSON.stringify(session),
       "EX",
       ttlSeconds
     );
   } catch (err) {
-    log("Error caching session for user %s", userId);
+    log("❌ Cache Write Error [User: %s]", userId);
   }
 }
 
 export async function invalidateSessionCache(userId: string): Promise<void> {
   try {
-    await redis.del(`icici:session:${userId}`);  // ← Fixed: removed backticks from string
+    await redis.del(`${SESSION_PREFIX}${userId}`);
+    log("🗑️ Cache cleared for user: %s", userId);
   } catch (err) {
-    log("Error invalidating session cache for user %s", userId);
+    log("❌ Cache Del Error [User: %s]", userId);
   }
 }
 
-// -----------------------------
-// MARKET DATA CACHE (SHORT TTL)
-// -----------------------------
+/* ======================================================
+   MARKET DATA CACHE (HFT-Grade Short TTL)
+   Ensures the Aggregator doesn't hammer ICICI for static prices
+====================================================== */
+const QUOTE_PREFIX = "quote:";
+
 export async function getCachedQuote(
   symbol: string,
-  exchange: string
-): Promise<any | null> {
+  exchange: string = "NSE"
+): Promise<MarketTick | null> {
   try {
-    const cached = await redis.get(`quote:${exchange}:${symbol}`);  // ← Fixed: removed backticks from string
-    return cached ? JSON.parse(cached) : null;
+    const cached = await redis.get(`${QUOTE_PREFIX}${exchange}:${symbol}`);
+    return cached ? (JSON.parse(cached) as MarketTick) : null;
   } catch {
     return null;
   }
@@ -74,18 +81,19 @@ export async function getCachedQuote(
 
 export async function cacheQuote(
   symbol: string,
-  exchange: string,
-  quote: any,
-  ttlSeconds = 5
+  exchange: string = "NSE",
+  quote: MarketTick,
+  ttlSeconds = 2 // Reduced TTL for active market hours
 ): Promise<void> {
   try {
+    // Pipeline can be used here if caching multiple symbols at once
     await redis.set(
-      `quote:${exchange}:${symbol}`,
+      `${QUOTE_PREFIX}${exchange}:${symbol}`,
       JSON.stringify(quote),
       "EX",
       ttlSeconds
     );
   } catch {
-    /* silent */
+    /* Silent fail - system falls back to Live WS or REST */
   }
 }
