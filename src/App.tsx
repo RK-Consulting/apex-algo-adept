@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ProfileProvider } from "@/context/ProfileContext";
+import { IciciProvider } from "@/context/IciciContext"; // Added Context
 
 // Pages
 import Index from "./pages/Index";
@@ -23,8 +24,6 @@ import Signup from "./pages/Signup";
 const queryClient = new QueryClient();
 
 const App = () => {
-  // DELETED: All Option 1 ICICI event listeners
-
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
@@ -38,15 +37,20 @@ const App = () => {
             <Route path="/signup" element={<Signup />} />
             
             {/* ---------- PROTECTED ROUTES ---------- */}
+            {/* Surgical Fix: Wrapped all protected routes in Profile & ICICI Providers.
+                This ensures global state for the Aggregator and Connector.
+            */}
             <Route
-              path="/"
               element={
                 <ProtectedRoute>
                   <ProfileProvider>
-                    <Index />
+                    <IciciProvider>
+                      <Index />
+                    </IciciProvider>
                   </ProfileProvider>
                 </ProtectedRoute>
               }
+              path="/"
             />
 
             <Route
@@ -54,7 +58,9 @@ const App = () => {
               element={
                 <ProtectedRoute>
                   <ProfileProvider>
-                    <Markets />
+                    <IciciProvider>
+                      <Markets />
+                    </IciciProvider>
                   </ProfileProvider>
                 </ProtectedRoute>
               }
@@ -65,7 +71,9 @@ const App = () => {
               element={
                 <ProtectedRoute>
                   <ProfileProvider>
-                    <Strategies />
+                    <IciciProvider>
+                      <Strategies />
+                    </IciciProvider>
                   </ProfileProvider>
                 </ProtectedRoute>
               }
@@ -76,7 +84,9 @@ const App = () => {
               element={
                 <ProtectedRoute>
                   <ProfileProvider>
-                    <Portfolio />
+                    <IciciProvider>
+                      <Portfolio />
+                    </IciciProvider>
                   </ProfileProvider>
                 </ProtectedRoute>
               }
@@ -87,7 +97,9 @@ const App = () => {
               element={
                 <ProtectedRoute>
                   <ProfileProvider>
-                    <Analytics />
+                    <IciciProvider>
+                      <Analytics />
+                    </IciciProvider>
                   </ProfileProvider>
                 </ProtectedRoute>
               }
@@ -98,7 +110,9 @@ const App = () => {
               element={
                 <ProtectedRoute>
                   <ProfileProvider>
-                    <Settings />
+                    <IciciProvider>
+                      <Settings />
+                    </IciciProvider>
                   </ProfileProvider>
                 </ProtectedRoute>
               }
@@ -109,7 +123,9 @@ const App = () => {
               element={
                 <ProtectedRoute>
                   <ProfileProvider>
-                    <StockDetails />
+                    <IciciProvider>
+                      <StockDetails />
+                    </IciciProvider>
                   </ProfileProvider>
                 </ProtectedRoute>
               }
