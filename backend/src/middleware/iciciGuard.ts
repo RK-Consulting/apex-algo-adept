@@ -1,12 +1,12 @@
 // backend/src/middleware/iciciGuard.ts
 
 /**
- * ICICI Guard Middleware
- *
- * Enforces ICICI connection finite-state machine (FSM)
- * Ensures multi-user isolation and prevents session race conditions.
- *
- * FSM States: IDLE -> LOGIN_INITIATED -> SESSION_ACTIVE (or FAILED)
+ * ICICI Guard Middleware - Institutional Grade
+ * * Objectives:
+ * 1. Connector: Ensures AI-strategies only fire if SESSION_ACTIVE.
+ * 2. Aggregator: Prevents dashboard sync if session is stale/IDLE.
+ * 3. Security: Handles the apisession -> session_token handshake.
+ * * FSM States: IDLE -> LOGIN_INITIATED -> CALLBACK_RECEIVED -> SESSION_ACTIVE (or FAILED)
  */
 
 import { Response, NextFunction } from "express";
@@ -21,7 +21,7 @@ export type IciciGuardMode = "LOGIN" | "CALLBACK" | "CONNECT";
 
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCK_DURATION_MIN = 15;
-const STALE_INITIATION_MIN = 10; // State expires if no callback received in 10 mins
+const STALE_INITIATION_MIN = 10; 
 
 export const iciciGuard =
   (mode: IciciGuardMode) =>
@@ -29,10 +29,7 @@ export const iciciGuard =
     const userId = req.user?.userId;
 
     if (!userId) {
-      return res.status(401).json({
-        success: false,
-        error: "Unauthenticated",
-      });
+      return res.status(401).json({ success: false, error: "Unauthenticated" });
     }
 
     try {
@@ -77,7 +74,7 @@ export const iciciGuard =
 
       let fsm = fsmResult.rows[0];
 
-      // Handle Stale 'LOGIN_INITIATED' state (prevent permanent lockout if user closes popup)
+      // Reset stale LOGIN_INITIATED states (user closed the login popup)
       if (fsm?.state === 'LOGIN_INITIATED') {
         const lastUpdate = new Date(fsm.updated_at).getTime();
         const now = new Date().getTime();
@@ -91,6 +88,7 @@ export const iciciGuard =
         }
       }
 
+      // Check for temporary lockout
       if (fsm?.locked_until && new Date(fsm.locked_until) > new Date()) {
         return res.status(423).json({
           success: false,
@@ -105,7 +103,7 @@ export const iciciGuard =
       const activeSession = await SessionService.getInstance().getSession(userId);
       const hasActiveSession = !!activeSession?.session_token;
 
-      // Force FSM back to FAILED if DB thinks it's active but Redis/Memory session is gone
+      // Self-healing: If DB thinks session is active but Redis/Memory token is missing
       if (fsm?.state === "SESSION_ACTIVE" && !hasActiveSession) {
         await query(
           `UPDATE icici_login_attempts SET state = 'FAILED', updated_at = now() WHERE user_id = $1`,
@@ -118,7 +116,6 @@ export const iciciGuard =
           4) MODE-SPECIFIC ENFORCEMENT
          ====================================================== */
 
-      /* ---------- LOGIN (Initiating the process) ---------- */
       if (mode === "LOGIN") {
         if (hasActiveSession) {
           return res.status(409).json({ success: false, message: "Already connected" });
@@ -136,18 +133,16 @@ export const iciciGuard =
           return res.status(423).json({ success: false, code: "ICICI_LOCKED" });
         }
 
-        // Transition to INITIATED
         await query(
           `INSERT INTO icici_login_attempts (user_id, state, attempts, updated_at)
-           VALUES ($1, 'LOGIN_INITIATED', 1, now())
+           VALUES ($1, 'LOGIN_INITIATED', $2, now())
            ON CONFLICT (user_id) DO UPDATE SET state='LOGIN_INITIATED', attempts=$2, updated_at=now()`,
           [userId, nextAttempts]
         );
       }
 
-      /* ---------- CALLBACK (ICICI calling us back) ---------- */
       if (mode === "CALLBACK") {
-        // We MUST allow LOGIN_INITIATED to pass through to the actual logic
+        // Only allow progression if we recently initiated a login
         if (fsm?.state !== "LOGIN_INITIATED") {
           return res.status(400).json({
             success: false,
@@ -155,15 +150,26 @@ export const iciciGuard =
             message: "No active login initiation found for this callback."
           });
         }
+        
+        // Atomically lock the state to prevent duplicate callback processing
+        await query(
+            `UPDATE icici_login_attempts SET state = 'CALLBACK_RECEIVED', updated_at = now() WHERE user_id = $1`,
+            [userId]
+        );
       }
 
-      /* ---------- CONNECT (General Check) ---------- */
       if (mode === "CONNECT") {
-        if (hasActiveSession) {
-          return res.json({ success: true, connected: true, message: "Connected" });
+        // Enforce active session for AI Execution and Aggregator Analytics
+        if (!hasActiveSession || fsm?.state !== "SESSION_ACTIVE") {
+          return res.status(412).json({ 
+            success: false, 
+            code: "ICICI_NOT_CONNECTED",
+            message: "ICICI session not active. Please reconnect." 
+          });
         }
       }
 
+      // If all checks pass, move to the controller
       next();
     } catch (err: any) {
       log("ICICI guard failure: %s", err.message);
