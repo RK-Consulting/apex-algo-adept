@@ -1,3 +1,4 @@
+// backend/src/services/iciciBreezeApi.ts
 /**
  * ICICI Breeze REST API Gateway - Institutional-Grade Integration
  *
@@ -79,34 +80,9 @@ export async function breezeRequest<T = any>(
       throw new Error("ICICI runtime session invalid or missing");
     }
 
-    /* --------------------------------------------------
-       RUNTIME MATERIALIZATION
-    -------------------------------------------------- */
     const runtimeAppKey = runtimeSession.api_key;
     const runtimeAppSecret = runtimeSession.api_secret;
     const runtimeSessionToken = runtimeSession.session_token;
-
-    /* --------------------------------------------------
-       CUSTOMER DETAILS (SPECIAL CASE: POST)
-    -------------------------------------------------- */
-    if (endpoint.includes("customerdetails")) {
-      const response = await iciciCircuitBreaker.execute(() =>
-        retryWithBackoff(() =>
-          breezeAxios.post(endpoint, {
-            SessionToken: payload.SessionToken,
-            AppKey: runtimeAppKey, // runtime → API mapping
-          })
-        )
-      );
-
-      if (response.data?.Status !== 200) {
-        throw new Error(
-          `CustomerDetails error: ${response.data?.Error || "Unknown"}`
-        );
-      }
-
-      return response.data;
-    }
 
     /* --------------------------------------------------
        CHECKSUM COMPUTATION (RUNTIME SECRET)
@@ -145,10 +121,17 @@ export async function breezeRequest<T = any>(
       )
     );
 
+    /* --------------------------------------------------
+       Surgical Fix: Handle ICICI "Success with Error"
+    -------------------------------------------------- */
     if (response.data?.Status && response.data.Status !== 200) {
-      throw new Error(
-        `Breeze API error: ${response.data.Error || "Unknown"}`
-      );
+      const errorMsg = response.data.Error || "Unknown Breeze Error";
+      
+      // If ICICI says session is expired within a 200 OK body
+      if (errorMsg.includes("Session") || errorMsg.includes("Token")) {
+        await SessionService.getInstance().invalidateSession(userId);
+      }
+      throw new Error(`Breeze API error: ${errorMsg}`);
     }
 
     if (process.env.NODE_ENV !== "production") {
@@ -164,21 +147,18 @@ export async function breezeRequest<T = any>(
     if (axios.isAxiosError(axiosError)) {
       const status = axiosError.response?.status;
 
+      /* --------------------------------------------------
+         Surgical Fix: Handle HTTP 401/403 Specifically
+      -------------------------------------------------- */
       if (status === 401) {
         await SessionService.getInstance().invalidateSession(userId);
-        throw new Error(
-          "ICICI session expired. Re-authentication required."
-        );
+        throw new Error("ICICI session expired. Re-authentication required.");
       }
 
       if (status === 403) {
         throw new Error(
           "ICICI access denied (403).\n" +
-            "Possible causes:\n" +
-            "• Server IP not whitelisted\n" +
-            "• Invalid API credentials\n" +
-            "• Checksum mismatch\n" +
-            "• Session token invalid"
+            "Possible causes: IP Whitelisting, Invalid Credentials, or Checksum Mismatch."
         );
       }
     }
@@ -187,104 +167,19 @@ export async function breezeRequest<T = any>(
   }
 }
 
-/* export async function generateIciciSession(
-  userId: string,
-  appKey: string,
-  appSecret: string,
-  apisession: string
-) {
-  console.log("🟡 generateIciciSession() ENTER");
-  console.log("➡️ userId:", userId);
-  console.log("➡️ appKey present:", !!appKey);
-  console.log("➡️ appSecret present:", !!appSecret);
-  console.log("➡️ apisession:", apisession);
-  const timestamp = getTimestamp();
-  const payload = {}; // CHANGED: Empty payload - session token goes in header only
-  console.log("➡️ timestamp:", timestamp);
-  console.log("➡️ payload:", payload);
-  const checksum = calculateChecksum(timestamp, payload, appSecret);
-  console.log("➡️ checksum:", checksum);
-  try {
-    console.log("🟡 Calling ICICI /api/v1/session");
-    const response = await breezeAxios.post(
-      "/customer/customerdetails",
-      payload,
-      {
-        headers: {
-          "X-Timestamp": timestamp,
-          "X-AppKey": appKey,
-          //"X-SessionToken": apisession,     // CHANGED: Use X-SessionToken (standard header name)
-          "X-Checksum": checksum,           // CHANGED: Remove backticks and template literal
-          "X-Request-ID": crypto.randomUUID()
-        }
-      }
-    );
-    console.log("🟢 ICICI session API RESPONSE:");
-    console.log("➡️ status:", response.status);
-    console.log("➡️ data:", JSON.stringify(response.data, null, 2));
-    if (response.data?.Status !== 200) {
-      console.error("❌ ICICI returned non-200 Status");
-      throw new Error(response.data?.Error || "Session generation failed");
-    }
-    const sessionToken = response.data?.Success?.session_token;
-    console.log("➡️ Extracted session_token:", sessionToken);
-    return sessionToken;
-  } catch (err: any) {
-    console.error("❌ generateIciciSession ERROR");
-    if (err.response) {
-      console.error("➡️ ICICI ERROR STATUS:", err.response.status);
-      console.error("➡️ ICICI ERROR DATA:", err.response.data);
-    }
-    console.error("➡️ Error message:", err.message);
-    throw err;
-  }
-}
-
+/* ======================================================
+   SESSION GENERATION (Institutional Handshake)
+   Surgically cleaned to use correct JSONPostData format
+====================================================== */
 export async function generateIciciSession(
-  userId: string,
+  userId: string,     // Your ICICI Trading ID (e.g., "NAGARROU")
   appKey: string,
   appSecret: string,
-  apisession: string
+  apisession: string  // Token from redirect URL
 ) {
   const timestamp = getTimestamp();
 
-  const payload = {
-    api_session: apisession
-  };
-
-  const checksum = calculateChecksum(
-    timestamp,
-    payload,
-    appSecret
-  );
-
-  const response = await breezeAxios.post(
-    "/apiuser/session",
-    payload,
-    {
-      headers: {
-        "X-AppKey": appKey,
-        "X-Timestamp": timestamp,
-        "X-Checksum": checksum
-      }
-    }
-  );
-
-  if (response.data?.Status !== 200) {
-    throw new Error(response.data?.Error || "Session generation failed");
-  }
-
-  return response.data.Success.session_token;
-} */
-export async function generateIciciSession(
-  userId: string,      // Your ICICI Trading ID (e.g., "NAGARROU")
-  appKey: string,
-  appSecret: string,
-  apisession: string   // The token received from the redirect URL
-) {
-  const timestamp = getTimestamp(); // MUST BE "DD-Mon-yyyy hh:mm:ss"
-
-  // 1. Manually stringify the inner data (Case Sensitive!)
+  // 1. Manually stringify inner data (Case Sensitive for ICICI)
   const innerData = JSON.stringify({
     UserID: userId,
     API_Session: apisession,
@@ -294,11 +189,11 @@ export async function generateIciciSession(
   // 2. Checksum = timestamp + innerData (the string) + secret
   const checksum = calculateChecksum(timestamp, innerData, appSecret);
 
-  // 3. Send the request
+  // 3. Request permanent SessionToken
   const response = await breezeAxios.post("/customer/customerdetails", {
     AppKey: appKey,
     time_stamp: timestamp,
-    JSONPostData: innerData, // Sending the string here
+    JSONPostData: innerData,
     Checksum: checksum
   });
 
@@ -306,11 +201,9 @@ export async function generateIciciSession(
     throw new Error(response.data?.Error || "Session generation failed");
   }
 
-  // NOTE: This returns 'SessionToken', which is what you use for all future calls
+  // Returns the permanent SessionToken for all future calls
   return response.data.Success.SessionToken;
 }
-
-
 
 /* ======================================================
    LOGIN URL (PURE API CONTRACT)
@@ -323,50 +216,24 @@ export function getBreezeLoginUrl(runtimeAppKey: string): string {
 
 /* ======================================================
    CUSTOMER DETAILS HELPER (AUTH FLOW ONLY)
-   SPECIAL: Does NOT use session (called during login)
 ====================================================== */
-
 export async function getCustomerDetails(appKey: string, appSecret: string, apisession: string) {
-  const timestamp = getTimestamp(); // Now in DD-Mon-yyyy format
+  const timestamp = getTimestamp();
   
-  // 1. Prepare the inner data and stringify it manually
   const innerData = JSON.stringify({
-    // UserID: "YOUR_USER_ID", // This must be known or passed
-    UserID: "NAGARROU",
+    UserID: "NAGARROU", // Consider making this dynamic if needed
     API_Session: apisession,
     APPKey: appKey
   });
 
-  // 2. Calculate checksum using the stringified version
   const checksum = calculateChecksum(timestamp, innerData, appSecret);
 
-  // 3. Send to ICICI
   const response = await breezeAxios.post("/customer/customerdetails", {
     AppKey: appKey,
     time_stamp: timestamp,
-    JSONPostData: innerData, // Sending the string, not the object
+    JSONPostData: innerData,
     Checksum: checksum
   });
   
   return response.data;
 }
-/*  =====================================================
-export async function getCustomerDetails(
-  appKey: string,
-  sessionToken: string // <--- Changed from apisession
-) {
-  const requestId = crypto.randomUUID();
-  
-  // Note: CustomerDetails is one of the few endpoints that 
-  // expects credentials in the BODY, not just headers.
-  return await breezeAxios.post(
-    "/api/v1/customerdetails",
-    {
-      SessionToken: sessionToken,
-      AppKey: appKey,
-    },
-    {
-      headers: { "X-Request-ID": requestId }
-    }
-  );
-} */
