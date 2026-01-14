@@ -1,4 +1,107 @@
-/**
+// backend/src/services/iciciRealtime.ts
+
+/* ... imports remain the same ... */
+
+  /* ======================================================
+      START USER STREAM
+  ====================================================== */
+  async startUserStream(
+    userId: string,
+    onTick: (tick: MarketTick) => void
+  ): Promise<void> {
+    if (this.streams.has(userId)) return;
+
+    /* ------------------------------
+        RUNTIME SESSION (EXPLICIT)
+        Refined: Now pulls from our institutional session service
+    ------------------------------ */
+    const runtimeSession =
+      await SessionService.getInstance().getSessionOrThrow(userId);
+
+    const runtimeAppKey = runtimeSession.api_key;
+    const runtimeSessionToken = runtimeSession.session_token;
+
+    /* ------------------------------
+        WEBSOCKET INIT
+        Note: ICICI Breeze WS usually requires query params for auth 
+        rather than headers, but your header contract is preserved.
+    ------------------------------ */
+    const ws = new WebSocket(this.WS_URL, {
+      headers: {
+        "X-App-Key": runtimeAppKey,
+        "X-SessionToken": runtimeSessionToken,
+      },
+    });
+
+    const stream: UserStream = {
+      userId,
+      ws,
+      symbols: new Set(),
+      reconnectAttempts: 0,
+    };
+
+    /* ------------------------------
+        WS EVENTS
+    ------------------------------ */
+    ws.on("open", () => {
+      log("Realtime WS open for user %s", userId);
+      stream.reconnectAttempts = 0;
+      
+      // ICICI Breeze Handshake: Subscribe to basic symbols if needed
+      // Most ICICI streams require an authentication JSON message immediately
+      ws.send(JSON.stringify({
+        action: "authenticate",
+        app_key: runtimeAppKey,
+        session_token: runtimeSessionToken
+      }));
+      
+      this.startHeartbeat(stream);
+    });
+
+    /* ... ws.on message remains the same ... */
+
+    ws.on("close", (code, reason) => {
+      log("Realtime WS closed for user %s (Code: %d)", userId, code);
+      this.clearHeartbeat(stream);
+      
+      // SURGICAL FIX: Only reconnect if the session hasn't been intentionally invalidated
+      SessionService.getInstance().hasActiveSession(userId).then(active => {
+        if (active) {
+            this.reconnect(userId, onTick);
+        } else {
+            log("Session invalidated for user %s, skipping reconnect", userId);
+            this.streams.delete(userId);
+        }
+      });
+    });
+
+    /* ... remaining event handlers remain the same ... */
+    
+    this.streams.set(userId, stream);
+  }
+
+  /* ... subscribe/unsubscribe logic remains the same ... */
+
+  /* ======================================================
+      RECONNECT STRATEGY
+  ====================================================== */
+  private reconnect(
+    userId: string,
+    onTick: (tick: MarketTick) => void
+  ): void {
+    const stream = this.streams.get(userId);
+    if (!stream) return;
+
+    if (stream.reconnectAttempts >= this.MAX_RETRIES) {
+      errLog("Max WS retries reached for user %s", userId);
+      // FSM INTEGRATION: Notify SessionService that the connection has failed
+      SessionService.getInstance().invalidateSession(userId).catch(() => {});
+      this.streams.delete(userId);
+      return;
+    }
+
+    /* ... exponential backoff logic remains the same ... */
+  }/**
  * ICICI Realtime Service — System-Engineered, RTOS-Grade
  *
  * Design Guarantees:
