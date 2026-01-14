@@ -18,21 +18,23 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   brokerName: string;
+  onSuccess?: () => void;
 }
 
 export function BrokerConnectionDialog({
   open,
   onOpenChange,
   brokerName,
+  onSuccess,
 }: Props) {
   /* =======================================================
-     GUI INPUT STATE (USER SCOPE)
+      GUI INPUT STATE
   ======================================================= */
   const [userInputAppKey, setUserInputAppKey] = useState("");
   const [userInputAppSecret, setUserInputAppSecret] = useState("");
 
   /* =======================================================
-     UI RUNTIME STATE
+      UI RUNTIME STATE
   ======================================================= */
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
@@ -43,13 +45,13 @@ export function BrokerConnectionDialog({
     "https://api.alphaforge.skillsifter.in";
 
   /* =======================================================
-     SUBMIT HANDLER
+      SUBMIT HANDLER
   ======================================================= */
   const handleConnect = async () => {
     if (isSubmitting) return; // prevent double-submit
 
     /* ------------------------------
-       VALIDATION (GUI SCOPE)
+        VALIDATION
     ------------------------------ */
     if (!userInputAppKey.trim()) {
       toast({
@@ -69,7 +71,8 @@ export function BrokerConnectionDialog({
       return;
     }
 
-    const authToken = localStorage.getItem("token");
+    // Using auth_token to match your App.tsx / ProtectedRoute logic
+    const authToken = localStorage.getItem("auth_token");
     if (!authToken) {
       toast({
         title: "Session expired",
@@ -83,7 +86,7 @@ export function BrokerConnectionDialog({
 
     try {
       /* ------------------------------
-         REQUEST PAYLOAD (BOUNDARY)
+          API CALL (CREDENTIAL STORAGE)
       ------------------------------ */
       const response = await fetch(`${backendUrl}/api/credentials/store`, {
         method: "POST",
@@ -93,12 +96,13 @@ export function BrokerConnectionDialog({
         },
         body: JSON.stringify({
           broker_name: brokerName.toUpperCase(),
-          app_key: userInputAppKey,        // explicit mapping
-          app_secret: userInputAppSecret,  // explicit mapping
+          app_key: userInputAppKey,
+          app_secret: userInputAppSecret,
         }),
       });
 
       const responseBody = await response.json();
+      
       if (!response.ok) {
         throw new Error(
           responseBody?.error || "Failed to save credentials"
@@ -107,22 +111,22 @@ export function BrokerConnectionDialog({
 
       toast({
         title: "Success",
-        description: `${brokerName} credentials saved`,
+        description: `${brokerName} credentials saved successfully`,
       });
 
       /* ------------------------------
-         CLEAR SENSITIVE INPUT
+          CLEANUP & REFRESH
       ------------------------------ */
       setUserInputAppKey("");
       setUserInputAppSecret("");
       onOpenChange(false);
+      
+      if (onSuccess) {
+        onSuccess();
+      }
     } catch (err: any) {
-      // Defensive cleanup
-      setUserInputAppKey("");
-      setUserInputAppSecret("");
-
       toast({
-        title: "Error",
+        title: "Connection Error",
         description: err.message,
         variant: "destructive",
       });
@@ -137,14 +141,17 @@ export function BrokerConnectionDialog({
         <DialogHeader>
           <DialogTitle>Connect to {brokerName}</DialogTitle>
           <DialogDescription>
-            Credentials are encrypted and stored securely on the server.
+            Enter your API credentials. These are encrypted and stored 
+            securely on the server to enable automated trading.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          <div>
-            <Label>API Key *</Label>
+          <div className="space-y-2">
+            <Label htmlFor="app-key">API Key *</Label>
             <Input
+              id="app-key"
+              placeholder="Enter your App Key"
               value={userInputAppKey}
               onChange={(e) => setUserInputAppKey(e.target.value)}
               disabled={isSubmitting}
@@ -152,10 +159,12 @@ export function BrokerConnectionDialog({
             />
           </div>
 
-          <div>
-            <Label>API Secret *</Label>
+          <div className="space-y-2">
+            <Label htmlFor="app-secret">API Secret *</Label>
             <Input
+              id="app-secret"
               type="password"
+              placeholder="Enter your App Secret"
               value={userInputAppSecret}
               onChange={(e) => setUserInputAppSecret(e.target.value)}
               disabled={isSubmitting}
@@ -164,7 +173,7 @@ export function BrokerConnectionDialog({
           </div>
         </div>
 
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end gap-3">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
@@ -174,10 +183,14 @@ export function BrokerConnectionDialog({
           </Button>
 
           <Button onClick={handleConnect} disabled={isSubmitting}>
-            {isSubmitting && (
-              <Loader2 className="animate-spin mr-2 h-4 w-4" />
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              "Connect Broker"
             )}
-            Connect
           </Button>
         </div>
       </DialogContent>
