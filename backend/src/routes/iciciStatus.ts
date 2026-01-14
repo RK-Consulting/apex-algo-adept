@@ -16,63 +16,98 @@
  * - Server layer → server*
  * - Runtime      → SessionService only
  */
+// backend/src/routes/iciciBroker.ts
 
 import { Router } from "express";
+import debug from "debug";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
+import { iciciGuard } from "../middleware/iciciGuard.js";
 import { query } from "../config/database.js";
-import { SessionService } from "../services/sessionService.js";
+import { IciciSessionFSM } from "../services/iciciSessionFSM.js"; // Import FSM
+import { getBreezeLoginUrl } from "../services/iciciBreezeApi.js"; // Use centralized URL generator
 
-export const iciciStatusRouter = Router();
+const router = Router();
+const log = debug("alphaforge:icici:broker");
 
-/**
- * GET /api/icici/status
- */
-iciciStatusRouter.get("/", authenticateToken, async (req: AuthRequest, res) => {
-  try {
-    /* ------------------------------
-       SERVER CONTEXT
-    ------------------------------ */
-    const serverUserId = req.user!.userId;
-    const serverBrokerName = "ICICI";
+/* ======================================================
+   1) CHECK ICICI CONNECTION STATUS
+   Surgical Fix: Returns FSM State + Readiness
+   ====================================================== */
+router.get(
+  "/status",
+  authenticateToken,
+  async (req: AuthRequest, res) => {
+    const userId = req.user!.userId;
+    
+    try {
+      // 1. Get current FSM state
+      const state = await IciciSessionFSM.getState(userId);
+      
+      // 2. Get static credential status
+      const creds = await query(
+        `SELECT is_active, last_connected FROM broker_credentials 
+         WHERE user_id = $1::uuid AND broker_name = 'ICICI'`,
+        [userId]
+      );
 
-    /* ------------------------------
-       DB: CHECK CREDENTIAL PRESENCE
-       (NO SECRETS, NO DECRYPTION)
-    ------------------------------ */
-    const dbCredResult = await query(
-      `
-      SELECT 1
-      FROM broker_credentials
-      WHERE user_id = $1::uuid
-        AND broker_name = $2
-        AND is_active = true
-      `,
-      [serverUserId, serverBrokerName]
-    );
-
-    const hasCredentials = (dbCredResult.rowCount ?? 0) > 0;
-
-    /* ------------------------------
-       RUNTIME: CHECK ACTIVE SESSION
-       (SERVER-SIDE ONLY)
-    ------------------------------ */
-    const runtimeSession =
-      await SessionService.getInstance().getSession(serverUserId);
-
-    const connected = !!runtimeSession?.session_token;
-
-    /* ------------------------------
-       RESPONSE (STATUS ONLY)
-    ------------------------------ */
-    return res.json({
-      success: true,
-      hasCredentials,
-      connected,
-    });
-  } catch (err: any) {
-    return res.status(500).json({
-      success: false,
-      error: err.message || "Failed to fetch ICICI status",
-    });
+      return res.json({
+        connected: state === 'SESSION_ACTIVE',
+        state: state, // IDLE, LOGIN_INITIATED, SESSION_ACTIVE, etc.
+        hasCredentials: (creds.rowCount ?? 0) > 0,
+        lastConnected: creds.rows[0]?.last_connected || null
+      });
+    } catch (err) {
+      return res.status(500).json({ error: "Failed to fetch broker status" });
+    }
   }
-});
+);
+
+/* ======================================================
+   2) CONNECT - HANDLES FSM TRANSITION & URL GENERATION
+   ====================================================== */
+router.post(
+  "/connect",
+  authenticateToken,
+  iciciGuard("CONNECT"), // Ensure state allows starting a login
+  async (req: AuthRequest, res) => {
+    const userId = req.user!.userId;
+    try {
+      // 1. Get Credentials
+      const credsResult = await query(
+        `SELECT app_key FROM broker_credentials
+         WHERE user_id = $1::uuid AND broker_name = 'ICICI' AND is_active = true`,
+        [userId]
+      );
+      
+      if (credsResult.rowCount === 0) {
+        return res.status(400).json({
+          error: "ICICI credentials not found. Please setup your API keys first.",
+        });
+      }
+
+      // 2. FSM TRANSITION: Move to LOGIN_INITIATED
+      // This protects the system from "Callback Race Conditions"
+      await IciciSessionFSM.transition(userId, 'LOGIN_INITIATED');
+
+      // 3. Generate URL using the service utility
+      const iciciUrl = getBreezeLoginUrl(credsResult.rows[0].app_key);
+      
+      log("✅ FSM set to LOGIN_INITIATED for user %s", userId);
+      
+      return res.json({
+        success: true,
+        redirectUrl: iciciUrl,
+        message: "Redirecting to ICICI Direct login"
+      });
+      
+    } catch (err: any) {
+      log("❌ Connect error:", err.message);
+      return res.status(500).json({ 
+        error: err.message || "Connection failed. Please try again." 
+      });
+    }
+  }
+);
+
+export { router as iciciBrokerRouter };
+export default router;
