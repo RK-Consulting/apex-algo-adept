@@ -24,27 +24,21 @@
  * - Sessions include credentials for Breeze API calls
  */
 
+// backend/src/services/sessionService.ts
+
 import redis from "../config/redis.js";
 import { query } from "../config/database.js";
 import debug from "debug";
 
 const log = debug("alphaforge:session");
 
-/**
- * ICICI Session Structure
- * Stored in both Redis and PostgreSQL
- */
 export interface IciciSession {
-  api_key: string;        // ← ADDED
-  api_secret: string;     // ← ADDED
+  api_key: string;      
+  api_secret: string;   
   session_token: string;
   user_details?: any;
 }
 
-/**
- * Singleton Session Service
- * Ensures single Redis client across application
- */
 export class SessionService {
   private static instance: SessionService;
   private redis = redis;
@@ -59,16 +53,16 @@ export class SessionService {
   }
 
   /* =====================================================
-     SAVE SESSION (REDIS + DB)
+      SAVE SESSION (REDIS + icici_sessions Table)
   ===================================================== */
   async saveSession(
     userId: string,
-    sessionData: IciciSession  // ← CHANGED: now includes api_key, api_secret
+    sessionData: IciciSession 
   ): Promise<void> {
     const sessionKey = `icici:session:${userId}`;
 
     try {
-      // 1. Store in Redis (fast access)
+      // 1. Store in Redis (fast access for the Connector)
       await this.redis.set(
         sessionKey,
         JSON.stringify(sessionData),
@@ -76,7 +70,8 @@ export class SessionService {
         86400 // 24 hours
       );
 
-      // 2. Store in DB (persistence + audit)
+      // 2. Store in icici_sessions (Primary Source of Truth for the Aggregator)
+      // Note: We map sessionData.session_token to icici_sessions table
       await query(
         `INSERT INTO icici_sessions (user_id, session_token, created_at)
          VALUES ($1::uuid, $2, NOW())
@@ -85,15 +80,15 @@ export class SessionService {
         [userId, sessionData.session_token]
       );
 
-      // 3. Update broker_credentials with session_token
+      // 3. Update broker_credentials last_connected only (Objective 2: Aggregator)
       await query(
         `UPDATE broker_credentials
-         SET session_token = $2, last_connected = NOW()
+         SET last_connected = NOW()
          WHERE user_id = $1::uuid AND broker_name = 'ICICI'`,
-        [userId, sessionData.session_token]
+        [userId]
       );
 
-      log("✅ Session saved for user:", userId);
+      log("✅ Institutional Session saved for user:", userId);
     } catch (err: any) {
       log("❌ Error saving session:", err.message);
       throw err;
@@ -101,34 +96,33 @@ export class SessionService {
   }
 
   /* =====================================================
-     GET SESSION (REDIS → DB FALLBACK)
+      GET SESSION (REDIS → DB JOIN FALLBACK)
   ===================================================== */
   async getSession(userId: string): Promise<IciciSession | null> {
     const sessionKey = `icici:session:${userId}`;
 
     try {
-      // 1. Try Redis first (fast path)
+      // 1. Try Redis first (fast path for High Frequency Trading)
       const cached = await this.redis.get(sessionKey);
       if (cached) {
-        log("✅ Session found in Redis for user:", userId);
         return JSON.parse(cached) as IciciSession;
       }
 
-      log("⚠️ Session not in Redis, checking DB for user:", userId);
+      log("⚠️ Session not in Redis, checking DB via Join for user:", userId);
 
-      // 2. Fallback to DB
+      // 2. Fallback: JOIN icici_sessions (token) with broker_credentials (keys)
       const result = await query(
-        `SELECT bc.app_key, bc.app_secret, bc.session_token
-         FROM broker_credentials bc
-         WHERE bc.user_id = $1::uuid 
-           AND bc.broker_name = 'ICICI' 
-           AND bc.is_active = true
-           AND bc.session_token IS NOT NULL`,
+        `SELECT s.session_token, c.app_key, c.app_secret
+         FROM icici_sessions s
+         JOIN broker_credentials c ON s.user_id = c.user_id
+         WHERE s.user_id = $1::uuid 
+           AND c.broker_name = 'ICICI' 
+           AND c.is_active = true`,
         [userId]
       );
 
       if (result.rowCount === 0) {
-        log("❌ No session found in DB for user:", userId);
+        log("❌ No active session found in DB for user:", userId);
         return null;
       }
 
@@ -139,7 +133,7 @@ export class SessionService {
         session_token: row.session_token,
       };
 
-      // 3. Re-cache it in Redis
+      // 3. Re-cache in Redis
       await this.redis.set(
         sessionKey,
         JSON.stringify(sessionData),
@@ -147,73 +141,53 @@ export class SessionService {
         86400
       );
 
-      log("✅ Session restored from DB to Redis for user:", userId);
       return sessionData;
     } catch (err: any) {
-      log("❌ Error getting session:", err.message);
+      log("❌ Error retrieving session:", err.message);
       return null;
     }
   }
 
-  // If you need a more specific error with status code for Express:
   async getSessionOrThrow(userId: string): Promise<IciciSession> {
     const session = await this.getSession(userId);
-    
     if (!session) {
-      const error = new Error(`No active session found for user: ${userId}`);
-      (error as any).statusCode = 401; // Unauthorized
+      const error = new Error(`No active ICICI session. Please login.`);
+      (error as any).statusCode = 412; // Precondition Failed (State Machine error)
       throw error;
     }
-    
     return session;
   }
   
   /* =====================================================
-     INVALIDATE SESSION (REDIS + DB)
+      INVALIDATE SESSION (The "Clean Break")
   ===================================================== */
   async invalidateSession(userId: string): Promise<void> {
     const sessionKey = `icici:session:${userId}`;
 
     try {
-      // 1. Remove from Redis
+      // 1. Wipe Redis
       await this.redis.del(sessionKey);
 
-      // 2. Clear session_token in DB
-      await query(
-        `UPDATE broker_credentials
-         SET session_token = NULL
-         WHERE user_id = $1::uuid AND broker_name = 'ICICI'`,
-        [userId]
-      );
+      // 2. Wipe icici_sessions table
+      await query(`DELETE FROM icici_sessions WHERE user_id = $1::uuid`, [userId]);
 
-      // 3. Update FSM state
+      // 3. Reset FSM to IDLE (Critical for State Machine)
       await query(
-        `UPDATE icici_login_attempts
-         SET state = 'IDLE', updated_at = NOW()
+        `UPDATE icici_login_attempts 
+         SET state = 'IDLE', updated_at = NOW() 
          WHERE user_id = $1::uuid`,
         [userId]
       );
 
-      log("✅ Session invalidated for user:", userId);
+      log("✅ Session fully purged for user:", userId);
     } catch (err: any) {
       log("❌ Error invalidating session:", err.message);
       throw err;
     }
   }
 
-  /* =====================================================
-     CHECK IF SESSION EXISTS
-  ===================================================== */
   async hasActiveSession(userId: string): Promise<boolean> {
     const session = await this.getSession(userId);
     return session !== null && !!session.session_token;
-  }
-
-  /* =====================================================
-     GET SESSION TOKEN ONLY (FOR BREEZE API CALLS)
-  ===================================================== */
-  async getSessionToken(userId: string): Promise<string | null> {
-    const session = await this.getSession(userId);
-    return session?.session_token || null;
   }
 }
