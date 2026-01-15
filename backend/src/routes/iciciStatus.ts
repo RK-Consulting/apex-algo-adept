@@ -16,22 +16,20 @@
  * - Server layer → server*
  * - Runtime      → SessionService only
  */
-// backend/src/routes/iciciBroker.ts
+// backend/src/routes/iciciStatus.ts
 
 import { Router } from "express";
 import debug from "debug";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 import { iciciGuard } from "../middleware/iciciGuard.js";
 import { query } from "../config/database.js";
-import { IciciSessionFSM } from "../services/iciciSessionFSM.js"; // Import FSM
-// import { getBreezeLoginUrl } from "../services/iciciBreezeApi.js"; // Use centralized URL generator
+import { IciciSessionFSM } from "../services/iciciSessionFSM.js";
 
 const router = Router();
 const log = debug("alphaforge:icici:broker");
 
 /* ======================================================
    1) CHECK ICICI CONNECTION STATUS
-   Surgical Fix: Returns FSM State + Readiness
    ====================================================== */
 router.get(
   "/status",
@@ -40,10 +38,8 @@ router.get(
     const userId = req.user!.userId;
     
     try {
-      // 1. Get current FSM state
       const state = await IciciSessionFSM.getState(userId);
       
-      // 2. Get static credential status
       const creds = await query(
         `SELECT is_active, last_connected FROM broker_credentials 
          WHERE user_id = $1::uuid AND broker_name = 'ICICI'`,
@@ -52,7 +48,7 @@ router.get(
 
       return res.json({
         connected: state === 'SESSION_ACTIVE',
-        state: state, // IDLE, LOGIN_INITIATED, SESSION_ACTIVE, etc.
+        state: state, 
         hasCredentials: (creds.rowCount ?? 0) > 0,
         lastConnected: creds.rows[0]?.last_connected || null
       });
@@ -68,11 +64,10 @@ router.get(
 router.post(
   "/connect",
   authenticateToken,
-  iciciGuard("CONNECT"), // Ensure state allows starting a login
+  iciciGuard("CONNECT"), 
   async (req: AuthRequest, res) => {
     const userId = req.user!.userId;
     try {
-      // 1. Get Credentials
       const credsResult = await query(
         `SELECT app_key FROM broker_credentials
          WHERE user_id = $1::uuid AND broker_name = 'ICICI' AND is_active = true`,
@@ -85,12 +80,15 @@ router.post(
         });
       }
 
-      // 2. FSM TRANSITION: Move to LOGIN_INITIATED
-      // This protects the system from "Callback Race Conditions"
+      // Transition FSM to prevent race conditions
       await IciciSessionFSM.transition(userId, 'LOGIN_INITIATED');
 
-      // 3. Generate URL using the service utility
-      const iciciUrl = getBreezeLoginUrl(credsResult.rows[0].app_key);
+      /* ======================================================
+         SURGICAL FIX: INLINED URL GENERATION
+         Replaces the missing 'getBreezeLoginUrl' function call
+         ====================================================== */
+      const appKey = credsResult.rows[0].app_key;
+      const iciciUrl = `https://api.icicidirect.com/breezeapi/authenticate?api_key=${encodeURIComponent(appKey)}`;
       
       log("✅ FSM set to LOGIN_INITIATED for user %s", userId);
       
