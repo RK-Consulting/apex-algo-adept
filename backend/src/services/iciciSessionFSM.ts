@@ -1,15 +1,17 @@
 // backend/src/services/iciciSessionFSM.ts
 
-import { query } from "../config/database.js";
+import { query, pool } from "../config/database.js";
+import { redis } from "../config/redis.js"; // Ensure this import exists for your cache cleanup
+import { SessionService } from "./SessionService.js"; // Ensure this import exists
 import debug from "debug";
-// Use the expanded type we defined earlier
+
 export type IciciState = "IDLE" | "LOGIN_INITIATED" | "CALLBACK_RECEIVED" | "SESSION_ACTIVE" | "FAILED" | "LOCKED";
 
 const log = debug("alphaforge:icici:fsm");
 
 export class IciciSessionFSM {
   /* =====================================================
-      READ CURRENT STATE (Surgical: Pointing to login_attempts)
+      READ CURRENT STATE
   ===================================================== */
   static async getState(userId: string): Promise<IciciState> {
     const res = await query(
@@ -28,16 +30,16 @@ export class IciciSessionFSM {
   }
 
   /* =====================================================
-      ASSERT TRANSITION (Surgical: Added handshake states)
+      ASSERT TRANSITION
   ===================================================== */
   static assertAllowed(current: IciciState, next: IciciState) {
     const allowed: Record<IciciState, IciciState[]> = {
       IDLE: ["LOGIN_INITIATED"],
       LOGIN_INITIATED: ["CALLBACK_RECEIVED", "FAILED"],
       CALLBACK_RECEIVED: ["SESSION_ACTIVE", "FAILED"],
-      SESSION_ACTIVE: ["IDLE", "FAILED"], // Logout or token expiry
+      SESSION_ACTIVE: ["IDLE", "FAILED"],
       FAILED: ["IDLE", "LOGIN_INITIATED"],
-      LOCKED: ["IDLE"], // Manual unlock or expiry handled by getState
+      LOCKED: ["IDLE"],
     };
 
     if (!allowed[current]?.includes(next)) {
@@ -47,7 +49,7 @@ export class IciciSessionFSM {
   }
 
   /* =====================================================
-      TRANSITION STATE (Surgical: DB targets & parameters)
+      TRANSITION STATE
   ===================================================== */
   static async transition(
     userId: string,
@@ -68,13 +70,117 @@ export class IciciSessionFSM {
         [userId]
       );
     } else {
-      // General transition for IDLE, INITIATED, CALLBACK, ACTIVE
       await query(
         `INSERT INTO icici_login_attempts (user_id, state, updated_at)
          VALUES ($1::uuid, $2, now())
          ON CONFLICT (user_id) DO UPDATE SET state = $2, updated_at = now()`,
         [userId, to]
       );
+    }
+  }
+
+  /* =====================================================
+      HARD RESET: Complete session cleanup with atomic transaction
+  ===================================================== */
+  static async forceReset(userId: string): Promise<void> {
+    log(`🔄 FORCE RESET initiated for user: ${userId}`);
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+
+      // 1. Clear ALL session states atomically in broker_credentials
+      await client.query(
+        `UPDATE broker_credentials 
+         SET is_active = false, session_token = NULL, session_expires_at = NULL, 
+             last_login_attempt = NULL, error_message = NULL, updated_at = NOW()
+         WHERE user_id = $1::uuid AND broker_name = 'ICICI'`,
+        [userId]
+      );
+
+      // 2. Reset FSM state to IDLE
+      await client.query(
+        `UPDATE icici_login_attempts SET state = 'IDLE', locked_until = NULL, updated_at = NOW() 
+         WHERE user_id = $1::uuid`,
+        [userId]
+      );
+
+      // 3. Clear Websocket subscriptions if table exists
+      await client.query(
+        `DELETE FROM icici_websocket_subscriptions WHERE user_id = $1::uuid`,
+        [userId]
+      ).catch(() => log("ℹ️ icici_websocket_subscriptions table not found, skipping."));
+
+      await client.query('COMMIT');
+
+      // 4. Clear Redis cache
+      if (redis) {
+        const keys = [`fsm:state:${userId}`, `session:${userId}`, `icici:session:${userId}`];
+        await redis.del(...keys);
+      }
+
+      // 5. Invalidate memory cache
+      await SessionService.getInstance().invalidateSession(userId);
+
+      log(`✅ FORCE RESET complete for user: ${userId}`);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      log(`❌ FORCE RESET failed: ${error}`);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /* =====================================================
+      SOFT RESET: Only clear session token
+  ===================================================== */
+  static async softReset(userId: string): Promise<void> {
+    log(`🔄 SOFT RESET initiated for user: ${userId}`);
+    try {
+      await query(
+        `UPDATE broker_credentials 
+         SET is_active = false, session_token = NULL, session_expires_at = NULL, updated_at = NOW()
+         WHERE user_id = $1::uuid AND broker_name = 'ICICI'`,
+        [userId]
+      );
+      await SessionService.getInstance().invalidateSession(userId);
+    } catch (error) {
+      log(`❌ SOFT RESET failed: ${error}`);
+      throw error;
+    }
+  }
+
+  /* =====================================================
+      CHECK AND RESET IF STALE
+  ===================================================== */
+  static async checkAndResetIfStale(userId: string): Promise<void> {
+    log(`🔍 Checking for stale session: ${userId}`);
+    try {
+      const result = await query(
+        `SELECT b.is_active, b.updated_at, l.state, l.updated_at as last_fsm_update
+         FROM broker_credentials b
+         LEFT JOIN icici_login_attempts l ON b.user_id = l.user_id
+         WHERE b.user_id = $1::uuid AND b.broker_name = 'ICICI'`,
+        [userId]
+      );
+
+      if (result.rowCount === 0) return;
+
+      const creds = result.rows[0];
+      const now = Date.now();
+      const thirtyMin = 30 * 60 * 1000;
+      const fiveMin = 5 * 60 * 1000;
+
+      const isStale = creds.is_active && (now - new Date(creds.updated_at).getTime() > thirtyMin);
+      const isStuck = creds.state === 'LOGIN_INITIATED' && (now - new Date(creds.last_fsm_update).getTime() > fiveMin);
+
+      if (isStale || isStuck) {
+        log(`⚠️ Stale/Stuck session detected. Forcing reset.`);
+        await this.forceReset(userId);
+      }
+    } catch (error) {
+      log(`❌ Check stale failed: ${error}`);
     }
   }
 
