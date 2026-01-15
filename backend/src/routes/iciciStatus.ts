@@ -109,5 +109,5 @@ router.post(
   }
 );
 
-export { router as iciciBrokerRouter };
+export { router as iciciStatusRouter };
 export default router;
