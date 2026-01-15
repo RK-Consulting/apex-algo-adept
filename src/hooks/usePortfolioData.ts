@@ -2,66 +2,69 @@
 import { useState, useEffect } from "react";
 import { useIcici } from "@/context/IciciContext";
 
+/**
+ * Hook to manage portfolio data fetching and calculations.
+ * Standardizes raw broker data into enriched UI-ready objects.
+ */
 export const usePortfolioData = () => {
-  const [portfolioData, setPortfolioData] = useState<any[]>([]);
+  const [holdings, setHoldings] = useState<any[]>([]);
   const [totalValue, setTotalValue] = useState(0);
   const [totalPnL, setTotalPnL] = useState(0);
   const [totalInvested, setTotalInvested] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Get connection status from our FSM context
   const { isConnected } = useIcici();
 
-  const { data } = useQuery({
-    queryKey: ["portfolio"],
-    queryFn: () => api.get("/api/icici/portfolio"),
-    enabled: isConnected, // Prevents 401s when session is dead
-     });
-  
-  return { 
-    totalValue: data?.totalValue || 0, 
-    totalPnL: data?.totalPnL || 0 
-  };
- };
-  
   useEffect(() => {
+    // 1. Safety Check: If broker isn't connected, don't even try the API
+    if (!isConnected) {
+      setLoading(false);
+      setHoldings([]);
+      setTotalValue(0);
+      setTotalPnL(0);
+      return;
+    }
+
     const fetchPortfolio = async () => {
       try {
         setLoading(true);
         setError(null);
-        
-        const token = localStorage.getItem("authToken");
+
+        const token = localStorage.getItem("auth_token") || localStorage.getItem("authToken");
         if (!token) {
           setError("Not authenticated");
-          setLoading(false);
           return;
         }
 
-        const backendUrl = import.meta.env.VITE_BACKEND_URL;
-         // 🚨 TEMPORARY DISABLE ICICI CALL (backend failing)
-        // const response = await fetch(`${backendUrl}/api/icici/portfolio`, {
-          // headers: {
-          //  "Authorization": `Bearer ${token}`,
-          //},
-       // });
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || "https://api.alphaforge.skillsifter.in";
 
-        // if (!response.ok) 
-          // throw new Error("Failed to fetch portfolio");
-       // }
+        // ✅ RE-ENABLED: Actual backend call
+        const response = await fetch(`${backendUrl}/api/icici/portfolio`, {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+        });
 
-        // const result = await response.json();
-        
+        if (!response.ok) throw new Error("Failed to fetch portfolio from server");
+
+        const result = await response.json();
+
+        // 2. Data Transformation Logic
         if (result.success && result.portfolio?.Success) {
-          const holdings = result.portfolio.Success || [];
+          const rawHoldings = result.portfolio.Success || [];
           
-          const enrichedHoldings = holdings.map((holding: any) => {
+          const enriched = rawHoldings.map((holding: any) => {
             const avgPrice = parseFloat(holding.average_price || holding.AveragePrice || 0);
             const ltp = parseFloat(holding.ltp || holding.LastPrice || avgPrice);
             const qty = parseInt(holding.quantity || holding.Quantity || 0);
+            
             const investedValue = avgPrice * qty;
             const currentValue = ltp * qty;
             const pnl = currentValue - investedValue;
-            const pnlPercent = avgPrice > 0 ? ((ltp - avgPrice) / avgPrice) * 100 : 0;
-            
+
             return {
               symbol: holding.stock_code || holding.StockCode || "",
               exchange: holding.exchange_code || holding.ExchangeCode || "NSE",
@@ -71,41 +74,32 @@ export const usePortfolioData = () => {
               invested_value: investedValue,
               current_value: currentValue,
               pnl,
-              pnlPercent,
+              pnlPercent: avgPrice > 0 ? (pnl / investedValue) * 100 : 0,
               trend: pnl >= 0 ? "up" : "down",
             };
           });
 
-          const totalVal = enrichedHoldings.reduce((sum: number, h: any) => sum + h.current_value, 0);
-          const totalP = enrichedHoldings.reduce((sum: number, h: any) => sum + h.pnl, 0);
-          const totalInv = enrichedHoldings.reduce((sum: number, h: any) => sum + h.invested_value, 0);
-
-          setPortfolioData(enrichedHoldings);
-          setTotalValue(totalVal);
-          setTotalPnL(totalP);
-          setTotalInvested(totalInv);
-        } else {
-          setPortfolioData([]);
-          setTotalValue(0);
-          setTotalPnL(0);
-          setTotalInvested(0);
+          // 3. State Updates
+          setHoldings(enriched);
+          setTotalValue(enriched.reduce((sum, h) => sum + h.current_value, 0));
+          setTotalPnL(enriched.reduce((sum, h) => sum + h.pnl, 0));
+          setTotalInvested(enriched.reduce((sum, h) => sum + h.invested_value, 0));
         }
-      } catch (err) {
-        console.error("Error fetching portfolio:", err);
-        setError(err instanceof Error ? err.message : "Failed to fetch portfolio");
-        setPortfolioData([]);
+      } catch (err: any) {
+        console.error("usePortfolioData Error:", err);
+        setError(err.message);
       } finally {
         setLoading(false);
       }
     };
 
-    // 🚨 DISABLE fetch ON LOAD
-    // fetchPortfolio();
-    // 🚨 DISABLE INTERVAL REFRESH
-    // Refresh every 30 seconds
-    //const interval = setInterval(fetchPortfolio, 30000);
-    //return () => clearInterval(interval);
-  }, []);
+    fetchPortfolio();
 
-  return { holdings: portfolioData, totalValue, totalPnL, totalInvested, loading, error };
-}; 
+    // 4. Polling: Refresh every 60s while the window is active
+    const interval = setInterval(fetchPortfolio, 60000);
+    return () => clearInterval(interval);
+
+  }, [isConnected]); // Only re-run when broker connection status changes
+
+  return { holdings, totalValue, totalPnL, totalInvested, loading, error };
+};
