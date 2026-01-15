@@ -1,6 +1,6 @@
 // frontend/src/hooks/useIciciBroker.ts
 import { useState, useCallback } from 'react';
-import api from '../lib/api';
+import { api } from '../lib/api';
 
 export const useIciciBroker = () => {
   const [loading, setLoading] = useState(false);
