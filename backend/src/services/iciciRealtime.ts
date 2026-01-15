@@ -30,7 +30,7 @@ export class ICICIRealtimeService {
   private static instance: ICICIRealtimeService;
   private streams = new Map<string, UserStream>();
 
-  private readonly WS_URL = "wss://stream.icicidirect.com/breezeapi/realtime";
+  private readonly WS_URL = "wss://api.icicidirect.com/apiws/stream";
   private readonly HEARTBEAT_MS = 30_000;
   private readonly MAX_RETRIES = 10;
   private readonly BASE_DELAY = 1000;
