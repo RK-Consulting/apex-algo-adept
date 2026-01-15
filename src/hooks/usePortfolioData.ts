@@ -1,5 +1,6 @@
 // src/hooks/usePortfolioData.ts
 import { useState, useEffect } from "react";
+import { useIcici } from "@/context/IciciContext";
 
 export const usePortfolioData = () => {
   const [portfolioData, setPortfolioData] = useState<any[]>([]);
@@ -8,7 +9,20 @@ export const usePortfolioData = () => {
   const [totalInvested, setTotalInvested] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { isConnected } = useIcici();
 
+  const { data } = useQuery({
+    queryKey: ["portfolio"],
+    queryFn: () => api.get("/api/icici/portfolio"),
+    enabled: isConnected, // Prevents 401s when session is dead
+     });
+  
+  return { 
+    totalValue: data?.totalValue || 0, 
+    totalPnL: data?.totalPnL || 0 
+  };
+ };
+  
   useEffect(() => {
     const fetchPortfolio = async () => {
       try {
