@@ -94,7 +94,7 @@ app.use("/api/redis", redisDevRouter);
 // ICICI PROTECTED ROUTES (JWT REQUIRED)
 // =======================================================
 app.use("/api/icici/broker", authenticateToken, iciciBrokerRouter);
-app.use("/api/icici/status", authenticateToken, iciciStatusRouter);
+app.use("/api/icici/", authenticateToken, iciciStatusRouter);
 app.use("/api/icici/stream", authenticateToken, iciciStreamRouter);
 app.use("/api/icici", authenticateToken, iciciOrderRouter);
 
