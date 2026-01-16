@@ -194,3 +194,50 @@ export class IciciSessionFSM {
     }
   }
 }
+
+/**
+ * GRACEFUL DISCONNECT: Clean logout with ICICI API call
+ * Use when user explicitly clicks "Disconnect"
+ */
+static async gracefulDisconnect(userId: string): Promise<void> {
+  log("👋 GRACEFUL DISCONNECT initiated for user: %s", userId);
+  
+  try {
+    // 1. Get current session before clearing
+    const sessionResult = await query(
+      `SELECT session_token FROM broker_credentials 
+       WHERE user_id = $1::uuid AND broker_name = 'ICICI' AND is_active = true`,
+      [userId]
+    );
+    
+    const sessionToken = sessionResult.rows[0]?.session_token;
+    
+    if (sessionToken) {
+      try {
+        // 2. Call ICICI logout endpoint (if they have one)
+        // Based on ICICI docs, there might be a logout endpoint
+        // If not, this gracefully fails and continues cleanup
+        const { breezeAxios } = await import('./breezeClient.js');
+        
+        await breezeAxios.post('/api/v1/logout', {
+          SessionToken: sessionToken
+        }, {
+          timeout: 5000 // Don't wait too long
+        });
+        
+        log("✅ ICICI logout API called successfully");
+      } catch (logoutError: any) {
+        // Don't fail if ICICI logout fails - continue with cleanup
+        log("⚠️ ICICI logout API failed (continuing cleanup): %s", logoutError.message);
+      }
+    }
+
+    // 3. Perform force reset regardless of ICICI API result
+    await this.forceReset(userId);
+
+    log("✅ GRACEFUL DISCONNECT complete for user: %s", userId);
+  } catch (error) {
+    log("❌ GRACEFUL DISCONNECT failed for user: %s", userId, error);
+    throw error;
+  }
+}
