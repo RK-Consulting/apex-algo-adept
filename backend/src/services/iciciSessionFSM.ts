@@ -238,4 +238,5 @@ static async gracefulDisconnect(userId: string): Promise<void> {
     log("❌ GRACEFUL DISCONNECT failed for user: %s", userId, error);
     throw error;
   }
+ }
 }
