@@ -193,8 +193,6 @@ export class IciciSessionFSM {
       throw new Error(`ICICI not active (state=${state}). Please connect broker.`);
     }
   }
-}
-
 /**
  * GRACEFUL DISCONNECT: Clean logout with ICICI API call
  * Use when user explicitly clicks "Disconnect"
