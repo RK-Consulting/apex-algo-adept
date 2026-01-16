@@ -42,14 +42,16 @@ router.get(
       const state = await IciciSessionFSM.getState(userId);
       
       const creds = await query(
-        `SELECT is_active, last_connected, session_expires_at 
+        `SELECT is_active, last_connected, session_expires_at, created_at
          FROM broker_credentials 
          WHERE user_id = $1::uuid AND broker_name = 'ICICI'`,
         [userId]
       );
 
       // System-Engineering Check: Even if FSM says ACTIVE, verify timestamp
-      const hasValidSession = creds.rows[0]?.is_active && 
+      // 3. System-Engineering Integrity Check:
+      // A connection is only 'true' if the FSM is ACTIVE AND the DB token isn't expired
+      /*const hasValidSession = creds.rows[0]?.is_active && 
         (!creds.rows[0]?.session_expires_at || 
          new Date(creds.rows[0].session_expires_at) > new Date());
 
@@ -59,7 +61,24 @@ router.get(
         hasCredentials: (creds.rowCount ?? 0) > 0,
         lastConnected: creds.rows[0]?.last_connected || null,
         sessionExpiresAt: creds.rows[0]?.session_expires_at || null
-      });
+      });*/
+       const hasCredentials = (creds.rowCount ?? 0) > 0;
+       const sessionExpired = creds.rows[0]?.session_expires_at && 
+                              new Date(creds.rows[0].session_expires_at) < new Date();
+       
+       const isConnected = state === 'SESSION_ACTIVE' && 
+                           creds.rows[0]?.is_active === true && 
+                           !sessionExpired;
+   
+       return res.json({
+         connected: isConnected,
+         state: state, // IDLE, LOGIN_INITIATED, etc.
+         hasCredentials: hasCredentials,
+         broker: "ICICI",
+         lastConnected: creds.rows[0]?.last_connected || null,
+         sessionExpiresAt: creds.rows[0]?.session_expires_at || null,
+         createdAt: creds.rows[0]?.created_at || null
+       });  
     } catch (err) {
       log("❌ Status check error:", err);
       return res.status(500).json({ error: "Failed to fetch broker status" });
