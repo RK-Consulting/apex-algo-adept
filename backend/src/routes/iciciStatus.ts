@@ -23,7 +23,7 @@ import debug from "debug";
 import crypto from "crypto";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 import { iciciGuard } from "../middleware/iciciGuard.js";
-import { query, pool } from "../config/database.js"; // Use pool for dedicated transaction clients
+import pool, { query } from "../config/database.js"; // Use pool for dedicated transaction clients
 import { IciciSessionFSM } from "../services/iciciSessionFSM.js";
 
 const router = Router();
