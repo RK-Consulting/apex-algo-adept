@@ -96,7 +96,7 @@ const Settings = () => {
       }
 
       try {
-        const response = await fetch(`${backendUrl}/api/icici/broker/connect`, {
+        const response = await fetch(`${backendUrl}/api/icici/status/connect`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
