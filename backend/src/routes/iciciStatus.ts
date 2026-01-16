@@ -94,7 +94,7 @@ router.post(
       );
 
       // 2. STALE STATE REAPER
-      if (lockResult.rowCount > 0) {
+      if ((lockResult.rowCount ?? 0) > 0) {
         const existing = lockResult.rows[0];
         const ageMinutes = (Date.now() - new Date(existing.created_at).getTime()) / 60000;
         
