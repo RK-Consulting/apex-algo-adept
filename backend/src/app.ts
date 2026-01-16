@@ -27,7 +27,7 @@ import { requestLogger } from "./middleware/logger.js";
 // === Route Imports ===
 import authRouter from "./routes/auth.js";
 import iciciOrderRouter from "./routes/icici/orders.js";
-import { iciciBrokerRouter } from "./routes/iciciBroker.js";
+//import { iciciBrokerRouter } from "./routes/iciciBroker.js";
 import { iciciStatusRouter } from "./routes/iciciStatus.js";
 import { iciciStreamRouter } from "./routes/icici/stream.js";
 import { strategyRouter as strategiesRouter } from "./routes/strategies.js";
@@ -93,7 +93,7 @@ app.use("/api/redis", redisDevRouter);
 // =======================================================
 // ICICI PROTECTED ROUTES (JWT REQUIRED)
 // =======================================================
-app.use("/api/icici/broker", authenticateToken, iciciBrokerRouter);
+//app.use("/api/icici/broker", authenticateToken, iciciBrokerRouter);
 app.use("/api/icici/status", authenticateToken, iciciStatusRouter);
 app.use("/api/icici/stream", authenticateToken, iciciStreamRouter);
 app.use("/api/icici/order", authenticateToken, iciciOrderRouter);
