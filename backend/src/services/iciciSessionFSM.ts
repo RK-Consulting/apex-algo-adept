@@ -2,7 +2,7 @@
 
 import pool, { query } from "../config/database.js"; // Fixed: pool is default export
 import redis from "../config/redis.js"; // Fixed: redis is default export
-import { SessionService } from "./SessionService.js";
+import { SessionService } from "./sessionService.js";
 import debug from "debug";
 
 export type IciciState = "IDLE" | "LOGIN_INITIATED" | "CALLBACK_RECEIVED" | "SESSION_ACTIVE" |
@@ -203,17 +203,17 @@ export class IciciSessionFSM {
         try {
           // 2. Call ICICI logout endpoint (if they have one)
           // Fixed: Use default import for breezeAxios
-          const breezeModule = await import('./breezeClient.js');
-          const breezeAxios = breezeModule.default; 
+          const breezeModule = await import('./breezeClient.js') as any;
+          const breezeAxios = breezeModule.breezeAxios || breezeModule.default || breezeModule;
           
-          if (breezeAxios) {
-             await breezeAxios.post('/api/v1/logout', {
-                SessionToken: sessionToken
-             }, {
-                timeout: 5000 // Don't wait too long
-             });
-             log("✅ ICICI logout API called successfully");
-          } else {
+          if (breezeAxios && breezeAxios.post) {
+              await breezeAxios.post('/api/v1/logout', {
+                  SessionToken: sessionToken
+              }, {
+                  timeout: 5000
+              });
+              log("✅ ICICI logout API called successfully");
+          }else {
              log("⚠️ breezeAxios not found in module, skipping logout call");
           }
         } catch (logoutError: any) {
