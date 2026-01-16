@@ -1,11 +1,12 @@
-// backend/src/services/iciciSessionFSM.ts
+// src/services/iciciSessionFSM.ts
 
-import { query, pool } from "../config/database.js";
-import { redis } from "../config/redis.js"; // Ensure this import exists for your cache cleanup
-import { SessionService } from "./SessionService.js"; // Ensure this import exists
+import pool, { query } from "../config/database.js"; // Fixed: pool is default export
+import redis from "../config/redis.js"; // Fixed: redis is default export
+import { SessionService } from "./SessionService.js";
 import debug from "debug";
 
-export type IciciState = "IDLE" | "LOGIN_INITIATED" | "CALLBACK_RECEIVED" | "SESSION_ACTIVE" | "FAILED" | "LOCKED";
+export type IciciState = "IDLE" | "LOGIN_INITIATED" | "CALLBACK_RECEIVED" | "SESSION_ACTIVE" |
+  "FAILED" | "LOCKED";
 
 const log = debug("alphaforge:icici:fsm");
 
@@ -18,7 +19,6 @@ export class IciciSessionFSM {
       `SELECT state, locked_until FROM icici_login_attempts WHERE user_id = $1::uuid`,
       [userId]
     );
-
     if (res.rowCount === 0) return "IDLE";
 
     const row = res.rows[0];
@@ -41,7 +41,6 @@ export class IciciSessionFSM {
       FAILED: ["IDLE", "LOGIN_INITIATED"],
       LOCKED: ["IDLE"],
     };
-
     if (!allowed[current]?.includes(next)) {
       log(`❌ Illegal ICICI transition: ${current} → ${next}`);
       throw new Error(`ICICI transition blocked: ${current} → ${next}`);
@@ -60,7 +59,6 @@ export class IciciSessionFSM {
     this.assertAllowed(current, to);
 
     log(`🔁 ICICI FSM transition ${current} → ${to} (user=${userId})`);
-
     if (to === "LOCKED") {
       const lockMinutes = options.lockMinutes ?? 15;
       await query(
@@ -88,7 +86,6 @@ export class IciciSessionFSM {
     
     try {
       await client.query('BEGIN');
-
       // 1. Clear ALL session states atomically in broker_credentials
       await client.query(
         `UPDATE broker_credentials 
@@ -97,20 +94,17 @@ export class IciciSessionFSM {
          WHERE user_id = $1::uuid AND broker_name = 'ICICI'`,
         [userId]
       );
-
       // 2. Reset FSM state to IDLE
       await client.query(
         `UPDATE icici_login_attempts SET state = 'IDLE', locked_until = NULL, updated_at = NOW() 
          WHERE user_id = $1::uuid`,
         [userId]
       );
-
       // 3. Clear Websocket subscriptions if table exists
       await client.query(
         `DELETE FROM icici_websocket_subscriptions WHERE user_id = $1::uuid`,
         [userId]
       ).catch(() => log("ℹ️ icici_websocket_subscriptions table not found, skipping."));
-
       await client.query('COMMIT');
 
       // 4. Clear Redis cache
@@ -121,7 +115,6 @@ export class IciciSessionFSM {
 
       // 5. Invalidate memory cache
       await SessionService.getInstance().invalidateSession(userId);
-
       log(`✅ FORCE RESET complete for user: ${userId}`);
     } catch (error) {
       await client.query('ROLLBACK');
@@ -164,17 +157,14 @@ export class IciciSessionFSM {
          WHERE b.user_id = $1::uuid AND b.broker_name = 'ICICI'`,
         [userId]
       );
-
       if (result.rowCount === 0) return;
 
       const creds = result.rows[0];
       const now = Date.now();
       const thirtyMin = 30 * 60 * 1000;
       const fiveMin = 5 * 60 * 1000;
-
       const isStale = creds.is_active && (now - new Date(creds.updated_at).getTime() > thirtyMin);
       const isStuck = creds.state === 'LOGIN_INITIATED' && (now - new Date(creds.last_fsm_update).getTime() > fiveMin);
-
       if (isStale || isStuck) {
         log(`⚠️ Stale/Stuck session detected. Forcing reset.`);
         await this.forceReset(userId);
@@ -193,50 +183,51 @@ export class IciciSessionFSM {
       throw new Error(`ICICI not active (state=${state}). Please connect broker.`);
     }
   }
-/**
- * GRACEFUL DISCONNECT: Clean logout with ICICI API call
- * Use when user explicitly clicks "Disconnect"
- */
-static async gracefulDisconnect(userId: string): Promise<void> {
-  log("👋 GRACEFUL DISCONNECT initiated for user: %s", userId);
-  
-  try {
-    // 1. Get current session before clearing
-    const sessionResult = await query(
-      `SELECT session_token FROM broker_credentials 
-       WHERE user_id = $1::uuid AND broker_name = 'ICICI' AND is_active = true`,
-      [userId]
-    );
-    
-    const sessionToken = sessionResult.rows[0]?.session_token;
-    
-    if (sessionToken) {
-      try {
-        // 2. Call ICICI logout endpoint (if they have one)
-        // Based on ICICI docs, there might be a logout endpoint
-        // If not, this gracefully fails and continues cleanup
-        const { breezeAxios } = await import('./breezeClient.js');
-        
-        await breezeAxios.post('/api/v1/logout', {
-          SessionToken: sessionToken
-        }, {
-          timeout: 5000 // Don't wait too long
-        });
-        
-        log("✅ ICICI logout API called successfully");
-      } catch (logoutError: any) {
-        // Don't fail if ICICI logout fails - continue with cleanup
-        log("⚠️ ICICI logout API failed (continuing cleanup): %s", logoutError.message);
+
+  /**
+   * GRACEFUL DISCONNECT: Clean logout with ICICI API call
+   * Use when user explicitly clicks "Disconnect"
+   */
+  static async gracefulDisconnect(userId: string): Promise<void> {
+    log("👋 GRACEFUL DISCONNECT initiated for user: %s", userId);
+    try {
+      // 1. Get current session before clearing
+      const sessionResult = await query(
+        `SELECT session_token FROM broker_credentials 
+         WHERE user_id = $1::uuid AND broker_name = 'ICICI' AND is_active = true`,
+        [userId]
+      );
+      const sessionToken = sessionResult.rows[0]?.session_token;
+      
+      if (sessionToken) {
+        try {
+          // 2. Call ICICI logout endpoint (if they have one)
+          // Fixed: Use default import for breezeAxios
+          const breezeModule = await import('./breezeClient.js');
+          const breezeAxios = breezeModule.default; 
+          
+          if (breezeAxios) {
+             await breezeAxios.post('/api/v1/logout', {
+                SessionToken: sessionToken
+             }, {
+                timeout: 5000 // Don't wait too long
+             });
+             log("✅ ICICI logout API called successfully");
+          } else {
+             log("⚠️ breezeAxios not found in module, skipping logout call");
+          }
+        } catch (logoutError: any) {
+          // Don't fail if ICICI logout fails - continue with cleanup
+          log("⚠️ ICICI logout API failed (continuing cleanup): %s", logoutError.message);
+        }
       }
+
+      // 3. Perform force reset regardless of ICICI API result
+      await this.forceReset(userId);
+      log("✅ GRACEFUL DISCONNECT complete for user: %s", userId);
+    } catch (error) {
+      log("❌ GRACEFUL DISCONNECT failed for user: %s", userId, error);
+      throw error;
     }
-
-    // 3. Perform force reset regardless of ICICI API result
-    await this.forceReset(userId);
-
-    log("✅ GRACEFUL DISCONNECT complete for user: %s", userId);
-  } catch (error) {
-    log("❌ GRACEFUL DISCONNECT failed for user: %s", userId, error);
-    throw error;
   }
- }
 }
