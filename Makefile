@@ -1,17 +1,18 @@
 # ============================================================
 # Apex Algo Adept — Clean Build, Verify & Deploy Makefile
 # ============================================================
-
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
-.SHELLFLAGS := -euo pipefail -c
+# .SHELLFLAGS := -euo pipefail -c    # ← COMMENTED OUT: stops interactive sessions from dying on failed commands
+                                     # Use this strict mode only in CI pipelines if you want
+                                     # For local dev → keep it off or you'll rage-quit every compile error
 
 # ------------------------------------------------------------
 # Directories
 # ------------------------------------------------------------
 BACKEND_DIR := backend
 SCRIPTS_DIR := scripts
-DB_SCRIPTS  := $(SCRIPTS_DIR)/db
+DB_SCRIPTS := $(SCRIPTS_DIR)/db
 ICICI_SCRIPTS := $(SCRIPTS_DIR)/icici
 ENV_SCRIPTS := $(SCRIPTS_DIR)/env
 LOG_DIR := logs
@@ -40,20 +41,20 @@ help:
 	@echo "Usage: make <target>"
 	@echo ""
 	@echo "Development:"
-	@echo "  make install-dev      Install deps (npm install)"
-	@echo "  make build            Build backend (dev)"
-	@echo "  make test             Run tests"
+	@echo " make install-dev    Install deps (npm install)"
+	@echo " make build          Build backend (dev)"
+	@echo " make test           Run tests"
 	@echo ""
 	@echo "Verification:"
-	@echo "  make env-verify       Verify environment variables"
-	@echo "  make db-verify        Verify database + FSM invariants"
-	@echo "  make icici-verify     Verify ICICI guards & FSM"
-	@echo "  make preflight        Run ALL verifications"
+	@echo " make env-verify     Verify environment variables"
+	@echo " make db-verify      Verify database + FSM invariants"
+	@echo " make icici-verify   Verify ICICI guards & FSM"
+	@echo " make preflight      Run ALL verifications"
 	@echo ""
 	@echo "CI / Production:"
-	@echo "  make install-ci       Clean install (npm ci)"
-	@echo "  make build-ci         Strict CI build"
-	@echo "  make deploy-prod      Production deploy"
+	@echo " make install-ci     Clean install (npm ci)"
+	@echo " make build-ci       Strict CI build"
+	@echo " make deploy-prod    Production deploy"
 	@echo ""
 
 # ------------------------------------------------------------
