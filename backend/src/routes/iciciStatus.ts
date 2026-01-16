@@ -202,5 +202,38 @@ router.post(
   }
 );
 
+// Add this to ./src/routes/iciciStatus.ts after the /cancel route
+
+/* ======================================================
+   DISCONNECT - Graceful Logout with ICICI API Call
+====================================================== */
+router.post(
+  "/disconnect",
+  authenticateToken,
+  async (req: AuthRequest, res) => {
+    const userId = req.user!.userId;
+    
+    try {
+      log("🔌 Disconnect requested for user: %s", userId);
+      
+      // Call gracefulDisconnect (we'll add this to FSM next)
+      await IciciSessionFSM.gracefulDisconnect(userId);
+      
+      return res.json({ 
+        success: true, 
+        message: "Successfully disconnected from ICICI" 
+      });
+    } catch (err) {
+      log("❌ Disconnect error:", err);
+      return res.status(500).json({ 
+        error: "Failed to disconnect gracefully",
+        message: "Session cleared locally but ICICI logout may have failed"
+      });
+    }
+  }
+);
+
+
+
 export { router as iciciStatusRouter };
 export default router;
