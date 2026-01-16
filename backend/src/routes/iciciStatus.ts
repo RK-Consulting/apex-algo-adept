@@ -33,7 +33,7 @@ const log = debug("alphaforge:icici:broker");
    STATUS CHECK - Validates FSM + DB Session Expiry
 ====================================================== */
 router.get(
-  "/status",
+  "/",
   authenticateToken,
   async (req: AuthRequest, res) => {
     const userId = req.user!.userId;
