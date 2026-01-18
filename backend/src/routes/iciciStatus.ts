@@ -62,29 +62,45 @@ router.get(
         lastConnected: creds.rows[0]?.last_connected || null,
         sessionExpiresAt: creds.rows[0]?.session_expires_at || null
       });*/
-       const hasCredentials = (creds.rowCount ?? 0) > 0;
-       const sessionExpired = creds.rows[0]?.session_expires_at && 
-                              new Date(creds.rows[0].session_expires_at) < new Date();
-       
-       const isConnected = state === 'SESSION_ACTIVE' && 
-                           creds.rows[0]?.is_active === true && 
-                           !sessionExpired;
-   
-       return res.json({
-         connected: isConnected,
-         state: state, // IDLE, LOGIN_INITIATED, etc.
-         hasCredentials: hasCredentials,
-         broker: "ICICI",
-         lastConnected: creds.rows[0]?.last_connected || null,
-         sessionExpiresAt: creds.rows[0]?.session_expires_at || null,
-         createdAt: creds.rows[0]?.created_at || null
-       });  
+      const hasCredentials = (creds.rowCount ?? 0) > 0;
+      const row = hasCredentials ? creds.rows[0] : null;
+      
+      const sessionExpired =
+        row?.session_expires_at
+          ? new Date(row.session_expires_at) < new Date()
+          : false;
+      
+      const isConnected =
+        state === 'SESSION_ACTIVE' &&
+        row?.is_active === true &&
+        !sessionExpired;
+      
+      return res.json({
+        connected: isConnected,
+        state,
+        hasCredentials,
+        broker: "ICICI",
+        lastConnected: row?.last_connected || null,
+        sessionExpiresAt: row?.session_expires_at || null,
+        createdAt: row?.created_at || null
+      });
+
     } catch (err) {
       log("❌ Status check error:", err);
       return res.status(500).json({ error: "Failed to fetch broker status" });
     }
   }
 );
+
+// ------------------------------------------------------
+// CONNECT (GET wrapper for frontend redirect compatibility)
+// ------------------------------------------------------
+router.get(
+  "/connect",
+  authenticateToken,
+  (req, _res, next) => next()
+);
+
 
 /* ======================================================
    CONNECT - ATOMIC CHECK-AND-LOCK TRANSACTION
