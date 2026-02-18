@@ -30,6 +30,9 @@ const Settings = () => {
   ====================================================== */
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
+      // 🔍 FIX 2: Debug log to catch origin mismatches — remove after fixing
+      console.log("[ICICI] Message received from:", event.origin, "Data:", event.data);
+
       const allowedOrigin =
         import.meta.env.VITE_BACKEND_URL ||
         import.meta.env.VITE_API_URL ||
@@ -37,8 +40,14 @@ const Settings = () => {
 
       try {
         const allowedHostname = new URL(allowedOrigin).hostname;
-        if (!event.origin.includes(allowedHostname)) return;
+        if (!event.origin.includes(allowedHostname)) {
+          // 🔍 FIX 2: Warn instead of silently dropping — helps diagnose mismatches
+          console.warn("[ICICI] Origin mismatch. Got:", event.origin, "Expected hostname:", allowedHostname);
+          return;
+        }
       } catch (e) {
+        // 🔍 FIX 2: Log parse errors so misconfigured env vars are visible
+        console.error("[ICICI] Failed to parse allowedOrigin:", allowedOrigin);
         return;
       }
 
@@ -94,6 +103,16 @@ const Settings = () => {
         toast({ title: "Popup blocked", variant: "destructive" });
         return;
       }
+
+      // ✅ FIX 1: Write a loading page immediately so the browser doesn't kill
+      // the popup during the async fetch — browsers close idle blank popups
+      popup.document.write(`
+        <html>
+          <body style="font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0f0f0f;color:white;">
+            <div>Connecting to ICICI Direct...</div>
+          </body>
+        </html>
+      `);
 
       try {
         const response = await fetch(`${backendUrl}/api/icici/status/connect`, {
