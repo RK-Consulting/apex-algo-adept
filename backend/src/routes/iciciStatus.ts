@@ -108,7 +108,7 @@ router.get(
 router.post(
   "/connect",
   authenticateToken,
-  iciciGuard("CONNECT"),
+  iciciGuard("LOGIN"),
   async (req: AuthRequest, res) => {
     const userId = req.user!.userId;
     const requestId = crypto.randomUUID(); 
