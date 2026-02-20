@@ -198,7 +198,8 @@ router.post(
 
       // 6. GENERATE BREEZE URL
       const appKey = decryptCredential(credsResult.rows[0].app_key);
-      const iciciUrl = `https://api.icicidirect.com/breezeapi/authenticate?api_key=${encodeURIComponent(appKey)}`;
+      // const iciciUrl = `https://api.icicidirect.com/breezeapi/authenticate?api_key=${encodeURIComponent(appKey)}`;
+      const iciciUrl = `https://api.icicidirect.com/apiuser/login?api_key=${encodeURIComponent(appKey)}`;
       
       log("✅ Secure connect initiated: %s", requestId);
       
