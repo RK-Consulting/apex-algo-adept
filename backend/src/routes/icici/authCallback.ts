@@ -5,7 +5,8 @@
  */
 import { Router } from "express";
 import debug from "debug";
-import axios from "axios"; // Ensure axios is installed for the exchange call
+import axios from "axios";
+import crypto from "crypto";
 import { iciciLimiter } from "../../middleware/rateLimiter.js";
 import { SessionService } from "../../services/sessionService.js";
 import { query } from "../../config/database.js";
@@ -14,6 +15,25 @@ const router = Router();
 const log = debug("alphaforge:icici:callback");
 
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "https://alphaforge.skillsifter.in";
+
+// ── Decrypt helper (mirrors credentials.ts) ──────────────────────────────────
+function getServerEncryptionKey(): Buffer {
+  const masterSecret = process.env.CREDENTIALS_ENCRYPTION_KEY;
+  if (!masterSecret) throw new Error("CREDENTIALS_ENCRYPTION_KEY not configured");
+  return crypto.pbkdf2Sync(masterSecret, "alphaforge-credentials-v1", 100_000, 32, "sha256");
+}
+
+function decryptCredential(dbPayload: string): string {
+  const { encrypted, iv, tag } = JSON.parse(dbPayload);
+  const key = getServerEncryptionKey();
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(iv, "base64"));
+  decipher.setAuthTag(Buffer.from(tag, "base64"));
+  return Buffer.concat([
+    decipher.update(Buffer.from(encrypted, "base64")),
+    decipher.final()
+  ]).toString("utf8");
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function getSuccessPage(): string {
   return `
@@ -79,9 +99,9 @@ router.all(
   iciciLimiter,
   async (req, res) => {
     let currentUserId: string | null = null;
-    
+
     log("🟢 ICICI CALLBACK HIT");
-    
+
     try {
       // 1. Extract the temporary apisession from the redirect URL
       const apisession = (req.query.apisession || req.body?.apisession) as string;
@@ -90,12 +110,16 @@ router.all(
         throw new Error("ICICI did not provide an apisession parameter.");
       }
 
-      // 2. Identify the user by looking for CALLBACK_RECEIVED (set by our iciciGuard)
-      // We order by updated_at to ensure we get the absolute latest attempt
+      // ✅ FIX 1: Query for LOGIN_INITIATED (not CALLBACK_RECEIVED).
+      // The guard middleware isn't applied here (JWT-free route), so nothing
+      // pre-transitions the state. We do it atomically right here instead.
       const loginAttempt = await query(
-        `SELECT user_id FROM icici_login_attempts 
-         WHERE state = 'CALLBACK_RECEIVED' 
-         ORDER BY updated_at DESC LIMIT 1`
+        `UPDATE icici_login_attempts
+         SET state = 'CALLBACK_RECEIVED', updated_at = NOW()
+         WHERE state = 'LOGIN_INITIATED'
+         ORDER BY updated_at DESC
+         LIMIT 1
+         RETURNING user_id`,
       );
 
       if (loginAttempt.rowCount === 0) {
@@ -103,6 +127,7 @@ router.all(
       }
 
       currentUserId = loginAttempt.rows[0].user_id;
+      log("🔑 Matched pending login for user: %s", currentUserId);
 
       // 3. Update FSM with the apisession for audit/handshake tracking
       await query(
@@ -110,38 +135,44 @@ router.all(
         [apisession, currentUserId]
       );
 
-      // 4. Load static App Credentials
+      // ✅ FIX 2: Removed AND is_active = true — connect route sets is_active = false
+      // during login initiation to invalidate stale sessions. Credentials still exist.
       const credsResult = await query(
         `SELECT app_key, app_secret FROM broker_credentials 
-         WHERE user_id = $1::uuid AND broker_name = 'ICICI' AND is_active = true`,
+         WHERE user_id = $1::uuid AND broker_name = 'ICICI'`,
         [currentUserId]
       );
 
       if (credsResult.rowCount === 0) throw new Error("API keys not found.");
-      const { app_key, app_secret } = credsResult.rows[0];
 
-      // 5. THE CRITICAL STEP: Exchange apisession for SessionToken
-      // Based on ICICI Documentation: https://api.icicidirect.com/breezeapi/documents/index.html#customerdetails
-      const exchangeResponse = await axios.post('https://api.icicidirect.com/breezeapi/api/v1/customerdetails', {
-        SessionToken: apisession, // For the customerdetails call, we pass the login apisession
-        AppKey: app_key
-      });
+      // ✅ FIX 3 & 4: Decrypt credentials before use.
+      // DB stores AES-256-GCM encrypted JSON — must decrypt to plain text
+      // before passing to ICICI API or saving to SessionService.
+      const plainAppKey    = decryptCredential(credsResult.rows[0].app_key);
+      const plainAppSecret = decryptCredential(credsResult.rows[0].app_secret);
+
+      // 5. Exchange apisession for permanent SessionToken
+      const exchangeResponse = await axios.post(
+        'https://api.icicidirect.com/breezeapi/api/v1/customerdetails',
+        {
+          SessionToken: apisession,
+          AppKey: plainAppKey   // ✅ FIX 3: plain text, not encrypted JSON
+        }
+      );
 
       const sessionData = exchangeResponse.data;
-      
-      // In ICICI Breeze, the exchange returns a JSON. 
-      // We must check if 'Success' field exists or status is 200
+
       if (!sessionData || !sessionData.Success) {
-          throw new Error(sessionData?.Message || "Failed to exchange apisession for a valid API session.");
+        throw new Error(sessionData?.Message || "Failed to exchange apisession for a valid API session.");
       }
 
-      // The final permanent token is usually in sessionData.Success.session_token
       const finalApiToken = sessionData.Success.session_token;
 
       // 6. Save permanent Session to Redis/Postgres via SessionService
+      // ✅ FIX 4: Save decrypted plain text credentials, not encrypted blobs
       await SessionService.getInstance().saveSession(currentUserId!, {
-        api_key: app_key,
-        api_secret: app_secret,
+        api_key:      plainAppKey,
+        api_secret:   plainAppSecret,
         session_token: finalApiToken
       });
 
@@ -156,9 +187,11 @@ router.all(
         [currentUserId]
       );
 
-      // 8. Update last_connected in credentials for the Aggregator/Analytics
+      // 8. Mark credentials active again and record last_connected
       await query(
-        `UPDATE broker_credentials SET last_connected = NOW() WHERE user_id = $1 AND broker_name = 'ICICI'`,
+        `UPDATE broker_credentials 
+         SET is_active = true, last_connected = NOW(), updated_at = NOW()
+         WHERE user_id = $1 AND broker_name = 'ICICI'`,
         [currentUserId]
       );
 
@@ -166,6 +199,7 @@ router.all(
       return res.send(getSuccessPage());
 
     } catch (err: any) {
+      console.error("❌ ICICI CALLBACK ERROR:", err.message);
       log("❌ ICICI CALLBACK ERROR: %s", err.message);
 
       if (currentUserId) {
