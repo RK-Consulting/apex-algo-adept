@@ -171,7 +171,7 @@ router.post(
       // 5. INVALDIATE STALE APP SESSION
       await client.query(
         `UPDATE broker_credentials 
-         SET is_active = false, session_token = NULL, last_login_attempt = NOW()
+         SET is_active = false, updated_at = NOW()
          WHERE user_id = $1::uuid AND broker_name = 'ICICI'`,
         [userId]
       );
