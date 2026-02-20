@@ -169,7 +169,7 @@ router.all(
         throw new Error(sessionData?.Message || "Failed to exchange apisession for a valid API session.");
       }
 
-      const finalApiToken = sessionData.Success.session_token;
+      const finalApiToken = sessionData.Success.SessionToken; // ICICI returns SessionToken (capital S and T)
 
       // 6. Save permanent Session to Redis/Postgres via SessionService
       // ✅ FIX 4: Save decrypted plain text credentials, not encrypted blobs
