@@ -91,7 +91,7 @@ const Settings = () => {
         import.meta.env.VITE_API_URL ||
         "https://api.alphaforge.skillsifter.in";
 
-      const token = localStorage.getItem("auth_token") || localStorage.getItem("token");
+      const token = localStorage.getItem("authToken") || localStorage.getItem("token");
 
       if (!token) {
         toast({ title: "Session expired", variant: "destructive" });
