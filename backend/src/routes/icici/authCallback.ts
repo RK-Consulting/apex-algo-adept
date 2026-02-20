@@ -116,10 +116,13 @@ router.all(
       const loginAttempt = await query(
         `UPDATE icici_login_attempts
          SET state = 'CALLBACK_RECEIVED', updated_at = NOW()
-         WHERE state = 'LOGIN_INITIATED'
-         ORDER BY updated_at DESC
-         LIMIT 1
-         RETURNING user_id`,
+         WHERE user_id = (
+           SELECT user_id FROM icici_login_attempts
+           WHERE state = 'LOGIN_INITIATED'
+           ORDER BY updated_at DESC
+           LIMIT 1
+         )
+         RETURNING user_id`
       );
 
       if (loginAttempt.rowCount === 0) {
