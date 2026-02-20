@@ -57,9 +57,10 @@ export const iciciGuard =
       
       const credResult = await query(
         `SELECT id FROM broker_credentials 
-         WHERE user_id = $1::uuid AND broker_name = 'ICICI', [userId]
+         WHERE user_id = $1::uuid AND broker_name = 'ICICI'`,
+        [userId]
       );
-
+      
       if (credResult.rowCount === 0) {
         return res.status(400).json({
           success: false,
