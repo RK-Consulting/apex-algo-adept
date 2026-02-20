@@ -49,10 +49,15 @@ export const iciciGuard =
         });
       }
 
+      // ✅ FIX: Removed `AND is_active = true` — is_active tracks SESSION state,
+      // not credential existence. The connect route sets is_active = false during
+      // every login initiation (to invalidate the old session), which caused the
+      // guard to falsely report credentials as missing on every reconnect attempt.
+      // We only need to verify the credential ROW exists, not its session state.
+      
       const credResult = await query(
         `SELECT id FROM broker_credentials 
-         WHERE user_id = $1::uuid AND broker_name = 'ICICI' AND is_active = true`,
-        [userId]
+         WHERE user_id = $1::uuid AND broker_name = 'ICICI', [userId]
       );
 
       if (credResult.rowCount === 0) {
