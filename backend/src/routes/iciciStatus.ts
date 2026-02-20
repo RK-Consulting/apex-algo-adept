@@ -29,6 +29,24 @@ import { IciciSessionFSM } from "../services/iciciSessionFSM.js";
 const router = Router();
 const log = debug("alphaforge:icici:broker");
 
+// ── Add this decrypt helper near the top of the file (after imports) ──
+function getServerEncryptionKey(): Buffer {
+  const masterSecret = process.env.CREDENTIALS_ENCRYPTION_KEY;
+  if (!masterSecret) throw new Error("CREDENTIALS_ENCRYPTION_KEY not configured");
+  return crypto.pbkdf2Sync(masterSecret, "alphaforge-credentials-v1", 100_000, 32, "sha256");
+}
+
+function decryptCredential(dbPayload: string): string {
+  const { encrypted, iv, tag } = JSON.parse(dbPayload);
+  const key = getServerEncryptionKey();
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(iv, "base64"));
+  decipher.setAuthTag(Buffer.from(tag, "base64"));
+  return Buffer.concat([
+    decipher.update(Buffer.from(encrypted, "base64")),
+    decipher.final()
+  ]).toString("utf8");
+}
+
 /* ======================================================
    STATUS CHECK - Validates FSM + DB Session Expiry
 ====================================================== */
@@ -179,7 +197,7 @@ router.post(
       await client.query('COMMIT');
 
       // 6. GENERATE BREEZE URL
-      const appKey = credsResult.rows[0].app_key;
+      const appKey = decryptCredential(credsResult.rows[0].app_key);
       const iciciUrl = `https://api.icicidirect.com/breezeapi/authenticate?api_key=${encodeURIComponent(appKey)}`;
       
       log("✅ Secure connect initiated: %s", requestId);
