@@ -21,7 +21,7 @@ export type IciciGuardMode = "LOGIN" | "CALLBACK" | "CONNECT";
 
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCK_DURATION_MIN = 15;
-const STALE_INITIATION_MIN = 10; 
+const STALE_INITIATION_MIN = 10;
 
 export const iciciGuard =
   (mode: IciciGuardMode) =>
@@ -54,13 +54,12 @@ export const iciciGuard =
       // every login initiation (to invalidate the old session), which caused the
       // guard to falsely report credentials as missing on every reconnect attempt.
       // We only need to verify the credential ROW exists, not its session state.
-      
       const credResult = await query(
         `SELECT id FROM broker_credentials 
          WHERE user_id = $1::uuid AND broker_name = 'ICICI'`,
         [userId]
       );
-      
+
       if (credResult.rowCount === 0) {
         return res.status(400).json({
           success: false,
@@ -156,7 +155,7 @@ export const iciciGuard =
             message: "No active login initiation found for this callback."
           });
         }
-        
+
         // Atomically lock the state to prevent duplicate callback processing
         await query(
             `UPDATE icici_login_attempts SET state = 'CALLBACK_RECEIVED', updated_at = now() WHERE user_id = $1`,
@@ -167,10 +166,10 @@ export const iciciGuard =
       if (mode === "CONNECT") {
         // Enforce active session for AI Execution and Aggregator Analytics
         if (!hasActiveSession || fsm?.state !== "SESSION_ACTIVE") {
-          return res.status(412).json({ 
-            success: false, 
+          return res.status(412).json({
+            success: false,
             code: "ICICI_NOT_CONNECTED",
-            message: "ICICI session not active. Please reconnect." 
+            message: "ICICI session not active. Please reconnect."
           });
         }
       }
