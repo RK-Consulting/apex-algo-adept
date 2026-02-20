@@ -105,14 +105,21 @@ const Settings = () => {
       }
 
       // ✅ FIX 1: Write a loading page immediately so the browser doesn't kill
-      // the popup during the async fetch — browsers close idle blank popups
-      popup.document.write(`
-        <html>
-          <body style="font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0f0f0f;color:white;">
-            <div>Connecting to ICICI Direct...</div>
-          </body>
-        </html>
-      `);
+      // the popup during the async fetch. Wrapped in try-catch because some
+      // browsers throw a SecurityError accessing popup.document even for
+      // about:blank when cross-origin policies are strict — safe to ignore.
+      try {
+        popup.document.write(`
+          <html>
+            <body style="font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0f0f0f;color:white;">
+              <div>Connecting to ICICI Direct...</div>
+            </body>
+          </html>
+        `);
+      } catch (_) {
+        // Cross-origin document access blocked — popup will stay blank briefly
+        // until popup.location.href is set below. This is safe to ignore.
+      }
 
       try {
         const response = await fetch(`${backendUrl}/api/icici/status/connect`, {
