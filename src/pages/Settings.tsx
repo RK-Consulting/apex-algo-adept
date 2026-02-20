@@ -30,9 +30,6 @@ const Settings = () => {
   ====================================================== */
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      // 🔍 FIX 2: Debug log to catch origin mismatches — remove after fixing
-      console.log("[ICICI] Message received from:", event.origin, "Data:", event.data);
-
       const allowedOrigin =
         import.meta.env.VITE_BACKEND_URL ||
         import.meta.env.VITE_API_URL ||
