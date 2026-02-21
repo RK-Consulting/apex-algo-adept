@@ -2,11 +2,19 @@
 
 /**
  * ICICI Guard Middleware - Institutional Grade
- * * Objectives:
- * 1. Connector: Ensures AI-strategies only fire if SESSION_ACTIVE.
- * 2. Aggregator: Prevents dashboard sync if session is stale/IDLE.
- * 3. Security: Handles the apisession -> session_token handshake.
- * * FSM States: IDLE -> LOGIN_INITIATED -> CALLBACK_RECEIVED -> SESSION_ACTIVE (or FAILED)
+ *
+ * FSM States: IDLE -> LOGIN_INITIATED -> CALLBACK_RECEIVED -> SESSION_ACTIVE (or FAILED)
+ *
+ * ROOT CAUSE FIX (ICICI Account Lockout):
+ * The `attempts` counter was previously incremented on every Connect button click.
+ * This meant each click → new ICICI login page → user enters credentials + OTP →
+ * ICICI counts that as a login attempt on their end. After enough cycles, ICICI
+ * locks the real account. Our internal lock (MAX_LOGIN_ATTEMPTS=5) fired too, making
+ * it look like our app was the problem.
+ *
+ * Fix: Guard NEVER increments `attempts`. It only transitions state to LOGIN_INITIATED.
+ * `attempts` is incremented ONLY in authCallback.ts when the ICICI apisession
+ * exchange actually fails. Reset to 0 only on success.
  */
 
 import { Response, NextFunction } from "express";
@@ -41,7 +49,11 @@ export const iciciGuard =
         [userId]
       );
 
-      if (profileResult.rowCount === 0 || !profileResult.rows[0].is_verified || profileResult.rows[0].is_locked) {
+      if (
+        profileResult.rowCount === 0 ||
+        !profileResult.rows[0].is_verified ||
+        profileResult.rows[0].is_locked
+      ) {
         return res.status(403).json({
           success: false,
           code: "PROFILE_INVALID",
@@ -49,13 +61,10 @@ export const iciciGuard =
         });
       }
 
-      // ✅ FIX: Removed `AND is_active = true` — is_active tracks SESSION state,
-      // not credential existence. The connect route sets is_active = false during
-      // every login initiation (to invalidate the old session), which caused the
-      // guard to falsely report credentials as missing on every reconnect attempt.
-      // We only need to verify the credential ROW exists, not its session state.
+      // Credential row existence check only — no is_active filter.
+      // connect route sets is_active=false during login initiation; the row still exists.
       const credResult = await query(
-        `SELECT id FROM broker_credentials 
+        `SELECT id FROM broker_credentials
          WHERE user_id = $1::uuid AND broker_name = 'ICICI'`,
         [userId]
       );
@@ -72,33 +81,32 @@ export const iciciGuard =
           2) FSM STATE LOAD & STALE CLEANUP
          ====================================================== */
       const fsmResult = await query(
-        `SELECT state, attempts, locked_until, updated_at 
+        `SELECT state, attempts, locked_until, updated_at
          FROM icici_login_attempts WHERE user_id = $1::uuid`,
         [userId]
       );
 
       let fsm = fsmResult.rows[0];
 
-      // Reset stale LOGIN_INITIATED states (user closed the login popup)
-      if (fsm?.state === 'LOGIN_INITIATED') {
-        const lastUpdate = new Date(fsm.updated_at).getTime();
-        const now = new Date().getTime();
-        if (now - lastUpdate > STALE_INITIATION_MIN * 60 * 1000) {
+      // Reset stale LOGIN_INITIATED (user closed popup before completing OTP)
+      if (fsm?.state === "LOGIN_INITIATED") {
+        const ageMs = Date.now() - new Date(fsm.updated_at).getTime();
+        if (ageMs > STALE_INITIATION_MIN * 60 * 1000) {
           log("Stale initiation detected for user %s - resetting to IDLE", userId);
           await query(
             `UPDATE icici_login_attempts SET state = 'IDLE', updated_at = now() WHERE user_id = $1`,
             [userId]
           );
-          fsm.state = 'IDLE';
+          fsm.state = "IDLE";
         }
       }
 
-      // Check for temporary lockout
+      // Check for lockout — set by authCallback when attempts >= MAX_LOGIN_ATTEMPTS
       if (fsm?.locked_until && new Date(fsm.locked_until) > new Date()) {
         return res.status(423).json({
           success: false,
           code: "ICICI_LOCKED",
-          message: "ICICI login temporarily locked due to too many attempts",
+          message: `ICICI login locked due to too many failed attempts. Try again after ${new Date(fsm.locked_until).toLocaleTimeString()}.`,
         });
       }
 
@@ -108,73 +116,61 @@ export const iciciGuard =
       const activeSession = await SessionService.getInstance().getSession(userId);
       const hasActiveSession = !!activeSession?.session_token;
 
-      // Self-healing: If DB thinks session is active but Redis/Memory token is missing
+      // Self-healing: FSM says active but session token is gone (Redis expired, DB empty)
       if (fsm?.state === "SESSION_ACTIVE" && !hasActiveSession) {
+        log("Self-heal: SESSION_ACTIVE with no token for user %s — resetting to FAILED", userId);
         await query(
           `UPDATE icici_login_attempts SET state = 'FAILED', updated_at = now() WHERE user_id = $1`,
           [userId]
         );
-        if (fsm) fsm.state = 'FAILED';
+        if (fsm) fsm.state = "FAILED";
       }
 
       /* ======================================================
           4) MODE-SPECIFIC ENFORCEMENT
          ====================================================== */
-
       if (mode === "LOGIN") {
         if (hasActiveSession) {
           return res.status(409).json({ success: false, message: "Already connected" });
         }
 
-        const nextAttempts = (fsm?.attempts ?? 0) + 1;
-
-        if (nextAttempts >= MAX_LOGIN_ATTEMPTS) {
-          await query(
-            `INSERT INTO icici_login_attempts (user_id, state, attempts, locked_until)
-             VALUES ($1, 'LOCKED', $2, now() + interval '${LOCK_DURATION_MIN} minutes')
-             ON CONFLICT (user_id) DO UPDATE SET state='LOCKED', attempts=$2, locked_until=EXCLUDED.locked_until`,
-            [userId, nextAttempts]
-          );
-          return res.status(423).json({ success: false, code: "ICICI_LOCKED" });
-        }
-
+        // IMPORTANT: Do NOT increment attempts here.
+        // attempts is only ever incremented in authCallback on exchange failure.
+        // Incrementing here would lock the account every 5 Connect button clicks,
+        // even when the user never even reaches the OTP screen.
         await query(
-          `INSERT INTO icici_login_attempts (user_id, state, attempts, updated_at)
-           VALUES ($1, 'LOGIN_INITIATED', $2, now())
-           ON CONFLICT (user_id) DO UPDATE SET state='LOGIN_INITIATED', attempts=$2, updated_at=now()`,
-          [userId, nextAttempts]
+          `INSERT INTO icici_login_attempts (user_id, state, updated_at)
+           VALUES ($1, 'LOGIN_INITIATED', now())
+           ON CONFLICT (user_id) DO UPDATE
+           SET state = 'LOGIN_INITIATED', updated_at = now()`,
+          [userId]
         );
       }
 
       if (mode === "CALLBACK") {
-        // Only allow progression if we recently initiated a login
         if (fsm?.state !== "LOGIN_INITIATED") {
           return res.status(400).json({
             success: false,
             code: "FSM_FLOW_ERROR",
-            message: "No active login initiation found for this callback."
+            message: "No active login initiation found for this callback.",
           });
         }
-
-        // Atomically lock the state to prevent duplicate callback processing
         await query(
-            `UPDATE icici_login_attempts SET state = 'CALLBACK_RECEIVED', updated_at = now() WHERE user_id = $1`,
-            [userId]
+          `UPDATE icici_login_attempts SET state = 'CALLBACK_RECEIVED', updated_at = now() WHERE user_id = $1`,
+          [userId]
         );
       }
 
       if (mode === "CONNECT") {
-        // Enforce active session for AI Execution and Aggregator Analytics
         if (!hasActiveSession || fsm?.state !== "SESSION_ACTIVE") {
           return res.status(412).json({
             success: false,
             code: "ICICI_NOT_CONNECTED",
-            message: "ICICI session not active. Please reconnect."
+            message: "ICICI session not active. Please reconnect.",
           });
         }
       }
 
-      // If all checks pass, move to the controller
       next();
     } catch (err: any) {
       log("ICICI guard failure: %s", err.message);
