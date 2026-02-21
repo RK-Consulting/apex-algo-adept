@@ -55,52 +55,36 @@ router.get(
   authenticateToken,
   async (req: AuthRequest, res) => {
     const userId = req.user!.userId;
-    
+
     try {
+      // FSM state is the single source of truth for connection status
       const state = await IciciSessionFSM.getState(userId);
-      
+
+      // BUG 6 FIX: Removed session_expires_at from SELECT — column was dropped
+      // from broker_credentials schema. Only query columns that actually exist.
       const creds = await query(
-        `SELECT is_active, last_connected, session_expires_at, created_at
-         FROM broker_credentials 
+        `SELECT is_active, last_connected, created_at
+         FROM broker_credentials
          WHERE user_id = $1::uuid AND broker_name = 'ICICI'`,
         [userId]
       );
 
-      // System-Engineering Check: Even if FSM says ACTIVE, verify timestamp
-      // 3. System-Engineering Integrity Check:
-      // A connection is only 'true' if the FSM is ACTIVE AND the DB token isn't expired
-      /*const hasValidSession = creds.rows[0]?.is_active && 
-        (!creds.rows[0]?.session_expires_at || 
-         new Date(creds.rows[0].session_expires_at) > new Date());
-
-      return res.json({
-        connected: state === 'SESSION_ACTIVE' && hasValidSession,
-        state: state,
-        hasCredentials: (creds.rowCount ?? 0) > 0,
-        lastConnected: creds.rows[0]?.last_connected || null,
-        sessionExpiresAt: creds.rows[0]?.session_expires_at || null
-      });*/
       const hasCredentials = (creds.rowCount ?? 0) > 0;
       const row = hasCredentials ? creds.rows[0] : null;
-      
-      const sessionExpired =
-        row?.session_expires_at
-          ? new Date(row.session_expires_at) < new Date()
-          : false;
-      
-      const isConnected =
-        state === 'SESSION_ACTIVE' &&
-        row?.is_active === true &&
-        !sessionExpired;
-      
+
+      // isConnected is determined solely by FSM state.
+      // Do NOT gate on is_active here — connect route sets is_active=false
+      // during login initiation and restores it on success. The FSM state
+      // SESSION_ACTIVE is the correct indicator of a live connection.
+      const isConnected = state === "SESSION_ACTIVE";
+
       return res.json({
         connected: isConnected,
         state,
         hasCredentials,
         broker: "ICICI",
         lastConnected: row?.last_connected || null,
-        sessionExpiresAt: row?.session_expires_at || null,
-        createdAt: row?.created_at || null
+        createdAt: row?.created_at || null,
       });
 
     } catch (err) {
