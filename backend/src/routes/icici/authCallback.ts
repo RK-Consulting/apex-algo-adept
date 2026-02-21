@@ -2,6 +2,11 @@
 /**
  * ICICI Breeze Authentication Callback Handler
  * Handles the 2-step exchange: apisession (login) -> SessionToken (API usage)
+ *
+ * BUG 8 FIX — attempts tracking moved here from iciciGuard:
+ * attempts is now incremented ONLY when the ICICI apisession exchange fails.
+ * This correctly models "failed login attempts" as failures ICICI actually sees,
+ * not as Connect button clicks. Lock is applied here when attempts >= MAX_LOGIN_ATTEMPTS.
  */
 import { Router } from "express";
 import debug from "debug";
@@ -15,8 +20,10 @@ const router = Router();
 const log = debug("alphaforge:icici:callback");
 
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "https://alphaforge.skillsifter.in";
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCK_DURATION_MIN = 15;
 
-// ── Decrypt helper (mirrors credentials.ts) ──────────────────────────────────
+// ── Decrypt helper ────────────────────────────────────────────────────────────
 function getServerEncryptionKey(): Buffer {
   const masterSecret = process.env.CREDENTIALS_ENCRYPTION_KEY;
   if (!masterSecret) throw new Error("CREDENTIALS_ENCRYPTION_KEY not configured");
@@ -49,7 +56,7 @@ function getSuccessPage(): string {
       </head>
       <body>
         <h2 class="loader">✅ ICICI Connected Successfully</h2>
-        <p>Your institutional state is now ACTIVE. This window will close...</p>
+        <p>Your session is now active. This window will close...</p>
         <script>
           if (window.opener && !window.opener.closed) {
             window.opener.postMessage(
@@ -110,9 +117,10 @@ router.all(
         throw new Error("ICICI did not provide an apisession parameter.");
       }
 
-      // ✅ FIX 1: Query for LOGIN_INITIATED (not CALLBACK_RECEIVED).
-      // The guard middleware isn't applied here (JWT-free route), so nothing
-      // pre-transitions the state. We do it atomically right here instead.
+      // 2. Atomically transition LOGIN_INITIATED → CALLBACK_RECEIVED and get userId.
+      //    This route is JWT-free (no userId in request), so we identify the user
+      //    by finding the most recent pending login. The subquery is needed because
+      //    PostgreSQL UPDATE does not support ORDER BY / LIMIT directly.
       const loginAttempt = await query(
         `UPDATE icici_login_attempts
          SET state = 'CALLBACK_RECEIVED', updated_at = NOW()
@@ -132,73 +140,72 @@ router.all(
       currentUserId = loginAttempt.rows[0].user_id;
       log("🔑 Matched pending login for user: %s", currentUserId);
 
-      // 3. Update FSM with the apisession for audit/handshake tracking
+      // 3. Store apisession for audit trail
       await query(
         `UPDATE icici_login_attempts SET current_apisession = $1 WHERE user_id = $2`,
         [apisession, currentUserId]
       );
 
-      // ✅ FIX 2: Removed AND is_active = true — connect route sets is_active = false
-      // during login initiation to invalidate stale sessions. Credentials still exist.
+      // 4. Load credentials — no is_active filter (connect route sets it false)
       const credsResult = await query(
-        `SELECT app_key, app_secret FROM broker_credentials 
+        `SELECT app_key, app_secret FROM broker_credentials
          WHERE user_id = $1::uuid AND broker_name = 'ICICI'`,
         [currentUserId]
       );
 
       if (credsResult.rowCount === 0) throw new Error("API keys not found.");
 
-      // ✅ FIX 3 & 4: Decrypt credentials before use.
-      // DB stores AES-256-GCM encrypted JSON — must decrypt to plain text
-      // before passing to ICICI API or saving to SessionService.
+      // 5. Decrypt — DB stores AES-256-GCM encrypted JSON blobs
       const plainAppKey    = decryptCredential(credsResult.rows[0].app_key);
       const plainAppSecret = decryptCredential(credsResult.rows[0].app_secret);
 
-      // 5. Exchange apisession for permanent SessionToken
+      // 6. Exchange apisession → permanent SessionToken
+      //    ICICI Breeze endpoint: /breezeapi/api/v1/customerdetails
+      //    Response field: Success.SessionToken (capital S and T)
+      //    Fallback: Success.session_token (some API versions return lowercase)
       const exchangeResponse = await axios.post(
-        'https://api.icicidirect.com/breezeapi/api/v1/customerdetails',
+        "https://api.icicidirect.com/breezeapi/api/v1/customerdetails",
         {
           SessionToken: apisession,
-          AppKey: plainAppKey   // ✅ FIX 3: plain text, not encrypted JSON
+          AppKey: plainAppKey,
         }
       );
 
       const sessionData = exchangeResponse.data;
 
       if (!sessionData || !sessionData.Success) {
-        throw new Error(sessionData?.Message || "Failed to exchange apisession for a valid API session.");
+        throw new Error(
+          sessionData?.Message || "Failed to exchange apisession for a valid session token."
+        );
       }
 
-      const finalApiToken = sessionData.Success.SessionToken; // ICICI returns SessionToken (capital S and T)
+      // Handle both casing variants from different ICICI API versions
+      const finalApiToken =
+        sessionData.Success.SessionToken || sessionData.Success.session_token;
 
-      // 6. Save permanent Session to Redis/Postgres via SessionService
-      // ✅ FIX 4: Save decrypted plain text credentials, not encrypted blobs
+      if (!finalApiToken) {
+        throw new Error("ICICI returned Success but no SessionToken in response.");
+      }
+
+      // 7. Save session to Redis + icici_sessions table
       await SessionService.getInstance().saveSession(currentUserId!, {
-        api_key:      plainAppKey,
-        api_secret:   plainAppSecret,
-        session_token: finalApiToken
+        api_key:       plainAppKey,
+        api_secret:    plainAppSecret,
+        session_token: finalApiToken,
       });
 
-      // 7. Finalize State Machine to SESSION_ACTIVE
+      // 8. Finalize FSM: SESSION_ACTIVE, reset attempts to 0
       await query(
-        `UPDATE icici_login_attempts 
-         SET state = 'SESSION_ACTIVE', 
-             attempts = 0, 
+        `UPDATE icici_login_attempts
+         SET state = 'SESSION_ACTIVE',
+             attempts = 0,
              last_error_message = NULL,
-             updated_at = NOW() 
+             updated_at = NOW()
          WHERE user_id = $1::uuid`,
         [currentUserId]
       );
 
-      // 8. Mark credentials active again and record last_connected
-      await query(
-        `UPDATE broker_credentials 
-         SET is_active = true, last_connected = NOW(), updated_at = NOW()
-         WHERE user_id = $1 AND broker_name = 'ICICI'`,
-        [currentUserId]
-      );
-
-      log("✅ ICICI connection fully established for user: %s", currentUserId);
+      log("✅ ICICI connection established for user: %s", currentUserId);
       return res.send(getSuccessPage());
 
     } catch (err: any) {
@@ -206,14 +213,34 @@ router.all(
       log("❌ ICICI CALLBACK ERROR: %s", err.message);
 
       if (currentUserId) {
-        await query(
-          `UPDATE icici_login_attempts 
-           SET state = 'FAILED', 
+        // BUG 8 FIX: Increment attempts on every real ICICI exchange failure.
+        // This is the ONLY place attempts should be incremented — when the
+        // apisession exchange with ICICI actually fails (bad credentials, expired
+        // token, etc.), not on every Connect button click.
+        const attemptResult = await query(
+          `UPDATE icici_login_attempts
+           SET state = 'FAILED',
+               attempts = attempts + 1,
                last_error_message = $1,
-               updated_at = NOW() 
-           WHERE user_id = $2::uuid`,
+               updated_at = NOW()
+           WHERE user_id = $2::uuid
+           RETURNING attempts`,
           [err.message, currentUserId]
         );
+
+        const newAttempts = attemptResult.rows[0]?.attempts ?? 0;
+
+        // Lock if too many real failures
+        if (newAttempts >= MAX_LOGIN_ATTEMPTS) {
+          await query(
+            `UPDATE icici_login_attempts
+             SET state = 'LOCKED',
+                 locked_until = NOW() + INTERVAL '${LOCK_DURATION_MIN} minutes'
+             WHERE user_id = $1::uuid`,
+            [currentUserId]
+          );
+          log("🔒 User %s locked after %d failed attempts", currentUserId, newAttempts);
+        }
       }
 
       return res.send(getErrorPage(err.message));
