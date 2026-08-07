@@ -26,7 +26,7 @@ import { Router } from "express";
 import { WebSocketServer, WebSocket, RawData } from "ws"; // Import RawData type
 import jwt from "jsonwebtoken";
 import debug from "debug";
-import { IncomingMessage } from "http";
+import { IncomingMessage, Server } from "http";
 import { Socket } from "net";
 import { iciciRealtimeService } from "../breeze.realtime.js";
 import { authenticateToken, AuthRequest } from "../../../../shared/middleware/auth.js";
@@ -54,8 +54,9 @@ iciciStreamRouter.get("/status", authenticateToken, async (_req, res) => {
       connected: true,
       message: "ICICI WebSocket Feed Ready",
     });
-  } catch (error: any) {
-    errorLog("Status check failed:", error.message);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    errorLog("Status check failed:", message);
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
@@ -81,9 +82,10 @@ iciciStreamRouter.post("/subscribe", authenticateToken, async (req: AuthRequest,
     log(`User ${userId} subscribed to ${symbol} (${exchange})`);
 
     res.json({ success: true, subscribed: symbol });
-  } catch (error: any) {
-    errorLog(`Subscribe error for user ${req.user!.userId}:`, error.message);
-    res.status(500).json({ success: false, error: error.message || "Failed to subscribe" });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    errorLog(`Subscribe error for user ${req.user!.userId}:`, message);
+    res.status(500).json({ success: false, error: message || "Failed to subscribe" });
   }
 });
 
@@ -104,9 +106,10 @@ iciciStreamRouter.post("/unsubscribe", authenticateToken, async (req: AuthReques
     log(`User ${userId} unsubscribed from ${symbol} (${exchange})`);
 
     res.json({ success: true, unsubscribed: symbol });
-  } catch (error: any) {
-    errorLog(`Unsubscribe error for user ${req.user!.userId}:`, error.message);
-    res.status(500).json({ success: false, error: error.message || "Failed to unsubscribe" });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    errorLog(`Unsubscribe error for user ${req.user!.userId}:`, message);
+    res.status(500).json({ success: false, error: message || "Failed to unsubscribe" });
   }
 });
 
@@ -120,8 +123,9 @@ iciciStreamRouter.get("/", authenticateToken, (_req, res) => {
       success: true,
       ws: `WebSocket available at wss://${process.env.HOST || "api.alphaforge.skillsifter.in"}/api/icici/stream`,
     });
-  } catch (error: any) {
-    errorLog("Stream discovery failed:", error.message);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    errorLog("Stream discovery failed:", message);
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
@@ -130,7 +134,7 @@ iciciStreamRouter.get("/", authenticateToken, (_req, res) => {
  * WebSocket Server Implementation
  * Upgrades HTTP to WebSocket, authenticates, and relays ticks
  */
-export function initIciciStreamServer(server: any): WebSocketServer {
+export function initIciciStreamServer(server: Server): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
 
   server.on("upgrade", async (req: WsRequest, socket: Socket, head: Buffer) => {
@@ -168,8 +172,9 @@ export function initIciciStreamServer(server: any): WebSocketServer {
       wss.handleUpgrade(req, socket, head, (ws: WebSocket) => {
         wss.emit("connection", ws, req);
       });
-    } catch (error: any) {
-      errorLog("WS upgrade failed:", error.message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      errorLog("WS upgrade failed:", message);
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
       socket.destroy();
     }
@@ -215,9 +220,10 @@ export function initIciciStreamServer(server: any): WebSocketServer {
             default:
               throw new Error(`Unknown action: ${action}`);
           }
-        } catch (error: any) {
-          errorLog(`WS message error for user ${userId}:`, error.message);
-          ws.send(JSON.stringify({ type: "error", error: error.message }));
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          errorLog(`WS message error for user ${userId}:`, message);
+          ws.send(JSON.stringify({ type: "error", error: message }));
         }
       });
 
@@ -230,9 +236,10 @@ export function initIciciStreamServer(server: any): WebSocketServer {
         iciciRealtimeService.stopUserStream(userId);
         errorLog(`WebSocket error for user ${userId}:`, error.message);
       });
-    } catch (error: any) {
-      errorLog(`Failed to initialize stream for user ${userId}:`, error.message);
-      ws.close(1011, error.message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      errorLog(`Failed to initialize stream for user ${userId}:`, message);
+      ws.close(1011, message);
     }
   });
 
@@ -242,16 +249,17 @@ export function initIciciStreamServer(server: any): WebSocketServer {
 /**
  * Authenticate WebSocket JWT token
  */
-async function authenticateWsToken(token: string): Promise<any> {
+async function authenticateWsToken(token: string): Promise<{ userId?: string } | undefined> {
   try {
     return await new Promise((resolve, reject) => {
       jwt.verify(token, process.env.JWT_SECRET || "", (err, decoded) => {
         if (err) reject(new Error("Invalid token"));
-        resolve(decoded);
+        resolve(decoded as { userId?: string } | undefined);
       });
     });
-  } catch (error: any) {
-    errorLog("JWT verification failed:", error.message);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    errorLog("JWT verification failed:", message);
     throw error;
   }
 }

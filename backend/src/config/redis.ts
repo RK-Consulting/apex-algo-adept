@@ -8,6 +8,7 @@ import Redis from 'ioredis';
  * Redis Client for AlphaForge - Handles session caching, stream pub/sub, and rate limiting
  * Uses connection pooling for high-throughput trading streams (~1000+ TPS)
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- runtime ESM/CJS interop check, not a typing gap
 const RedisClient = (Redis as any).default ?? Redis;
 
 const redis = new RedisClient({

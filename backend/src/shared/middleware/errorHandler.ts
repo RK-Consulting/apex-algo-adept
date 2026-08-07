@@ -56,7 +56,7 @@ export const errorHandler = (
   /* ---------------------------------------------------------
      Postgres Constraint Errors (23xxx)
   --------------------------------------------------------- */
-  const pgErr: any = err;
+  const pgErr = err as { code?: string };
   if (pgErr.code?.startsWith("23")) {
     status = 400;
     err.message = "Database constraint violation";

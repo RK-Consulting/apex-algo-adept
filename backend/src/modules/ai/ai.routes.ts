@@ -11,6 +11,7 @@ const router = Router();
  * Optional: reads user preferences and returns top suggestions
  */
 router.get("/watchlist-suggestions", authenticateToken, async (req: AuthRequest, res) => {
+  log("watchlist-suggestions requested by user %s", req.user?.userId);
   // This is a lightweight heuristic placeholder.
   // Replace with real AI model or external service.
   const suggestions = [

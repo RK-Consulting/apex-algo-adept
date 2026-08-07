@@ -28,7 +28,7 @@ export interface IciciSession {
   api_key: string;
   api_secret: string;
   session_token: string;
-  user_details?: any;
+  user_details?: Record<string, unknown>;
 }
 
 export class SessionService {
@@ -72,8 +72,9 @@ export class SessionService {
       );
 
       log("✅ Session saved for user:", userId);
-    } catch (err: any) {
-      log("❌ Error saving session:", err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      log("❌ Error saving session:", message);
       throw err;
     }
   }
@@ -126,8 +127,9 @@ export class SessionService {
       await this.redis.set(sessionKey, JSON.stringify(sessionData), "EX", 86400);
 
       return sessionData;
-    } catch (err: any) {
-      log("❌ Error retrieving session:", err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      log("❌ Error retrieving session:", message);
       return null;
     }
   }
@@ -135,8 +137,8 @@ export class SessionService {
   async getSessionOrThrow(userId: string): Promise<IciciSession> {
     const session = await this.getSession(userId);
     if (!session) {
-      const error = new Error("No active ICICI session. Please login.");
-      (error as any).statusCode = 412;
+      const error = new Error("No active ICICI session. Please login.") as Error & { statusCode?: number };
+      error.statusCode = 412;
       throw error;
     }
     return session;
@@ -164,8 +166,9 @@ export class SessionService {
       );
 
       log("✅ Session purged for user:", userId);
-    } catch (err: any) {
-      log("❌ Error invalidating session:", err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      log("❌ Error invalidating session:", message);
       throw err;
     }
   }

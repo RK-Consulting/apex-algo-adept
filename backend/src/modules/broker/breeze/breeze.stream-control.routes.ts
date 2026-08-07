@@ -81,7 +81,7 @@ router.post("/subscribe", authenticateToken, async (req: AuthRequest, res) => {
 
     // 2. LAZY START: Ensure user-specific WS exists
     // The callback here is the "Sink" for your live market data
-    await iciciRealtimeService.startUserStream(userId, (tick) => {
+    await iciciRealtimeService.startUserStream(userId, (_tick) => {
       /* SYSTEM NOTE: 
          In Objective 1 (Connector), this data triggers your AI Strategy.
          In Objective 2 (Aggregator), this data is broadcast to the UI.
@@ -98,8 +98,9 @@ router.post("/subscribe", authenticateToken, async (req: AuthRequest, res) => {
       success: true,
       subscribed: { symbol, exchange },
     });
-  } catch (err: any) {
-    log("❌ Stream start failed for %s: %s", userId, err.message);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    log("❌ Stream start failed for %s: %s", userId, message);
     res.status(412).json({ 
         error: "Broker session inactive. Please reconnect ICICI.",
         code: "ICICI_SESSION_REQUIRED" 
@@ -128,7 +129,7 @@ router.post("/unsubscribe", authenticateToken, async (req: AuthRequest, res) => 
       success: true,
       unsubscribed: { symbol, exchange },
     });
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: "Unsubscribe failed" });
   }
 });

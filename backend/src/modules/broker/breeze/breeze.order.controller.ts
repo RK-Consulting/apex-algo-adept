@@ -25,8 +25,9 @@ export class ICICIOrderController {
 
       const result = await ICICIOrderService.placeOrder(userId, req.body);
       res.json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(400).json({ success: false, error: error.message || "Failed to place order" });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to place order";
+      res.status(400).json({ success: false, error: message });
     }
   }
 
@@ -38,8 +39,9 @@ export class ICICIOrderController {
 
       const result = await ICICIOrderService.modifyOrder(userId, req.body);
       res.json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(400).json({ success: false, error: error.message || "Failed to modify order" });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to modify order";
+      res.status(400).json({ success: false, error: message });
     }
   }
 
@@ -57,8 +59,9 @@ export class ICICIOrderController {
 
       const result = await ICICIOrderService.cancelOrder(userId, exchangeCode, orderId);
       res.json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(400).json({ success: false, error: error.message || "Failed to cancel order" });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to cancel order";
+      res.status(400).json({ success: false, error: message });
     }
   }
 
@@ -70,8 +73,9 @@ export class ICICIOrderController {
 
       const result = await ICICIOrderService.getOrders(userId, "NSE", "", "");
       res.json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(400).json({ success: false, error: error.message || "Failed to fetch order book" });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to fetch order book";
+      res.status(400).json({ success: false, error: message });
     }
   }
 
@@ -83,8 +87,9 @@ export class ICICIOrderController {
 
       const result = await ICICIOrderService.getPositions(userId);
       res.json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(400).json({ success: false, error: error.message || "Failed to fetch positions" });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to fetch positions";
+      res.status(400).json({ success: false, error: message });
     }
   }
 
@@ -97,8 +102,9 @@ export class ICICIOrderController {
       const { exchangeCode = "NSE" } = req.query;
       const result = await ICICIOrderService.getHoldings(userId, exchangeCode as string);
       res.json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(400).json({ success: false, error: error.message || "Failed to fetch holdings" });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to fetch holdings";
+      res.status(400).json({ success: false, error: message });
     }
   }
 }

@@ -49,11 +49,11 @@ const breezeAxios = axios.create({
 /* ======================================================
    BREEZE REQUEST GATEWAY
 ====================================================== */
-export async function breezeRequest<T = any>(
+export async function breezeRequest<T = unknown>(
   userId: string,
   method: "GET" | "POST" | "PUT" | "DELETE",
   endpoint: string,
-  payload: Record<string, any> = {}
+  payload: Record<string, unknown> = {}
 ): Promise<T> {
   const startTime = Date.now();
   const requestId = crypto.randomUUID();

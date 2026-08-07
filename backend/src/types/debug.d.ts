@@ -1,4 +1,5 @@
 declare module "debug" {
-  const debug: any;
+  type DebugLogger = (...args: unknown[]) => void;
+  function debug(namespace: string): DebugLogger;
   export default debug;
 }

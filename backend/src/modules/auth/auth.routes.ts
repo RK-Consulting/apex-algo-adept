@@ -68,7 +68,7 @@ router.get("/verify", async (req, res) => {
         brokerState: fsmStatus.rows[0]?.state || 'IDLE'
       },
     });
-  } catch (err) {
+  } catch {
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 });

@@ -47,7 +47,7 @@ export async function cacheSession(
       "EX",
       ttlSeconds
     );
-  } catch (err) {
+  } catch {
     log("❌ Cache Write Error [User: %s]", userId);
   }
 }
@@ -56,7 +56,7 @@ export async function invalidateSessionCache(userId: string): Promise<void> {
   try {
     await redis.del(`${SESSION_PREFIX}${userId}`);
     log("🗑️ Cache cleared for user: %s", userId);
-  } catch (err) {
+  } catch {
     log("❌ Cache Del Error [User: %s]", userId);
   }
 }

@@ -74,17 +74,17 @@ export const authenticateToken = (
 
   try {
     const decoded = jwt.verify(token, jwtSecret) as JwtPayload;
-    const anyDecoded = decoded as any;
+    const flexDecoded = decoded as unknown as Record<string, unknown>;
 
     // Flexible key support for future compatibility
     const userId =
-      anyDecoded.userId ||
-      anyDecoded.id ||
-      anyDecoded.sub;
+      flexDecoded.userId ||
+      flexDecoded.id ||
+      flexDecoded.sub;
 
     const email =
-      anyDecoded.email ||
-      anyDecoded.user_email ||
+      flexDecoded.email ||
+      flexDecoded.user_email ||
       "";
 
     if (!userId) {
@@ -99,8 +99,9 @@ export const authenticateToken = (
     };
 
     return next();
-  } catch (err: any) {
-    log("❌ JWT verification failed:", err?.message);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    log("❌ JWT verification failed:", message);
     return res.status(403).json({ error: "Unauthorized" });
   }
 };

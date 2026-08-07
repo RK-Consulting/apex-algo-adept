@@ -22,6 +22,7 @@ server.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 AlphaForge Backend running on port ${PORT}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
   console.log(`🔗 Health: http://0.0.0.0:${PORT}/health`);
+  log("Server listening on port %d", PORT);
 });
 
 // Initialize WebSocket Upgrade Handler

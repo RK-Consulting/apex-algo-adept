@@ -44,7 +44,7 @@ pool.on("error", (err) => {
 /* ------------------------------------------------------------------
    4) Safe query helper with debug logging (not noisy in production)
 ------------------------------------------------------------------- */
-export const query = async (text: string, params?: any[]) => {
+export const query = async (text: string, params?: unknown[]) => {
   const start = Date.now();
 
   try {

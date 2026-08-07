@@ -34,7 +34,7 @@ function safeParseStrategyJson(rawText: string) {
 // -----------------------------------------------
 // AI Gateway Wrapper
 // -----------------------------------------------
-async function callAiModel(payload: any, timeoutMs = 30_000) {
+async function callAiModel(payload: Record<string, unknown>, timeoutMs = 30_000) {
   const provider = (process.env.PREFERRED_AI_PROVIDER || "LOVABLE").toUpperCase();
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -275,7 +275,7 @@ router.put("/:id", authenticateToken, async (req: AuthRequest, res, next) => {
     ];
 
     const fields: string[] = [];
-    const values: any[] = [];
+    const values: unknown[] = [];
     let i = 1;
 
     for (const [key, value] of Object.entries(updates)) {

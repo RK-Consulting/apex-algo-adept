@@ -12,13 +12,14 @@ export async function retryWithBackoff<T>(
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       return await fn();
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Only retry on network/server errors
+      const err = error as { code?: string; response?: { status?: number } };
       const shouldRetry = 
-        error.code === 'ECONNRESET' || 
-        error.code === 'ETIMEDOUT' ||
-        error.code === 'ENOTFOUND' ||
-        error.response?.status >= 500;
+        err.code === 'ECONNRESET' || 
+        err.code === 'ETIMEDOUT' ||
+        err.code === 'ENOTFOUND' ||
+        (err.response?.status ?? 0) >= 500;
 
       if (!shouldRetry || attempt === maxRetries - 1) {
         throw error; // Don't retry or max retries reached

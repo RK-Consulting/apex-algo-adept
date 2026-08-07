@@ -4,7 +4,7 @@ import crypto from "crypto";
 /**
  * Produces deterministic, compact JSON for ICICI Breeze checksum.
  */
-function stableStringify(obj: Record<string, any>): string {
+function stableStringify(obj: Record<string, unknown>): string {
   // If the object is empty, ICICI expects an empty string, not "{}"
   if (Object.keys(obj).length === 0) {
     return "";
@@ -14,7 +14,7 @@ function stableStringify(obj: Record<string, any>): string {
     .reduce((acc, key) => {
       acc[key] = obj[key];
       return acc;
-    }, {} as Record<string, any>);
+    }, {} as Record<string, unknown>);
 
   return JSON.stringify(sorted).replace(/\s+/g, "");
 }
@@ -25,8 +25,8 @@ function stableStringify(obj: Record<string, any>): string {
  */
 export function calculateChecksum(
   timestamp: string,
-  //payload: Record<string, any>,
-  payload: string | Record<string, any>,
+  //payload: Record<string, unknown>,
+  payload: string | Record<string, unknown>,
   secretKey: string
 ): string {
   let checksumPayload = "";

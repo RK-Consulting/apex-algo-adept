@@ -223,8 +223,9 @@ export class IciciSessionFSM {
 
       if (sessionToken) {
         try {
-          const breezeModule = await import('./breeze.client.js') as any;
-          const breezeAxios = breezeModule.breezeAxios || breezeModule.default || breezeModule;
+          const breezeModule = await import('./breeze.client.js') as unknown as Record<string, unknown>;
+          type AxiosLike = { post: (url: string, data?: unknown, config?: unknown) => Promise<unknown> };
+          const breezeAxios = (breezeModule.breezeAxios || breezeModule.default || breezeModule) as Partial<AxiosLike>;
 
           if (breezeAxios && breezeAxios.post) {
             await breezeAxios.post('/api/v1/logout', {
@@ -236,9 +237,10 @@ export class IciciSessionFSM {
           } else {
             log("⚠️ breezeAxios not found in module, skipping logout call");
           }
-        } catch (logoutError: any) {
+        } catch (logoutError: unknown) {
           // Don't fail if ICICI logout fails — continue with cleanup
-          log("⚠️ ICICI logout API failed (continuing cleanup): %s", logoutError.message);
+          const message = logoutError instanceof Error ? logoutError.message : String(logoutError);
+          log("⚠️ ICICI logout API failed (continuing cleanup): %s", message);
         }
       }
 

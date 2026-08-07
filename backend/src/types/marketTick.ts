@@ -3,5 +3,5 @@ export interface MarketTick {
   symbol: string;
   ltp: number;
   timestamp?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }

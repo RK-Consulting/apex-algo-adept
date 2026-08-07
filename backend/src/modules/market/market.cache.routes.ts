@@ -9,7 +9,7 @@ router.get("/status", async (_req, res) => {
   try {
     await redis.ping();
     res.json({ success: true, message: "Redis connected", timestamp: new Date().toISOString() });
-  } catch (err) {
+  } catch {
     res.status(500).json({ success: false, error: "Redis unreachable" });
   }
 });
@@ -18,7 +18,7 @@ router.get("/keys", async (_req, res) => {
   try {
     const keys = await redis.keys("*");
     res.json({ success: true, total: keys.length, sample: keys.slice(0, 20) });
-  } catch (err) {
+  } catch {
     res.status(500).json({ success: false, error: "Failed to fetch keys" });
   }
 });

@@ -61,7 +61,7 @@ router.get("/history", async (req: AuthRequest, res, next) => {
       toDate as string
     );
     res.json({ success: true, data: result });
-  } catch (error: any) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -77,7 +77,7 @@ router.get("/list", async (req: AuthRequest, res, next) => {
       new Date().toISOString().split("T")[0]
     );
     res.json({ success: true, data: result });
-  } catch (error: any) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -89,7 +89,7 @@ router.get("/detail/:orderId", async (req: AuthRequest, res, next) => {
     const { orderId } = req.params;
     const result = await ICICIOrderService.getOrderDetail(userId, "NSE", orderId);
     res.json({ success: true, data: result });
-  } catch (error: any) {
+  } catch (error: unknown) {
     next(error);
   }
 });

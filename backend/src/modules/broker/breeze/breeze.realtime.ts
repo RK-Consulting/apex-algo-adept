@@ -109,7 +109,7 @@ export class ICICIRealtimeService {
       }
     });
 
-    ws.on("close", (code, reason) => {
+    ws.on("close", (code, _reason) => {
       log("Realtime WS closed for user %s (Code: %d)", userId, code);
       this.clearHeartbeat(stream);
       

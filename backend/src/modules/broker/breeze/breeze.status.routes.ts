@@ -209,10 +209,10 @@ router.post(
         expiresIn: 600
       });
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       await client.query('ROLLBACK');
-      
-      if (err.code === '55P03') { // Postgres NOWAIT error
+      const pgErr = err as { code?: string };
+      if (pgErr.code === '55P03') { // Postgres NOWAIT error
         return res.status(409).json({ error: "Concurrent request blocked. Try again." });
       }
 
@@ -235,7 +235,7 @@ router.post(
     try {
       await IciciSessionFSM.forceReset(userId);
       return res.json({ success: true, message: "Login attempt cancelled" });
-    } catch (err) {
+    } catch {
       return res.status(500).json({ error: "Failed to cancel" });
     }
   }

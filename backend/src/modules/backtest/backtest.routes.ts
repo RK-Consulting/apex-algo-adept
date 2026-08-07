@@ -58,11 +58,12 @@ iciciBacktestRouter.post("/run", authenticateToken, async (req: AuthRequest, res
       message: "Backtest executed",
       result: mockResult,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("ICICI Backtest Error:", err);
+    const message = err instanceof Error ? err.message : "Failed to run backtest";
     return res.status(500).json({
       success: false,
-      error: err.message || "Failed to run backtest",
+      error: message,
     });
   }
 });

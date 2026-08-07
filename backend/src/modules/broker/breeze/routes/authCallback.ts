@@ -208,9 +208,10 @@ router.all(
       log("✅ ICICI connection established for user: %s", currentUserId);
       return res.send(getSuccessPage());
 
-    } catch (err: any) {
-      console.error("❌ ICICI CALLBACK ERROR:", err.message);
-      log("❌ ICICI CALLBACK ERROR: %s", err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("❌ ICICI CALLBACK ERROR:", message);
+      log("❌ ICICI CALLBACK ERROR: %s", message);
 
       if (currentUserId) {
         // BUG 8 FIX: Increment attempts on every real ICICI exchange failure.
@@ -225,7 +226,7 @@ router.all(
                updated_at = NOW()
            WHERE user_id = $2::uuid
            RETURNING attempts`,
-          [err.message, currentUserId]
+          [message, currentUserId]
         );
 
         const newAttempts = attemptResult.rows[0]?.attempts ?? 0;
@@ -243,7 +244,7 @@ router.all(
         }
       }
 
-      return res.send(getErrorPage(err.message));
+      return res.send(getErrorPage(message));
     }
   }
 );

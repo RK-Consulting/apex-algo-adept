@@ -27,8 +27,6 @@ const log = debug("alphaforge:icici:guard");
 
 export type IciciGuardMode = "LOGIN" | "CALLBACK" | "CONNECT";
 
-const MAX_LOGIN_ATTEMPTS = 5;
-const LOCK_DURATION_MIN = 15;
 const STALE_INITIATION_MIN = 10;
 
 export const iciciGuard =
@@ -86,7 +84,7 @@ export const iciciGuard =
         [userId]
       );
 
-      let fsm = fsmResult.rows[0];
+      const fsm = fsmResult.rows[0];
 
       // Reset stale LOGIN_INITIATED (user closed popup before completing OTP)
       if (fsm?.state === "LOGIN_INITIATED") {
@@ -172,8 +170,9 @@ export const iciciGuard =
       }
 
       next();
-    } catch (err: any) {
-      log("ICICI guard failure: %s", err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      log("ICICI guard failure: %s", message);
       return res.status(500).json({ success: false, error: "Security Guard Error" });
     }
   };

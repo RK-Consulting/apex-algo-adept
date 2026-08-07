@@ -68,7 +68,7 @@ export function decryptDataRaw(encryptedData: string, ivBase64: string, key?: Bu
 /**
  * Convenience: encrypt an object and return JSON-ready blob
  */
-export function encryptJSON(obj: any) {
+export function encryptJSON(obj: string | object) {
   return encryptDataRaw(obj);
 }
 

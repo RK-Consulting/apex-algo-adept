@@ -52,7 +52,7 @@ export const loginUser = async (req: Request, res: Response) => {
         email: user.email,
       },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     log("Login error:", err);
     return res.status(500).json({ error: "Internal server error" });
   }
@@ -103,7 +103,7 @@ export const registerUser = async (req: Request, res: Response) => {
       token,
       user: newUser,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     log("Register error:", err);
     return res.status(500).json({ error: "Internal server error" });
   }
