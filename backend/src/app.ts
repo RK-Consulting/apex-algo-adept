@@ -17,25 +17,25 @@ import express from "express";
 import helmet from "helmet";
 import compression from "compression";
 
-import iciciAuthCallbackRouter from "./routes/icici/authCallback.js";
+import iciciAuthCallbackRouter from "./modules/broker/breeze/routes/authCallback.js";
 
-import { loginLimiter, apiLimiter } from "./middleware/rateLimiter.js";
-import { authenticateToken } from "./middleware/auth.js";
-import { errorHandler } from "./middleware/errorHandler.js";
-import { requestLogger } from "./middleware/logger.js";
+import { loginLimiter, apiLimiter } from "./shared/middleware/rateLimiter.js";
+import { authenticateToken } from "./shared/middleware/auth.js";
+import { errorHandler } from "./shared/middleware/errorHandler.js";
+import { requestLogger } from "./shared/middleware/logger.js";
 
 // === Route Imports ===
-import authRouter from "./routes/auth.js";
-import iciciOrderRouter from "./routes/icici/orders.js";
+import authRouter from "./modules/auth/auth.routes.js";
+import iciciOrderRouter from "./modules/broker/breeze/routes/orders.js";
 //import { iciciBrokerRouter } from "./routes/iciciBroker.js";
-import { iciciStatusRouter } from "./routes/iciciStatus.js";
-import { iciciStreamRouter } from "./routes/icici/stream.js";
-import { strategyRouter as strategiesRouter } from "./routes/strategies.js";
-import { watchlistRouter } from "./routes/watchlist.js";
-import { credentialsRouter } from "./routes/credentials.js";
-import { aiRouter } from "./routes/ai.js";
-import redisDevRouter from "./routes/redis.js";
-import profileRouter from "./routes/profile.js";
+import { iciciStatusRouter } from "./modules/broker/breeze/breeze.status.routes.js";
+import { iciciStreamRouter } from "./modules/broker/breeze/routes/stream.js";
+import { strategyRouter as strategiesRouter } from "./modules/strategy/strategy.routes.js";
+import { watchlistRouter } from "./modules/portfolio/watchlist.routes.js";
+import { credentialsRouter } from "./modules/broker/breeze/breeze.credentials.routes.js";
+import { aiRouter } from "./modules/ai/ai.routes.js";
+import redisDevRouter from "./modules/market/market.cache.routes.js";
+import profileRouter from "./modules/portfolio/profile.routes.js";
 
 const app = express();
 app.set("trust proxy", 1);

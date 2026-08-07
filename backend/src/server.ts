@@ -9,9 +9,9 @@ import pool from "./config/database.js";
 import redis from "./config/redis.js";
 
 // Correct ICICI WS initializer import
-import { initIciciStreamServer } from "./routes/icici/stream.js";
+import { initIciciStreamServer } from "./modules/broker/breeze/routes/stream.js";
 
-import { iciciRealtimeService } from "./services/iciciRealtime.js";
+import { iciciRealtimeService } from "./modules/broker/breeze/breeze.realtime.js";
 
 const log = debug("apex:server");
 const PORT = Number(process.env.PORT || 3000);
