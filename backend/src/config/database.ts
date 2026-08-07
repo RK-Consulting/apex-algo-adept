@@ -1,6 +1,6 @@
 // src/config/database.ts
 import dotenv from "dotenv";
-dotenv.config({ path: "/var/www/apex-algo-adept/backend/.env" });
+dotenv.config();
 import pg from "pg";
 import debug from "debug";
 

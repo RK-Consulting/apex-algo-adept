@@ -11,7 +11,7 @@
  * CORS & primary CSP handled at Nginx level → no cors() middleware
  */
 import dotenv from "dotenv";
-dotenv.config({ path: "/var/www/apex-algo-adept/backend/.env" });
+dotenv.config();
 
 import express from "express";
 import helmet from "helmet";
