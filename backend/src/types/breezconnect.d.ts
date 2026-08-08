@@ -38,7 +38,7 @@ declare module "breezeconnect" {
       strikePrice?: string;
     }): Promise<{
       success?: boolean;
-      data?: any;
+      data?: Record<string, unknown>;
     }>;
 
     /** Latest OHLC API */
@@ -51,8 +51,8 @@ declare module "breezeconnect" {
       productType?: string;
     }): Promise<{
       success?: boolean;
-      Success?: any[];
-      data?: any[];
+      Success?: unknown[];
+      data?: unknown[];
     }>;
 
     /* ============================================================
@@ -60,23 +60,23 @@ declare module "breezeconnect" {
     ============================================================ */
 
     /** Fetch available funds */
-    getFunds(): Promise<any>;
+    getFunds(): Promise<Record<string, unknown>>;
 
     /** Holdings (preferred new API) */
-    getPortfolioHoldings(exchangeCode?: string): Promise<any[]>;
+    getPortfolioHoldings(exchangeCode?: string): Promise<Record<string, unknown>[]>;
 
     /** Fallback older API */
-    getHoldings(exchangeCode?: string): Promise<any[]>;
+    getHoldings(exchangeCode?: string): Promise<Record<string, unknown>[]>;
 
     /** Open positions */
-    getPortfolioPositions(): Promise<any[]>;
+    getPortfolioPositions(): Promise<Record<string, unknown>[]>;
 
     /* ============================================================
        ORDERS
     ============================================================ */
 
     /** List all recent orders */
-    getOrderList(): Promise<any[]>;
+    getOrderList(): Promise<Record<string, unknown>[]>;
 
     /** Place a new order */
     placeOrder(params: {
@@ -95,7 +95,7 @@ declare module "breezeconnect" {
       right?: string;
       strikePrice?: string;
       userRemark?: string;
-    }): Promise<any>;
+    }): Promise<Record<string, unknown>>;
 
     /** Modify an order */
     modifyOrder(params: {
@@ -106,10 +106,10 @@ declare module "breezeconnect" {
       disclosedQuantity?: string | number;
       stoploss?: string | number;
       triggerPrice?: string | number;
-    }): Promise<any>;
+    }): Promise<Record<string, unknown>>;
 
     /** Cancel order */
-    cancelOrder(params: { orderId: string }): Promise<any>;
+    cancelOrder(params: { orderId: string }): Promise<Record<string, unknown>>;
 
     /* ============================================================
        WEBSOCKET (REAL-TIME FEED)
@@ -149,11 +149,11 @@ declare module "breezeconnect" {
        EVENTS (WebSocket)
     ============================================================ */
 
-    on(event: "message", listener: (data: any) => void): this;
+    on(event: "message", listener: (data: unknown) => void): this;
     on(event: "open", listener: () => void): this;
     on(event: "close", listener: () => void): this;
-    on(event: "error", listener: (error: any) => void): this;
+    on(event: "error", listener: (error: unknown) => void): this;
 
-    off(event: string, listener: (...args: any[]) => void): this;
+    off(event: string, listener: (...args: unknown[]) => void): this;
   }
 }
