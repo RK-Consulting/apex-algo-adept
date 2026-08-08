@@ -167,7 +167,8 @@ ICICI_REDIRECT_URL=http://localhost:5173
 ICICI_PRIMARY_IP=127.0.0.1
 
 # AI Service (strategy generation)
-LOVABLE_API_KEY=your_lovable_api_key
+PREFERRED_AI_PROVIDER=OPENROUTER
+OPENROUTER_API_KEY=your_openrouter_api_key
 
 # CORS
 ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000

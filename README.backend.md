@@ -172,7 +172,8 @@ JWT_EXPIRES_IN=7d
 CREDENTIALS_ENCRYPTION_KEY=your_32_char_encryption_key
 
 # AI Service
-LOVABLE_API_KEY=your_lovable_api_key
+PREFERRED_AI_PROVIDER=OPENROUTER
+OPENROUTER_API_KEY=your_openrouter_api_key
 
 # CORS
 ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
@@ -200,7 +201,7 @@ See [DEPLOYMENT.md](../DEPLOYMENT.md) for comprehensive deployment guides coveri
 - Standalone deployment
 - Docker deployment
 - Production setup
-- Migration from Lovable Cloud
+- Migration from initial scaffold to standalone infrastructure
 
 ## Key Features
 
@@ -208,7 +209,7 @@ See [DEPLOYMENT.md](../DEPLOYMENT.md) for comprehensive deployment guides coveri
 ✅ **Secure Credentials** - AES-256-GCM encryption for API keys
 ✅ **JWT Authentication** - Stateless authentication
 ✅ **Rate Limiting** - Protection against abuse
-✅ **AI Integration** - Lovable AI for strategy generation
+✅ **AI Integration** - OpenRouter for strategy generation
 ✅ **Type Safety** - Full TypeScript support
 ✅ **Production Ready** - Error handling, logging, health checks
 

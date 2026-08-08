@@ -35,7 +35,7 @@ function safeParseStrategyJson(rawText: string) {
 // AI Gateway Wrapper
 // -----------------------------------------------
 async function callAiModel(payload: Record<string, unknown>, timeoutMs = 30_000) {
-  const provider = (process.env.PREFERRED_AI_PROVIDER || "LOVABLE").toUpperCase();
+  const provider = (process.env.PREFERRED_AI_PROVIDER || "OPENROUTER").toUpperCase();
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -63,11 +63,12 @@ async function callAiModel(payload: Record<string, unknown>, timeoutMs = 30_000)
       );
     }
 
-    // LOVABLE provider
-    const API_KEY = process.env.LOVABLE_API_KEY;
-    if (!API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+	// OpenRouter — default provider, OpenAI-compatible unified gateway
+    // https://openrouter.ai/docs
+    const API_KEY = process.env.OPENROUTER_API_KEY;
+    if (!API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
 
-    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${API_KEY}`,
@@ -142,7 +143,7 @@ Return JSON only.`,
       },
     ];
 
-    const provider = (process.env.PREFERRED_AI_PROVIDER || "LOVABLE").toUpperCase();
+    const provider = (process.env.PREFERRED_AI_PROVIDER || "OPENROUTER").toUpperCase();
     const aiPayload =
       provider === "GEMINI"
         ? {
@@ -152,7 +153,7 @@ Return JSON only.`,
             max_output_tokens: Number(process.env.AI_MAX_TOKENS || 1024),
           }
         : {
-            model: process.env.LOVABLE_MODEL || "google/gemini-2.5-flash",
+            model: process.env.OPENROUTER_MODEL  || "google/gemini-2.5-flash",
             messages: modelPrompt,
             temperature: Number(process.env.AI_TEMPERATURE || 0.2),
             max_tokens: Number(process.env.AI_MAX_TOKENS || 1024),

@@ -16,7 +16,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/), versioning foll
   - ICICI Direct (Breeze API) broker integration — session FSM, order placement,
     real-time streaming, encrypted credential storage
   - Basic strategy, watchlist, and profile CRUD
-  - AI-assisted strategy generation (via Lovable AI gateway)
+  - AI-assisted strategy generation (via OpenRouter)
 - Known gaps: no indicator engine, no scanner, no real backtesting engine,
   no automated tests confirmed, no CI/CD
 
