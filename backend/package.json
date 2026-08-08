@@ -1,6 +1,6 @@
 {
   "name": "alphaforge-backend",
-  "version": "0.2.0",
+  "version": "0.3.0-dev",
   "description": "Standalone backend server for AlphaForge trading platform",
   "type": "module",
   "main": "dist/server.js",
